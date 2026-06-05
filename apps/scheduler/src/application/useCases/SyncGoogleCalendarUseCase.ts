@@ -1,0 +1,169 @@
+import { Pool } from 'pg';
+import { GoogleCalendarClient } from '../../infrastructure/google/GoogleCalendarClient';
+import { IMessageRepository } from '../../domain/repositories/IMessageRepository';
+import { ScheduledMessage } from '../../domain/models/ScheduledMessage';
+import { IMessageSchedulerService } from '../services/IMessageSchedulerService';
+import { logger } from '../../infrastructure/logger/logger';
+
+export class SyncGoogleCalendarUseCase {
+    constructor(
+        private readonly googleClient: GoogleCalendarClient,
+        private readonly messageRepository: IMessageRepository,
+        private readonly dbPool: Pool,
+        private readonly scheduler: IMessageSchedulerService
+    ) {}
+
+    public async execute(tenantId?: string): Promise<void> {
+        logger.info({ tenantId }, 'Iniciando sincronização de Google Calendars...');
+
+        try {
+            const configs = tenantId
+                ? [await this.googleClient.getConfig(tenantId)]
+                : await this.googleClient.getActiveConfigs();
+
+            for (const config of configs) {
+                if (config?.isEnabled) {
+                    await this.syncUserCalendar(config);
+                }
+            }
+        } catch (err) {
+            logger.error({ err }, 'Erro durante a sincronização dos calendários.');
+        }
+    }
+
+    private async syncUserCalendar(config: any): Promise<void> {
+        const events = await this.googleClient.getUpcomingEvents(config);
+        logger.info(`📅 Encontrados ${events.length} eventos para o usuário ${config.userId} (${config.email})`);
+
+        for (const event of events) {
+            const phone = this.extractPhoneNumber(event.summary + ' ' + (event.description || ''));
+            if (!phone) {
+                continue;
+            }
+
+            const eventId = event.id;
+
+            // Verificar se o usuário desativou o envio automático para este evento
+            const autoSendEnabled = await this.googleClient.isEventAutoSendEnabled(config.userId, eventId);
+            if (!autoSendEnabled) {
+                logger.info(`⏭️ Evento ${eventId} tem envio automático DESATIVADO pelo usuário. Pulando.`);
+                continue;
+            }
+
+            const startDateTime = new Date(event.start.dateTime || event.start.date);
+            const clientName = this.extractClientName(event.summary);
+
+            // 1. Agendamento para o Cliente (24h antes do compromisso)
+            const clientSendAt = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+            await this.scheduleReminder(
+                config.userId,
+                eventId,
+                'client',
+                phone,
+                `Olá ${clientName}, lembrete do seu compromisso amanhã (${this.formatDate(startDateTime)}) às ${this.formatTime(startDateTime)}!`,
+                clientSendAt
+            );
+
+            // 2. Agendamento para Você/Profissional (30 minutos antes do compromisso)
+            const profSendAt = new Date(startDateTime.getTime() - 30 * 60 * 1000);
+            const profPhone = process.env.PROFESSIONAL_PHONE || phone; 
+            await this.scheduleReminder(
+                config.userId,
+                eventId,
+                'professional',
+                profPhone,
+                `Lembrete: Você tem um compromisso com ${clientName} em 30 minutos (${this.formatTime(startDateTime)})!`,
+                profSendAt
+            );
+        }
+    }
+
+    private async scheduleReminder(
+        userId: string,
+        eventId: string,
+        reminderType: 'client' | 'professional',
+        recipientId: string,
+        content: string,
+        sendAt: Date
+    ): Promise<void> {
+        // Ignorar se o horário de envio já passou!
+        if (sendAt.getTime() < Date.now()) {
+            return;
+        }
+
+        // Verificar se já existe lembrete agendado para este evento e tipo
+        const isAlreadyScheduled = await this.checkIfAlreadyScheduled(userId, eventId, reminderType);
+        if (isAlreadyScheduled) {
+            return;
+        }
+
+        // Criar agendamento
+        const scheduledMessage = new ScheduledMessage(
+            null,
+            userId,
+            content,
+            recipientId,
+            sendAt,
+            'pending',
+            'whatsapp',
+            new Date(),
+            { googleEventId: eventId, reminderType }
+        );
+
+        const savedMessage = await this.messageRepository.save(scheduledMessage);
+        
+        // 2. Calcula qual será o delay em milissegundos
+        const targetTimeMs = sendAt.getTime();
+        const currentTimeMs = Date.now();
+        const delayMs = Math.max(0, targetTimeMs - currentTimeMs);
+
+        // 3. Adiciona na Fila (BullMQ/Redis) com esse atraso
+        await this.scheduler.schedule(savedMessage, delayMs);
+
+        logger.info(`✨ Lembrete do Google Calendar (${reminderType}) agendado com sucesso para ${recipientId} em ${sendAt.toISOString()}`);
+    }
+
+    private async checkIfAlreadyScheduled(userId: string, eventId: string, reminderType: string): Promise<boolean> {
+        const query = `
+            SELECT COUNT(*) 
+            FROM scheduled_messages 
+            WHERE user_id = $1 
+              AND metadata->>'googleEventId' = $2 
+              AND metadata->>'reminderType' = $3;
+        `;
+        const result = await this.dbPool.query(query, [userId, eventId, reminderType]);
+        return parseInt(result.rows[0].count, 10) > 0;
+    }
+
+    private extractPhoneNumber(text: string): string | null {
+        // Encontrar celular DDI + DDD
+        const matches = text.match(/\b(55\d{10,11})\b/);
+        if (matches) return matches[1];
+
+        // Encontrar celular DDD 11 dígitos sem DDI
+        const matchesDDD = text.match(/\b([1-9]\d{10})\b/);
+        if (matchesDDD) return '55' + matchesDDD[1];
+
+        return null;
+    }
+
+    private extractClientName(summary: string): string {
+        const parts = summary.split('-');
+        if (parts.length > 1) {
+            return parts[parts.length - 1].trim();
+        }
+        return summary;
+    }
+
+    private formatDate(date: Date): string {
+        return date.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    }
+
+    private formatTime(date: Date): string {
+        return date.toLocaleTimeString('pt-BR', { 
+            timeZone: 'America/Sao_Paulo', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+    }
+}

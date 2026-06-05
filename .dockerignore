@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.gitignore
+*.md
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/coverage
+**/.jest
+**/auth_info_baileys
+**/public/uploads
+**/.vscode
+**/.idea

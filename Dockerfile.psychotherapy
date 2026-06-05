@@ -1,0 +1,46 @@
+# --- Build Stage ---
+FROM node:20-alpine AS builder
+WORKDIR /monorepo
+
+# Copy workspace manifests for layer caching
+COPY package*.json ./
+COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
+COPY apps/psychotherapy/package.json ./apps/psychotherapy/
+
+# Install all deps (including devDeps needed for tsc)
+RUN npm ci
+
+# Copy source
+COPY packages/whatsapp-core/ ./packages/whatsapp-core/
+COPY apps/psychotherapy/ ./apps/psychotherapy/
+
+# Build core first, then app
+RUN npm run build --workspace=packages/whatsapp-core
+RUN npm run build --workspace=apps/psychotherapy
+
+# --- Production Stage ---
+FROM node:20-alpine
+WORKDIR /monorepo
+
+# Install PostgreSQL client for pg_isready in entrypoint
+RUN apk add --no-cache postgresql-client
+
+# Copy workspace manifests
+COPY package*.json ./
+COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
+COPY apps/psychotherapy/package.json ./apps/psychotherapy/
+
+# Install only production dependencies (workspace symlinks are created here)
+RUN npm ci --omit=dev
+
+# Copy compiled output and runtime assets
+COPY --from=builder /monorepo/packages/whatsapp-core/dist ./packages/whatsapp-core/dist
+COPY --from=builder /monorepo/apps/psychotherapy/dist ./apps/psychotherapy/dist
+COPY apps/psychotherapy/migrations ./apps/psychotherapy/migrations
+COPY apps/psychotherapy/entrypoint.sh ./apps/psychotherapy/entrypoint.sh
+RUN chmod +x ./apps/psychotherapy/entrypoint.sh
+RUN mkdir -p ./apps/psychotherapy/public
+
+WORKDIR /monorepo/apps/psychotherapy
+EXPOSE 3000
+ENTRYPOINT ["./entrypoint.sh"]

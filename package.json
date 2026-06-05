@@ -7,9 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "psychotherapy": "npm --workspace=apps/psychotherapy start",
-    "scheduler": "npm --workspace=apps/scheduler start",
-    "dev:psychotherapy": "npm --workspace=apps/psychotherapy run dev",
-    "dev:scheduler": "npm --workspace=apps/scheduler run dev"
+    "postinstall": "npm run build --workspace=packages/whatsapp-core",
+    "build:core": "npm run build --workspace=packages/whatsapp-core",
+    "dev:psychotherapy": "npm run build:core && npm run dev --workspace=apps/psychotherapy",
+    "dev:scheduler": "npm run build:core && npm run dev --workspace=apps/scheduler",
+    "psychotherapy": "npm run start --workspace=apps/psychotherapy",
+    "scheduler": "npm run start --workspace=apps/scheduler"
   }
 }

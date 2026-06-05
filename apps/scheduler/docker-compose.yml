@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: whatsapp_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: whatsapp_scheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Carrega o nosso script SQL na primeira subida
+      - ./src/infrastructure/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp_redis
+    restart: always
+    command: redis-server --appendonly yes # AOF Ativado para Persistência Garantida
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: whatsapp_api
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:secretpassword@db:5432/whatsapp_scheduler
+      - REDIS_URL=redis://redis:6379
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASSWORD=secretpassword
+      - DB_NAME=whatsapp_scheduler
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=debug
+      - DEFAULT_USER_ID=default-user-id
+      - ALLOW_DEFAULT_USER=true
+      - GOOGLE_REDIRECT_URI=http://localhost:3000/api/google/callback
+    ports:
+      - "3000:3000"
+    volumes:
+      # Montar diretório local para persistir dados de Sessão/Token WhatsApp no host
+      - ./auth_info_baileys:/app/auth_info_baileys
+      - ./public/uploads:/app/public/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:

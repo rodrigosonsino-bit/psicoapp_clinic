@@ -1,0 +1,140 @@
+// Linha da tabela: psychotherapy_patients
+export interface PatientRow {
+    id: string;
+    tenant_id: string;
+    name: string;
+    status: 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+    payment_type: 'monthly' | 'per_session' | null;
+    default_session_price_cents: number | null;
+    notes: string | null;
+    document: string | null;
+    phone: string | null;
+    email: string | null;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_monthly_records
+export interface MonthlyRecordRow {
+    id: string;
+    tenant_id: string;
+    patient_id: string | null;
+    month: string;
+    patient_name_snapshot: string;
+    status: 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+    payment_type: 'monthly' | 'per_session' | null;
+    session_price_cents: number | null;
+    expected_sessions: number;
+    paid_sessions: number;
+    absences: number;
+    payment_status: 'paid' | 'pending' | 'partial';
+    notes: string | null;
+    previous_month_paid_cents: number;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: tenants (apenas colunas selecionadas no getTenantProfile)
+export interface TenantProfileRow {
+    id: string;
+    name: string;
+    email: string;
+    full_name: string | null;
+    document: string | null;
+    professional_id: string | null;
+    address: string | null;
+}
+
+// Linha da tabela: psychotherapy_receipts
+export interface ReceiptRow {
+    id: string;
+    tenant_id: string;
+    patient_id: string;
+    receipt_number: number;
+    amount_cents: number;
+    issue_date: Date;
+    description: string;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_sessions
+export interface SessionRow {
+    id: string;
+    tenant_id: string;
+    patient_id: string;
+    date: Date;
+    status: 'attended' | 'justified_absence' | 'unjustified_absence' | 'canceled';
+    notes: string | null;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_expenses
+export interface ExpenseRow {
+    id: string;
+    tenant_id: string;
+    date: Date;
+    amount_cents: number;
+    description: string;
+    category: 'rent' | 'taxes' | 'software' | 'marketing' | 'other';
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_availability_slots
+export interface AvailabilitySlotRow {
+    id: string;
+    tenant_id: string;
+    day_of_week: number;
+    start_time: string;
+    duration_minutes: number;
+    is_active: boolean;
+    notes: string | null;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_booking_links
+export interface BookingLinkRow {
+    id: string;
+    token: string;
+    tenant_id: string;
+    patient_id: string;
+    expires_at: Date | null;
+    is_active: boolean;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_clinical_notes
+export interface ClinicalNoteRow {
+    id: string;
+    tenant_id: string;
+    patient_id: string;
+    session_id: string | null;
+    note_date: Date;
+    content: string;
+    tags: string[];
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_appointments
+export interface AppointmentRow {
+    id: string;
+    tenant_id: string;
+    patient_id: string;
+    scheduled_at: Date;
+    duration_minutes: number;
+    status: 'scheduled' | 'confirmed' | 'attended' | 'canceled' | 'no_show';
+    recurrence: 'none' | 'weekly' | 'biweekly';
+    recurrence_end_date: Date | null;
+    notes: string | null;
+    google_event_id: string | null;
+    google_event_url: string | null;
+    confirm_token: string | null;
+    confirmed_at: Date | null;
+    created_at: Date;
+    updated_at: Date;
+}

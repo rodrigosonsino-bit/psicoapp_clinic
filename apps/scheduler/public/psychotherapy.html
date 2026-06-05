@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Controle de Sessões</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --text: #172026;
+      --muted: #65727c;
+      --line: #d9e0e6;
+      --brand: #0f766e;
+      --brand-strong: #115e59;
+      --danger: #b42318;
+      --warn: #a15c00;
+      --ok: #12733b;
+      --soft: #eef6f5;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 3;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      min-height: calc(100vh - 65px);
+    }
+
+    aside {
+      padding: 20px;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    section {
+      padding: 20px 24px 32px;
+      min-width: 0;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    input, select, textarea, button {
+      width: 100%;
+      font: inherit;
+      border-radius: 6px;
+    }
+
+    input, select, textarea {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 10px 11px;
+      min-height: 40px;
+    }
+
+    textarea {
+      min-height: 78px;
+      resize: vertical;
+    }
+
+    button {
+      min-height: 40px;
+      border: 0;
+      background: var(--brand);
+      color: #fff;
+      padding: 10px 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { background: var(--brand-strong); }
+
+    button.secondary {
+      background: #e7ecef;
+      color: var(--text);
+    }
+
+    button.secondary:hover { background: #dce4e8; }
+
+    .toolbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar > div { min-width: 160px; }
+
+    .form-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      min-height: 82px;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f1f5f7;
+      color: #38444c;
+      font-size: 12px;
+      text-transform: uppercase;
+      z-index: 1;
+    }
+
+    td input, td select {
+      min-width: 92px;
+      padding: 7px 8px;
+      min-height: 34px;
+    }
+
+    td.name { min-width: 190px; font-weight: 700; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .pill.paid { color: var(--ok); background: #e9f7ef; }
+    .pill.pending { color: var(--danger); background: #fff0ee; }
+    .pill.partial { color: var(--warn); background: #fff6e8; }
+
+    .patient-list {
+      margin-top: 18px;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+      display: grid;
+      gap: 8px;
+      max-height: 42vh;
+      overflow: auto;
+    }
+
+    .patient-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid #edf1f4;
+    }
+
+    .patient-row strong { overflow-wrap: anywhere; }
+    .patient-row span { color: var(--muted); font-size: 12px; }
+
+    .status {
+      color: var(--muted);
+      min-height: 20px;
+      margin-top: 10px;
+    }
+
+    .empty {
+      padding: 28px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      header { align-items: flex-start; }
+      main { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 560px) {
+      header, aside, section { padding-left: 14px; padding-right: 14px; }
+      .summary { grid-template-columns: 1fr; }
+      .toolbar { align-items: stretch; }
+      .toolbar > div, .toolbar button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Controle de Sessões</h1>
+    <div class="toolbar">
+      <div>
+        <label for="month">Mês</label>
+        <input id="month" type="month" value="2026-05">
+      </div>
+      <button id="generateMonth" class="secondary" type="button">Gerar mês</button>
+      <button id="refresh" type="button">Atualizar</button>
+    </div>
+  </header>
+
+  <main>
+    <aside>
+      <form id="patientForm">
+        <label for="patientName">Paciente</label>
+        <input id="patientName" autocomplete="off" required>
+
+        <div class="form-grid">
+          <div>
+            <label for="patientStatus">Status</label>
+            <select id="patientStatus">
+              <option value="weekly">Semanal</option>
+              <option value="biweekly">Quinzenal</option>
+              <option value="one_off">Avulso</option>
+              <option value="inactive">Inativo</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="paymentType">Forma de pagamento</label>
+            <select id="paymentType">
+              <option value="">Sem definição</option>
+              <option value="monthly">Por mês</option>
+              <option value="per_session">Por sessão</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="sessionPrice">Valor da sessão</label>
+            <input id="sessionPrice" type="number" min="0" step="1" placeholder="100">
+          </div>
+
+          <div>
+            <label for="patientNotes">Observações</label>
+            <textarea id="patientNotes"></textarea>
+          </div>
+
+          <button type="submit">Salvar paciente</button>
+        </div>
+      </form>
+
+      <div id="patientStatusMessage" class="status"></div>
+      <div id="patientList" class="patient-list"></div>
+    </aside>
+
+    <section>
+      <div class="summary" id="summary"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Paciente</th>
+              <th>Status</th>
+              <th>Valor</th>
+              <th>Prev.</th>
+              <th>Pagas</th>
+              <th>Faltas</th>
+              <th>Pagamento</th>
+              <th>Recebido</th>
+              <th>Pendente</th>
+              <th>Observações</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="recordsBody">
+            <tr><td colspan="11" class="empty">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="monthStatusMessage" class="status"></div>
+    </section>
+  </main>
+
+  <script>
+    const labels = {
+      weekly: 'Semanal',
+      biweekly: 'Quinzenal',
+      one_off: 'Avulso',
+      inactive: 'Inativo',
+      monthly: 'Por mês',
+      per_session: 'Por sessão',
+      paid: 'Pago',
+      pending: 'Pendente',
+      partial: 'Parcial'
+    };
+
+    const state = { patients: [], records: [], summary: null };
+    const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    const el = {
+      month: document.getElementById('month'),
+      refresh: document.getElementById('refresh'),
+      generateMonth: document.getElementById('generateMonth'),
+      patientForm: document.getElementById('patientForm'),
+      patientName: document.getElementById('patientName'),
+      patientStatus: document.getElementById('patientStatus'),
+      paymentType: document.getElementById('paymentType'),
+      sessionPrice: document.getElementById('sessionPrice'),
+      patientNotes: document.getElementById('patientNotes'),
+      patientList: document.getElementById('patientList'),
+      patientStatusMessage: document.getElementById('patientStatusMessage'),
+      summary: document.getElementById('summary'),
+      recordsBody: document.getElementById('recordsBody'),
+      monthStatusMessage: document.getElementById('monthStatusMessage')
+    };
+
+    async function api(path, options = {}) {
+      const response = await fetch(`/api${path}`, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Falha na operação');
+      return data;
+    }
+
+    async function loadAll() {
+      el.monthStatusMessage.textContent = 'Carregando dados...';
+      const [patientsResponse, monthResponse] = await Promise.all([
+        api('/psychotherapy/patients'),
+        api(`/psychotherapy/months/${el.month.value}`)
+      ]);
+      state.patients = patientsResponse.data || [];
+      state.records = monthResponse.records || [];
+      state.summary = monthResponse.summary || null;
+      renderPatients();
+      renderSummary();
+      renderRecords();
+      el.monthStatusMessage.textContent = '';
+    }
+
+    function renderPatients() {
+      if (!state.patients.length) {
+        el.patientList.innerHTML = '<div class="empty">Nenhum paciente cadastrado.</div>';
+        return;
+      }
+
+      el.patientList.innerHTML = state.patients.map(patient => `
+        <div class="patient-row">
+          <div>
+            <strong>${escapeHtml(patient.name)}</strong><br>
+            <span>${labels[patient.status] || patient.status}</span>
+          </div>
+          <span>${money(patient.defaultSessionPriceCents)}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderSummary() {
+      const summary = state.summary || {};
+      const metrics = [
+        ['Pacientes ativos', summary.activePatients || 0],
+        ['Recebido', money(summary.receivedAmountCents)],
+        ['Pendente', money(summary.pendingAmountCents)],
+        ['Registros pagos', summary.paidRecords || 0],
+        ['Faltas', summary.totalAbsences || 0]
+      ];
+
+      el.summary.innerHTML = metrics.map(([label, value]) => `
+        <div class="metric"><span>${label}</span><strong>${value}</strong></div>
+      `).join('');
+    }
+
+    function renderRecords() {
+      if (!state.records.length) {
+        el.recordsBody.innerHTML = '<tr><td colspan="11" class="empty">Nenhum registro neste mês.</td></tr>';
+        return;
+      }
+
+      el.recordsBody.innerHTML = state.records.map(record => `
+        <tr data-id="${record.id}">
+          <td class="name">${escapeHtml(record.patientNameSnapshot)}</td>
+          <td>${labels[record.status] || record.status}</td>
+          <td><input data-field="sessionPriceCents" type="number" min="0" step="1" value="${centsToNumber(record.sessionPriceCents)}"></td>
+          <td><input data-field="expectedSessions" type="number" min="0" max="31" value="${record.expectedSessions || 0}"></td>
+          <td><input data-field="paidSessions" type="number" min="0" max="31" value="${record.paidSessions || 0}"></td>
+          <td><input data-field="absences" type="number" min="0" max="31" value="${record.absences || 0}"></td>
+          <td>
+            <select data-field="paymentStatus">
+              ${option('paid', record.paymentStatus)}
+              ${option('pending', record.paymentStatus)}
+              ${option('partial', record.paymentStatus)}
+            </select>
+          </td>
+          <td>${money(record.receivedAmountCents)}</td>
+          <td>${money(record.pendingAmountCents)}</td>
+          <td><input data-field="notes" value="${escapeAttribute(record.notes || '')}"></td>
+          <td><button type="button" data-save="${record.id}">Salvar</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function saveRecord(id) {
+      const record = state.records.find(item => item.id === id);
+      const row = document.querySelector(`tr[data-id="${id}"]`);
+      const get = field => row.querySelector(`[data-field="${field}"]`).value;
+
+      await api(`/psychotherapy/months/${el.month.value}/records`, {
+        method: 'POST',
+        body: JSON.stringify({
+          id: record.id,
+          patientId: record.patientId,
+          patientNameSnapshot: record.patientNameSnapshot,
+          status: record.status,
+          paymentType: record.paymentType,
+          sessionPriceCents: Math.round(Number(get('sessionPriceCents') || 0) * 100),
+          expectedSessions: Number(get('expectedSessions') || 0),
+          paidSessions: Number(get('paidSessions') || 0),
+          absences: Number(get('absences') || 0),
+          paymentStatus: get('paymentStatus'),
+          notes: get('notes') || null,
+          previousMonthPaidCents: record.previousMonthPaidCents || 0
+        })
+      });
+
+      el.monthStatusMessage.textContent = 'Registro salvo.';
+      await loadAll();
+    }
+
+    el.patientForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await api('/psychotherapy/patients', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: el.patientName.value,
+          status: el.patientStatus.value,
+          paymentType: el.paymentType.value || null,
+          defaultSessionPriceCents: el.sessionPrice.value ? Math.round(Number(el.sessionPrice.value) * 100) : null,
+          notes: el.patientNotes.value || null
+        })
+      });
+      el.patientForm.reset();
+      el.patientStatusMessage.textContent = 'Paciente salvo.';
+      await loadAll();
+    });
+
+    el.recordsBody.addEventListener('click', async (event) => {
+      const id = event.target.dataset.save;
+      if (!id) return;
+      event.target.disabled = true;
+      try {
+        await saveRecord(id);
+      } catch (error) {
+        el.monthStatusMessage.textContent = error.message;
+      } finally {
+        event.target.disabled = false;
+      }
+    });
+
+    el.refresh.addEventListener('click', () => loadAll().catch(showMonthError));
+    el.month.addEventListener('change', () => loadAll().catch(showMonthError));
+    el.generateMonth.addEventListener('click', async () => {
+      try {
+        el.monthStatusMessage.textContent = 'Gerando mês...';
+        await api(`/psychotherapy/months/${el.month.value}/generate`, { method: 'POST' });
+        await loadAll();
+      } catch (error) {
+        showMonthError(error);
+      }
+    });
+
+    function option(value, selected) {
+      return `<option value="${value}" ${value === selected ? 'selected' : ''}>${labels[value]}</option>`;
+    }
+
+    function money(cents) {
+      return currency.format((Number(cents) || 0) / 100);
+    }
+
+    function centsToNumber(cents) {
+      return ((Number(cents) || 0) / 100).toFixed(0);
+    }
+
+    function showMonthError(error) {
+      el.monthStatusMessage.textContent = error.message || 'Erro ao carregar dados.';
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[char]);
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value).replace(/`/g, '&#96;');
+    }
+
+    loadAll().catch(showMonthError);
+  </script>
+</body>
+</html>
