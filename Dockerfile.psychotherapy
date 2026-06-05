@@ -8,7 +8,7 @@ COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
 COPY apps/psychotherapy/package.json ./apps/psychotherapy/
 
 # Install all deps (including devDeps needed for tsc)
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 # Copy source
 COPY packages/whatsapp-core/ ./packages/whatsapp-core/
@@ -31,7 +31,7 @@ COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
 COPY apps/psychotherapy/package.json ./apps/psychotherapy/
 
 # Install only production dependencies (workspace symlinks are created here)
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 # Copy compiled output and runtime assets
 COPY --from=builder /monorepo/packages/whatsapp-core/dist ./packages/whatsapp-core/dist
