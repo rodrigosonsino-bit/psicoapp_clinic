@@ -24,6 +24,8 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@whiskeysockets/baileys$': '<rootDir>/src/mocks/baileysMock.ts',
+    '^otplib$': '<rootDir>/src/mocks/otplibMock.ts',
   },
   clearMocks: true,
 };

@@ -766,14 +766,74 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async updateAppointmentStatus(tenantId: string, id: string, status: AppointmentStatus): Promise<PsychotherapyAppointment> {
         const validTenantId = this.validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            UPDATE psychotherapy_appointments
-            SET status = $1, updated_at = NOW()
-            WHERE tenant_id = $2 AND id = $3
-            RETURNING *;
-        `, [status, validTenantId, id]);
-        if (result.rows.length === 0) throw new NotFoundError('Agendamento não encontrado ou não autorizado');
-        return this.mapAppointment(result.rows[0]);
+        const client = await this.dbPool.connect();
+
+        try {
+            await client.query('BEGIN');
+
+            // 1. Atualizar o status do agendamento
+            const result = await client.query(`
+                UPDATE psychotherapy_appointments
+                SET status = $1, updated_at = NOW()
+                WHERE tenant_id = $2 AND id = $3
+                RETURNING *;
+            `, [status, validTenantId, id]);
+
+            if (result.rows.length === 0) {
+                throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+            }
+
+            const appointment = result.rows[0];
+
+            // 2. Sincronização com o Diário de Sessões (psychotherapy_sessions)
+            if (status === 'attended' || status === 'no_show' || status === 'canceled') {
+                const targetSessionStatus = 
+                    status === 'attended' ? 'attended' :
+                    status === 'no_show' ? 'unjustified_absence' : 'canceled';
+
+                // Verificar se já existe registro de sessão para este paciente no mesmo horário (com LIMIT 1)
+                const sessionCheck = await client.query(`
+                    SELECT id FROM psychotherapy_sessions
+                    WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
+                    LIMIT 1;
+                `, [validTenantId, appointment.patient_id, appointment.scheduled_at]);
+
+                if (sessionCheck.rows.length > 0) {
+                    // Atualizar sessão existente
+                    await client.query(`
+                        UPDATE psychotherapy_sessions
+                        SET status = $1, notes = COALESCE($2, notes), updated_at = NOW()
+                        WHERE id = $3;
+                    `, [targetSessionStatus, appointment.notes, sessionCheck.rows[0].id]);
+                } else {
+                    // Inserir nova sessão no diário
+                    await client.query(`
+                        INSERT INTO psychotherapy_sessions (id, tenant_id, patient_id, date, status, notes)
+                        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5);
+                    `, [validTenantId, appointment.patient_id, appointment.scheduled_at, targetSessionStatus, appointment.notes]);
+                }
+            } else if (status === 'scheduled' || status === 'confirmed') {
+                // Se voltou para agendado ou confirmado (compromisso futuro), removemos do diário
+                // Apenas deleta se a sessão NÃO possuir notas (tanto na tabela sessions quanto na clinical_notes)
+                await client.query(`
+                    DELETE FROM psychotherapy_sessions
+                    WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
+                      AND notes IS NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM psychotherapy_clinical_notes 
+                          WHERE session_id = psychotherapy_sessions.id
+                      );
+                `, [validTenantId, appointment.patient_id, appointment.scheduled_at]);
+            }
+
+            await client.query('COMMIT');
+            return this.mapAppointment(appointment);
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     async findUpcomingAppointments(windowStart: Date, windowEnd: Date): Promise<UpcomingAppointment[]> {
