@@ -1,0 +1,15 @@
+{
+  "name": "psicoapp",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "psychotherapy": "npm --workspace=apps/psychotherapy start",
+    "scheduler": "npm --workspace=apps/scheduler start",
+    "dev:psychotherapy": "npm --workspace=apps/psychotherapy run dev",
+    "dev:scheduler": "npm --workspace=apps/scheduler run dev"
+  }
+}

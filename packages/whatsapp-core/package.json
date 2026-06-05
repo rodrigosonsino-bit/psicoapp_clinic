@@ -1,0 +1,10 @@
+{
+  "name": "@psicoapp/whatsapp-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared WhatsApp infrastructure: Baileys session management, BullMQ queue, PostgreSQL auth state",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  }
+}
