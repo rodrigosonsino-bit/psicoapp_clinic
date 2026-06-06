@@ -216,6 +216,14 @@ export function createPsychotherapyRoutes(): Router {
     router.get('/psychotherapy/export/expenses', validateQuery(exportDateRangeQuerySchema), asyncHandler((req, res) => exportController.exportExpenses(req, res)));
     router.get('/psychotherapy/export/receipts', asyncHandler((req, res) => exportController.exportReceipts(req, res)));
 
+    const irReportQuerySchema = z.object({
+        year: z.string().regex(/^\d{4}$/, 'Ano deve ter 4 dígitos').refine(
+            y => { const n = parseInt(y, 10); return n >= 2020 && n <= 2099; },
+            'Ano fora do intervalo permitido (2020–2099)',
+        ),
+    });
+    router.get('/psychotherapy/export/ir-report', validateQuery(irReportQuerySchema), asyncHandler((req, res) => exportController.exportIrReport(req, res)));
+
     // Availability slots (horários disponíveis do terapeuta)
     const availabilitySlotSchema = z.object({
         id: z.string().uuid().optional(),
