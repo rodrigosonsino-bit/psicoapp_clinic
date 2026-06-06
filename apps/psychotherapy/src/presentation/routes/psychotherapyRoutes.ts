@@ -8,6 +8,7 @@ import { ExpenseController } from '../controllers/ExpenseController';
 import { AppointmentController } from '../controllers/AppointmentController';
 import { ExportController } from '../controllers/ExportController';
 import { ClinicalNoteController } from '../controllers/ClinicalNoteController';
+import { ProntuarioController } from '../controllers/ProntuarioController';
 import { PixController } from '../controllers/PixController';
 import { AppointmentConfirmController } from '../controllers/AppointmentConfirmController';
 import { BookingController } from '../controllers/BookingController';
@@ -268,6 +269,49 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/patients/:patientId/notes', validateParams(patientUuidParamSchema), validateBody(clinicalNoteSchema), asyncHandler((req, res) => clinicalNoteController.saveNote(req, res)));
     router.get('/psychotherapy/patients/:patientId/notes', validateParams(patientUuidParamSchema), validateQuery(listNotesQuerySchema), asyncHandler((req, res) => clinicalNoteController.listNotes(req, res)));
     router.delete('/psychotherapy/notes/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => clinicalNoteController.deleteNote(req, res)));
+
+    // Prontuário estruturado (anamnese + planos terapêuticos)
+    const prontuarioController = container.resolve(ProntuarioController);
+    const planIdParamSchema = z.object({ patientId: z.string().uuid(), planId: z.string().uuid() });
+    const anamnesisBodySchema = z.object({
+        chiefComplaint:      z.string().nullable().optional(),
+        onsetDescription:    z.string().nullable().optional(),
+        previousTreatment:   z.string().nullable().optional(),
+        medications:         z.string().nullable().optional(),
+        familyHistory:       z.string().nullable().optional(),
+        relevantHistory:     z.string().nullable().optional(),
+        cidCodes:            z.array(z.string()).optional(),
+        therapeuticApproach: z.string().nullable().optional(),
+    });
+    const treatmentPlanBodySchema = z.object({
+        title:          z.string().min(1, 'Título é obrigatório'),
+        goals:          z.array(z.string()).optional(),
+        approach:       z.string().nullable().optional(),
+        targetSessions: z.number().int().positive().nullable().optional(),
+        notes:          z.string().nullable().optional(),
+    });
+    const planStatusBodySchema = z.object({
+        status: z.enum(['active', 'completed', 'suspended']),
+    });
+
+    router.get('/psychotherapy/patients/:patientId/anamnesis',
+        validateParams(patientUuidParamSchema),
+        asyncHandler((req, res) => prontuarioController.getAnamnesis(req, res)));
+    router.put('/psychotherapy/patients/:patientId/anamnesis',
+        validateParams(patientUuidParamSchema),
+        validateBody(anamnesisBodySchema),
+        asyncHandler((req, res) => prontuarioController.upsertAnamnesis(req, res)));
+    router.get('/psychotherapy/patients/:patientId/treatment-plans',
+        validateParams(patientUuidParamSchema),
+        asyncHandler((req, res) => prontuarioController.listTreatmentPlans(req, res)));
+    router.post('/psychotherapy/patients/:patientId/treatment-plans',
+        validateParams(patientUuidParamSchema),
+        validateBody(treatmentPlanBodySchema),
+        asyncHandler((req, res) => prontuarioController.createTreatmentPlan(req, res)));
+    router.patch('/psychotherapy/patients/:patientId/treatment-plans/:planId/status',
+        validateParams(planIdParamSchema),
+        validateBody(planStatusBodySchema),
+        asyncHandler((req, res) => prontuarioController.updateTreatmentPlanStatus(req, res)));
 
     // Pix
     const pixController = container.resolve(PixController);
