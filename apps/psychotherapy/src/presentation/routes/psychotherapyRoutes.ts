@@ -277,5 +277,60 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/pix/charges', validateBody(createPixChargeSchema), asyncHandler((req, res) => pixController.createCharge(req, res)));
     router.get('/psychotherapy/pix/charges', asyncHandler((req, res) => pixController.listCharges(req, res)));
 
+    // ── Grupos de Terapia ─────────────────────────────────────────────────────
+    const { GroupController } = require('../controllers/GroupController');
+    const groupController: InstanceType<typeof GroupController> = container.resolve(GroupController);
+
+    const groupIdParamSchema = z.object({
+        groupId: z.string().uuid('groupId inválido (esperado UUID)')
+    });
+
+    const groupSessionSchema = z.object({
+        sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'sessionDate deve estar no formato YYYY-MM-DD'),
+        sessionNotes: z.string().nullable().optional(),
+        attendances: z.array(z.object({
+            patientId: z.string().uuid('patientId inválido'),
+            status: z.enum(['present', 'absent', 'excused']),
+            notes: z.string().nullable().optional(),
+            sessionPriceCentsOverride: z.number().int().nonnegative().nullable().optional(),
+        })).min(1, 'Informe a presença de ao menos um membro'),
+    });
+
+    const listGroupSessionsQuerySchema = z.object({
+        month: z.string().regex(/^\d{4}-\d{2}$/, 'Formato de mês inválido (esperado YYYY-MM)').optional(),
+    });
+
+    const listGroupMembersQuerySchema = z.object({
+        month: z.string().regex(/^\d{4}-\d{2}$/, 'Formato de mês inválido (esperado YYYY-MM)').optional(),
+    });
+
+    const listGroupsQuerySchema = z.object({
+        includeInactive: z.enum(['true', 'false']).optional(),
+    });
+
+    // Listar grupos
+    router.get('/psychotherapy/groups',
+        validateQuery(listGroupsQuerySchema),
+        asyncHandler((req, res) => groupController.listGroups(req, res)));
+
+    // Membros de um grupo com status de pagamento do mês (🟢🟡🔴)
+    router.get('/psychotherapy/groups/:groupId/members',
+        validateParams(groupIdParamSchema),
+        validateQuery(listGroupMembersQuerySchema),
+        asyncHandler((req, res) => groupController.listGroupMembers(req, res)));
+
+    // Registrar sessão de grupo (presença + faturamento)
+    router.post('/psychotherapy/groups/:groupId/sessions',
+        validateParams(groupIdParamSchema),
+        validateBody(groupSessionSchema),
+        asyncHandler((req, res) => groupController.registerGroupSession(req, res)));
+
+    // Histórico de sessões de um grupo
+    router.get('/psychotherapy/groups/:groupId/sessions',
+        validateParams(groupIdParamSchema),
+        validateQuery(listGroupSessionsQuerySchema),
+        asyncHandler((req, res) => groupController.listGroupSessions(req, res)));
+
     return router;
 }
+
