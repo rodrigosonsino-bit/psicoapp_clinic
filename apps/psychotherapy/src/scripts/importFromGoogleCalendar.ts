@@ -71,7 +71,7 @@ async function importForTenant(tenant: {
     });
 
     // Persiste novo access_token se o client o renovar automaticamente
-    oauth2Client.on('tokens', async (newTokens: { access_token?: string; expiry_date?: number }) => {
+    oauth2Client.on('tokens', async (newTokens: any) => {
         if (newTokens.access_token) {
             await pool.query(
                 `UPDATE google_oauth_tokens
@@ -84,14 +84,20 @@ async function importForTenant(tenant: {
 
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-    // ── Pacientes deste tenant (nome → id) ───────────────────────
-    const patientsRes = await pool.query<{ id: string; name: string }>(
-        'SELECT id, name FROM psychotherapy_patients WHERE tenant_id = $1',
+    // ── Pacientes deste tenant (nome → dados completos) ──────────
+    const patientsRes = await pool.query<{
+        id: string; name: string; status: string;
+        payment_type: string; default_session_price_cents: number;
+    }>(
+        `SELECT id, name, status, payment_type, default_session_price_cents
+         FROM psychotherapy_patients WHERE tenant_id = $1`,
         [tenant.tenant_id]
     );
     const patientByName = new Map<string, string>();
+    const patientDataById = new Map<string, typeof patientsRes.rows[0]>();
     for (const p of patientsRes.rows) {
         patientByName.set(normalize(p.name), p.id);
+        patientDataById.set(p.id, p);
     }
     console.log(`Pacientes cadastrados: ${patientsRes.rows.length}`);
 
@@ -137,12 +143,19 @@ async function importForTenant(tenant: {
                 continue;
             }
 
-            // ── Extrai nome do paciente do título ────────────────
+            // ── Extrai nome do paciente do título com busca flexível por substring ────────────────
             const summary = event.summary ?? '';
-            // Formato esperado: "Sessão — Nome" ou qualquer variação
-            const patientName = summary.replace(/^sess[aã]o\s*[—\-–]\s*/i, '').trim();
-            const patientId = patientByName.get(normalize(patientName))
-                           ?? patientByName.get(normalize(summary)); // fallback: título inteiro
+            const normalizedSummary = normalize(summary);
+            let patientId: string | undefined;
+            let patientName = summary;
+
+            for (const [pName, pId] of patientByName.entries()) {
+                if (normalizedSummary.includes(pName) || pName.includes(normalizedSummary)) {
+                    patientId = pId;
+                    patientName = pName.toUpperCase();
+                    break;
+                }
+            }
 
             if (!patientId) {
                 unmatched.push(`"${summary}"`);
@@ -176,6 +189,38 @@ async function importForTenant(tenant: {
                 event.htmlLink ?? null,
             ]);
 
+            // ── Sync faturamento para attended ───────────────────
+            if (status === 'attended') {
+                const p = patientDataById.get(patientId!)!;
+                const SESSIONS_BY_STATUS: Record<string, number> =
+                    { weekly: 4, biweekly: 2, one_off: 1, inactive: 0 };
+                const monthStr = toMonthStr(start);
+                const initExpected = p.payment_type === 'monthly'
+                    ? (SESSIONS_BY_STATUS[p.status] ?? 0)
+                    : 1;
+
+                await pool.query(`
+                    INSERT INTO psychotherapy_monthly_records (
+                        id, tenant_id, patient_id, month,
+                        patient_name_snapshot, status, payment_type,
+                        session_price_cents, expected_sessions, absences,
+                        paid_sessions, payment_status, previous_month_paid_cents
+                    ) VALUES (
+                        gen_random_uuid(), $1, $2, $3,
+                        $4, $5, $6, $7, $8, 0, 0, 'pending', 0
+                    )
+                    ON CONFLICT (tenant_id, month, patient_id)
+                    WHERE patient_id IS NOT NULL
+                    DO UPDATE SET
+                        expected_sessions = psychotherapy_monthly_records.expected_sessions + 1,
+                        updated_at = NOW()
+                `, [
+                    tenant.tenant_id, patientId, monthStr,
+                    p.name, p.status, p.payment_type,
+                    p.default_session_price_cents, initExpected,
+                ]);
+            }
+
             const dateStr = start.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
             console.log(`  ✅  ${patientName.padEnd(25)} ${dateStr}  [${status}]`);
             countImported++;
@@ -194,6 +239,17 @@ async function importForTenant(tenant: {
         console.log(`\n  ⚠️  Títulos sem correspondência (verifique o nome cadastrado):`);
         for (const t of unmatched) console.log(`     ${t}`);
     }
+}
+
+/** Converte uma Date para YYYY-MM no fuso America/Sao_Paulo */
+function toMonthStr(date: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric', month: '2-digit',
+    }).formatToParts(date);
+    const y = parts.find(p => p.type === 'year')!.value;
+    const m = parts.find(p => p.type === 'month')!.value;
+    return `${y}-${m}`;
 }
 
 /** Status do agendamento baseado no status do evento e se já passou */

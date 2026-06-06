@@ -28,6 +28,22 @@ import { BookingLink } from '../../domain/models/BookingLink';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Converte uma Date para o formato YYYY-MM no fuso America/Sao_Paulo */
+function toMonthStr(date: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+    }).formatToParts(date);
+    const y = parts.find(p => p.type === 'year')!.value;
+    const m = parts.find(p => p.type === 'month')!.value;
+    return `${y}-${m}`;
+}
+
+const SESSIONS_BY_PATIENT_STATUS: Record<string, number> = {
+    weekly: 4, biweekly: 2, one_off: 1, inactive: 0,
+};
+
 import { injectable } from 'tsyringe';
 import { AppError } from '../../domain/errors/AppError';
 import { NotFoundError } from '../../domain/errors/NotFoundError';
@@ -757,11 +773,69 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async deleteAppointment(tenantId: string, id: string): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            DELETE FROM psychotherapy_appointments
-            WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
-        if (result.rowCount === 0) throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+        const client = await this.dbPool.connect();
+
+        try {
+            await client.query('BEGIN');
+
+            // 1. Lê o agendamento + dados do paciente antes de deletar
+            const appQuery = await client.query(`
+                SELECT
+                    a.patient_id, a.scheduled_at, a.status,
+                    p.payment_type, p.default_session_price_cents,
+                    p.name AS patient_name, p.status AS patient_status
+                FROM psychotherapy_appointments a
+                JOIN psychotherapy_patients p ON p.id = a.patient_id
+                WHERE a.tenant_id = $1 AND a.id = $2
+            `, [validTenantId, id]);
+
+            if (appQuery.rows.length === 0)
+                throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+
+            const { patient_id, scheduled_at, status, payment_type } = appQuery.rows[0];
+
+            // 2. Reverte faturamento se o agendamento já estava contabilizado
+            if (status === 'attended' || status === 'no_show') {
+                const deltaExpected = payment_type === 'monthly' ? 0 : -1;
+                const deltaAbsences = status === 'no_show' ? -1 : 0;
+
+                await client.query(`
+                    UPDATE psychotherapy_monthly_records
+                    SET
+                        expected_sessions = GREATEST(expected_sessions + $1, 0),
+                        absences          = GREATEST(absences + $2, 0),
+                        updated_at        = NOW()
+                    WHERE tenant_id = $3 AND patient_id = $4 AND month = $5
+                `, [deltaExpected, deltaAbsences, validTenantId, patient_id, toMonthStr(new Date(scheduled_at))]);
+            }
+
+            // 3. Remove sessão correspondente (somente se sem notas clínicas)
+            await client.query(`
+                DELETE FROM psychotherapy_sessions
+                WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
+                  AND (notes IS NULL OR TRIM(notes) = '')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM psychotherapy_clinical_notes
+                      WHERE session_id = psychotherapy_sessions.id
+                  )
+            `, [validTenantId, patient_id, scheduled_at]);
+
+            // 4. Deleta o agendamento
+            const del = await client.query(`
+                DELETE FROM psychotherapy_appointments
+                WHERE tenant_id = $1 AND id = $2
+            `, [validTenantId, id]);
+
+            if (del.rowCount === 0)
+                throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
     }
 
     async updateAppointmentStatus(tenantId: string, id: string, status: AppointmentStatus): Promise<PsychotherapyAppointment> {
@@ -771,7 +845,30 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         try {
             await client.query('BEGIN');
 
-            // 1. Atualizar o status do agendamento
+            // ── Pré-leitura: old_status + dados do paciente ───────────────────
+            const preQuery = await client.query(`
+                SELECT
+                    a.patient_id, a.scheduled_at, a.status AS old_status,
+                    p.name   AS patient_name,
+                    p.status AS patient_status,
+                    p.payment_type,
+                    p.default_session_price_cents
+                FROM psychotherapy_appointments a
+                JOIN psychotherapy_patients p ON p.id = a.patient_id
+                WHERE a.tenant_id = $1 AND a.id = $2
+            `, [validTenantId, id]);
+
+            if (preQuery.rows.length === 0)
+                throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+
+            const {
+                patient_id, scheduled_at,
+                old_status,
+                patient_name, patient_status,
+                payment_type, default_session_price_cents,
+            } = preQuery.rows[0];
+
+            // ── 1. Atualiza status ────────────────────────────────────────────
             const result = await client.query(`
                 UPDATE psychotherapy_appointments
                 SET status = $1, updated_at = NOW()
@@ -779,51 +876,91 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 RETURNING *;
             `, [status, validTenantId, id]);
 
-            if (result.rows.length === 0) {
-                throw new NotFoundError('Agendamento não encontrado ou não autorizado');
-            }
-
             const appointment = result.rows[0];
 
-            // 2. Sincronização com o Diário de Sessões (psychotherapy_sessions)
+            // ── 2. Sincronização com o Diário de Sessões ──────────────────────
             if (status === 'attended' || status === 'no_show' || status === 'canceled') {
-                const targetSessionStatus = 
-                    status === 'attended' ? 'attended' :
-                    status === 'no_show' ? 'unjustified_absence' : 'canceled';
+                const targetSessionStatus =
+                    status === 'attended'  ? 'attended' :
+                    status === 'no_show'   ? 'unjustified_absence' : 'canceled';
 
-                // Verificar se já existe registro de sessão para este paciente no mesmo horário (com LIMIT 1)
                 const sessionCheck = await client.query(`
                     SELECT id FROM psychotherapy_sessions
                     WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
                     LIMIT 1;
-                `, [validTenantId, appointment.patient_id, appointment.scheduled_at]);
+                `, [validTenantId, patient_id, scheduled_at]);
 
                 if (sessionCheck.rows.length > 0) {
-                    // Atualizar sessão existente
                     await client.query(`
                         UPDATE psychotherapy_sessions
                         SET status = $1, notes = COALESCE($2, notes), updated_at = NOW()
                         WHERE id = $3;
                     `, [targetSessionStatus, appointment.notes, sessionCheck.rows[0].id]);
                 } else {
-                    // Inserir nova sessão no diário
                     await client.query(`
                         INSERT INTO psychotherapy_sessions (id, tenant_id, patient_id, date, status, notes)
                         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5);
-                    `, [validTenantId, appointment.patient_id, appointment.scheduled_at, targetSessionStatus, appointment.notes]);
+                    `, [validTenantId, patient_id, scheduled_at, targetSessionStatus, appointment.notes]);
                 }
             } else if (status === 'scheduled' || status === 'confirmed') {
-                // Se voltou para agendado ou confirmado (compromisso futuro), removemos do diário
-                // Apenas deleta se a sessão NÃO possuir notas (tanto na tabela sessions quanto na clinical_notes)
                 await client.query(`
                     DELETE FROM psychotherapy_sessions
                     WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
-                      AND notes IS NULL
+                      AND (notes IS NULL OR TRIM(notes) = '')
                       AND NOT EXISTS (
-                          SELECT 1 FROM psychotherapy_clinical_notes 
+                          SELECT 1 FROM psychotherapy_clinical_notes
                           WHERE session_id = psychotherapy_sessions.id
                       );
-                `, [validTenantId, appointment.patient_id, appointment.scheduled_at]);
+                `, [validTenantId, patient_id, scheduled_at]);
+            }
+
+            // ── 3. Sincronização com Faturamento Mensal ───────────────────────
+            const wasBilled = old_status === 'attended' || old_status === 'no_show';
+            const isBilled  = status    === 'attended' || status    === 'no_show';
+
+            const deltaExpected = payment_type === 'monthly'
+                ? 0
+                : (isBilled ? 1 : 0) - (wasBilled ? 1 : 0);
+
+            const deltaAbsences = (status    === 'no_show' ? 1 : 0)
+                                - (old_status === 'no_show' ? 1 : 0);
+
+            // Dispara sempre que há mudança real OU na primeira vez que o status
+            // se torna attended/no_show (garante criação do registro mensal para
+            // pacientes monthly onde deltaExpected é sempre 0)
+            if (deltaExpected !== 0 || deltaAbsences !== 0 || isBilled) {
+                const monthStr    = toMonthStr(new Date(scheduled_at));
+                const initExpected = payment_type === 'monthly'
+                    ? (SESSIONS_BY_PATIENT_STATUS[patient_status] ?? 0)
+                    : (isBilled ? 1 : 0);
+                const initAbsences = status === 'no_show' ? 1 : 0;
+
+                await client.query(`
+                    INSERT INTO psychotherapy_monthly_records (
+                        id, tenant_id, patient_id, month,
+                        patient_name_snapshot, status, payment_type,
+                        session_price_cents, expected_sessions, absences,
+                        paid_sessions, payment_status, previous_month_paid_cents
+                    ) VALUES (
+                        gen_random_uuid(), $1, $2, $3,
+                        $4, $5, $6,
+                        $7, $8, $9,
+                        0, 'pending', 0
+                    )
+                    ON CONFLICT (tenant_id, month, patient_id)
+                    WHERE patient_id IS NOT NULL
+                    DO UPDATE SET
+                        expected_sessions = GREATEST(
+                            psychotherapy_monthly_records.expected_sessions + $10, 0),
+                        absences = GREATEST(
+                            psychotherapy_monthly_records.absences + $11, 0),
+                        updated_at = NOW()
+                `, [
+                    validTenantId, patient_id, monthStr,
+                    patient_name, patient_status, payment_type,
+                    default_session_price_cents, initExpected, initAbsences,
+                    deltaExpected, deltaAbsences,
+                ]);
             }
 
             await client.query('COMMIT');
