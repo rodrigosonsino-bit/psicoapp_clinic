@@ -20,6 +20,7 @@ const scheduleMessageSchema = z.object({
     content: z.string().min(1, 'O conteúdo da mensagem não pode estar vazio'),
     sendAt: z.string().datetime({ message: 'Data de disparo inválida (deve ser ISO 8601)' }),
     platform: z.enum(['whatsapp', 'telegram']).default('whatsapp'),
+    recurrence: z.string().optional(),
     metadata: z.record(z.string(), z.any()).optional().nullable(),
     imageBase64: z.string().optional()
 });
