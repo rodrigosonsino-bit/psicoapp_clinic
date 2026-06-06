@@ -180,6 +180,7 @@ export interface IPsychotherapyRepository {
     deleteAppointment(tenantId: string, id: string): Promise<void>;
     updateAppointmentStatus(tenantId: string, id: string, status: AppointmentStatus): Promise<PsychotherapyAppointment>;
     findUpcomingAppointments(windowStart: Date, windowEnd: Date): Promise<UpcomingAppointment[]>;
+    countScheduledSessionsByPatient(tenantId: string, month: string): Promise<Map<string, number>>;
     saveClinicalNote(data: SaveClinicalNoteDTO): Promise<ClinicalNote>;
     listClinicalNotes(tenantId: string, patientId: string, page?: number, limit?: number): Promise<PaginatedResult<ClinicalNote>>;
     findClinicalNoteById(tenantId: string, id: string): Promise<ClinicalNote | null>;

@@ -20,28 +20,42 @@ export class GeneratePsychotherapyMonthUseCase {
 
         const patients = await this.repository.listPatients(tenantId);
 
-        // Fix #3: skip inactive patients — they don't generate monthly records.
+        // Skip inactive patients — they don't generate monthly records.
         const activePatients = patients.filter(p => p.status !== 'inactive');
 
         if (activePatients.length === 0) return [];
 
-        // Fix #4: single bulk INSERT instead of N sequential queries.
+        // Conta agendamentos reais do mês por paciente para detectar a 5ª semana.
+        // Usa query de agregação direta — sem paginação, sem carregar campos desnecessários.
+        const scheduledCounts = await this.repository.countScheduledSessionsByPatient(tenantId, month);
+
         return this.repository.bulkSaveMonthlyRecords(
-            activePatients.map(patient => ({
-                tenantId,
-                patientId: patient.id,
-                month,
-                patientNameSnapshot: patient.name,
-                status: patient.status,
-                paymentType: patient.paymentType,
-                sessionPriceCents: patient.defaultSessionPriceCents,
-                expectedSessions: EXPECTED_SESSIONS_BY_STATUS[patient.status],
-                paidSessions: 0,
-                absences: 0,
-                paymentStatus: 'pending' as const,
-                notes: patient.notes,
-                previousMonthPaidCents: 0
-            }))
+            activePatients.map(patient => {
+                const defaultSessions = EXPECTED_SESSIONS_BY_STATUS[patient.status];
+                const actualSessions  = scheduledCounts.get(patient.id) ?? 0;
+
+                // Se houver agendamentos reais, usa o maior valor (cobre o mês de 5 semanas).
+                // Se a agenda ainda não foi montada, cai no padrão.
+                const expectedSessions = actualSessions > 0
+                    ? Math.max(defaultSessions, actualSessions)
+                    : defaultSessions;
+
+                return {
+                    tenantId,
+                    patientId: patient.id,
+                    month,
+                    patientNameSnapshot: patient.name,
+                    status: patient.status,
+                    paymentType: patient.paymentType,
+                    sessionPriceCents: patient.defaultSessionPriceCents,
+                    expectedSessions,
+                    paidSessions: 0,
+                    absences: 0,
+                    paymentStatus: 'pending' as const,
+                    notes: patient.notes,
+                    previousMonthPaidCents: 0,
+                };
+            })
         );
     }
 }

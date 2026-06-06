@@ -290,11 +290,46 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             )
             VALUES ${placeholders.join(', ')}
             ON CONFLICT (tenant_id, month, patient_id) WHERE patient_id IS NOT NULL
-            DO NOTHING
+            DO UPDATE SET
+                expected_sessions = GREATEST(
+                    EXCLUDED.expected_sessions,
+                    psychotherapy_monthly_records.expected_sessions
+                ),
+                updated_at = NOW()
             RETURNING *;
         `, values);
 
         return result.rows.map(row => this.mapMonthlyRecord(row));
+    }
+
+    /**
+     * Conta agendamentos ativos (não cancelados) por paciente em um dado mês.
+     * Usa query de agregação direta — evita carregar todos os registros em memória.
+     * Retorna um Map<patientId, count>.
+     */
+    async countScheduledSessionsByPatient(tenantId: string, month: string): Promise<Map<string, number>> {
+        const validTenantId = this.validateTenantId(tenantId);
+
+        // Limites do mês em UTC, considerando o fuso America/Sao_Paulo (UTC-3)
+        const monthStart = new Date(`${month}-01T03:00:00.000Z`);
+        const monthEnd   = new Date(monthStart);
+        monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+
+        const result = await this.dbPool.query<{ patient_id: string; session_count: string }>(`
+            SELECT patient_id, COUNT(*) AS session_count
+            FROM psychotherapy_appointments
+            WHERE tenant_id   = $1
+              AND scheduled_at >= $2
+              AND scheduled_at <  $3
+              AND status NOT IN ('canceled')
+            GROUP BY patient_id
+        `, [validTenantId, monthStart, monthEnd]);
+
+        const map = new Map<string, number>();
+        for (const row of result.rows) {
+            map.set(row.patient_id, parseInt(row.session_count, 10));
+        }
+        return map;
     }
 
     async listMonthlyRecords(tenantId: string, month: string): Promise<PsychotherapyMonthlyRecord[]> {
