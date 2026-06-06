@@ -5,7 +5,7 @@ import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMon
 const EXPECTED_SESSIONS_BY_STATUS = {
     weekly: 4,
     biweekly: 2,
-    one_off: 1,
+    one_off: 0,
     inactive: 0
 } as const;
 

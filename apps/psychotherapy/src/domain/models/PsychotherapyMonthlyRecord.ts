@@ -24,11 +24,17 @@ export class PsychotherapyMonthlyRecord {
 
     get expectedAmountCents(): number {
         if (!this.sessionPriceCents) return 0;
+        if (this.paymentType === 'monthly') return this.sessionPriceCents;
         return this.sessionPriceCents * Math.max(this.expectedSessions - this.absences, 0);
     }
 
     get receivedAmountCents(): number {
         if (!this.sessionPriceCents) return 0;
+        if (this.paymentType === 'monthly') {
+            const target = Math.max(1, this.expectedSessions - this.absences);
+            const paid = Math.min(this.paidSessions, target);
+            return Math.round(this.sessionPriceCents * paid / target) + this.previousMonthPaidCents;
+        }
         return this.sessionPriceCents * this.paidSessions + this.previousMonthPaidCents;
     }
 

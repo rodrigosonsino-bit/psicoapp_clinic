@@ -41,7 +41,7 @@ function toMonthStr(date: Date): string {
 }
 
 const SESSIONS_BY_PATIENT_STATUS: Record<string, number> = {
-    weekly: 4, biweekly: 2, one_off: 1, inactive: 0,
+    weekly: 4, biweekly: 2, one_off: 0, inactive: 0,
 };
 
 import { injectable } from 'tsyringe';
@@ -295,6 +295,12 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                     EXCLUDED.expected_sessions,
                     psychotherapy_monthly_records.expected_sessions
                 ),
+                payment_status = CASE
+                    WHEN psychotherapy_monthly_records.paid_sessions >= GREATEST(
+                        GREATEST(EXCLUDED.expected_sessions, psychotherapy_monthly_records.expected_sessions) - psychotherapy_monthly_records.absences, 0) THEN 'paid'
+                    WHEN psychotherapy_monthly_records.paid_sessions > 0 THEN 'partial'
+                    ELSE 'pending'
+                END,
                 updated_at = NOW()
             RETURNING *;
         `, values);
@@ -669,7 +675,12 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         // Query 2: Pending amount in cents for the current month
         const pendingResult = await this.dbPool.query(`
             SELECT COALESCE(SUM(
-                GREATEST(expected_sessions - paid_sessions, 0) * COALESCE(session_price_cents, 0)
+                CASE 
+                    WHEN payment_type = 'monthly' THEN
+                        GREATEST(session_price_cents - (session_price_cents * paid_sessions / GREATEST(expected_sessions - absences, 1)), 0)
+                    ELSE
+                        GREATEST(expected_sessions - absences - paid_sessions, 0) * COALESCE(session_price_cents, 0)
+                END
             ), 0) as pending
             FROM psychotherapy_monthly_records
             WHERE tenant_id = $1 AND month = $2 AND payment_status != 'paid'
@@ -839,6 +850,11 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                     SET
                         expected_sessions = GREATEST(expected_sessions + $1, 0),
                         absences          = GREATEST(absences + $2, 0),
+                        payment_status = CASE
+                            WHEN paid_sessions >= GREATEST(expected_sessions + $1 - GREATEST(absences + $2, 0), 0) THEN 'paid'
+                            WHEN paid_sessions > 0 THEN 'partial'
+                            ELSE 'pending'
+                        END,
                         updated_at        = NOW()
                     WHERE tenant_id = $3 AND patient_id = $4 AND month = $5
                 `, [deltaExpected, deltaAbsences, validTenantId, patient_id, toMonthStr(new Date(scheduled_at))]);
@@ -989,6 +1005,12 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                             psychotherapy_monthly_records.expected_sessions + $10, 0),
                         absences = GREATEST(
                             psychotherapy_monthly_records.absences + $11, 0),
+                        payment_status = CASE
+                            WHEN psychotherapy_monthly_records.paid_sessions >= GREATEST(
+                                psychotherapy_monthly_records.expected_sessions + $10 - GREATEST(psychotherapy_monthly_records.absences + $11, 0), 0) THEN 'paid'
+                            WHEN psychotherapy_monthly_records.paid_sessions > 0 THEN 'partial'
+                            ELSE 'pending'
+                        END,
                         updated_at = NOW()
                 `, [
                     validTenantId, patient_id, monthStr,
