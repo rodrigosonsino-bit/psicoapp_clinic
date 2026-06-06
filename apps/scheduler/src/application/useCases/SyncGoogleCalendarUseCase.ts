@@ -136,14 +136,18 @@ export class SyncGoogleCalendarUseCase {
     }
 
     private extractPhoneNumber(text: string): string | null {
-        // Encontrar celular DDI + DDD
-        const matches = text.match(/\b(55\d{10,11})\b/);
-        if (matches) return matches[1];
+        const regex = /(?:\+?55\s?)?\(?([1-9]\d)\)?\s?(?:9?\d{4}[-.\s]?\d{4})/g;
+        const match = regex.exec(text);
+        if (!match) return null;
 
-        // Encontrar celular DDD 11 dígitos sem DDI
-        const matchesDDD = text.match(/\b([1-9]\d{10})\b/);
-        if (matchesDDD) return '55' + matchesDDD[1];
+        const clean = match[0].replace(/\D/g, '');
 
+        if (clean.length === 10 || clean.length === 11) {
+            return '55' + clean;
+        }
+        if (clean.length === 12 || clean.length === 13) {
+            return clean;
+        }
         return null;
     }
 
