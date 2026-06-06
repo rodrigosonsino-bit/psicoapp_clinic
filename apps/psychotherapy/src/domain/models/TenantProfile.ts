@@ -6,7 +6,8 @@ export class TenantProfile {
         public readonly fullName: string | null,
         public readonly document: string | null,
         public readonly professionalId: string | null,
-        public readonly address: string | null
+        public readonly address: string | null,
+        public readonly twoFactorEnabled: boolean = false
     ) {}
 
     toJSON() {
@@ -17,7 +18,8 @@ export class TenantProfile {
             fullName: this.fullName,
             document: this.document,
             professionalId: this.professionalId,
-            address: this.address
+            address: this.address,
+            twoFactorEnabled: this.twoFactorEnabled
         };
     }
 }

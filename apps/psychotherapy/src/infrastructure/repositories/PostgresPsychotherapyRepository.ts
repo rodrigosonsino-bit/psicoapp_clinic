@@ -358,7 +358,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = this.validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
@@ -377,7 +377,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 address = COALESCE($5, address),
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
@@ -1368,7 +1368,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.full_name,
             row.document,
             row.professional_id,
-            row.address
+            row.address,
+            row.totp_enabled || false
         );
     }
 

@@ -43,6 +43,7 @@ export interface TenantProfileRow {
     document: string | null;
     professional_id: string | null;
     address: string | null;
+    totp_enabled?: boolean;
 }
 
 // Linha da tabela: psychotherapy_receipts
