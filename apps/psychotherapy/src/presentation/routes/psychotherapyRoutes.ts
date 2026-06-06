@@ -20,6 +20,7 @@ import { container } from '../../container';
 // Zod Enum schemas
 const patientStatusSchema = z.enum(['weekly', 'biweekly', 'one_off', 'inactive']);
 const paymentTypeSchema = z.enum(['monthly', 'per_session']);
+const reminderChannelSchema = z.enum(['whatsapp', 'email', 'both', 'none']);
 const paymentStatusSchema = z.enum(['paid', 'pending', 'partial']);
 
 // Route Param and Query schemas
@@ -70,7 +71,8 @@ const patientSchema = z.object({
     notes: z.string().nullable().optional(),
     document: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
-    email: z.string().nullable().optional()
+    email: z.string().nullable().optional(),
+    reminderChannel: reminderChannelSchema.optional().default('whatsapp')
 });
 
 const monthlyRecordSchema = z.object({
@@ -402,6 +404,37 @@ export function createPsychotherapyRoutes(): Router {
         validateParams(groupIdParamSchema),
         validateQuery(listGroupSessionsQuerySchema),
         asyncHandler((req, res) => groupController.listGroupSessions(req, res)));
+
+    // ── Lembretes automáticos ─────────────────────────────────────────────────
+    // Trigger manual para teste / diagnóstico
+    router.post('/psychotherapy/reminders/trigger', authMiddleware, asyncHandler(async (req, res) => {
+        const { ReminderScheduler } = require('../../infrastructure/scheduler/ReminderScheduler');
+        const { WhatsappSessionManager } = require('@antigravity/whatsapp-core');
+        const repository = container.resolve<any>('IPsychotherapyRepository');
+        const sessionManager = container.resolve<InstanceType<typeof WhatsappSessionManager>>('WhatsappSessionManager');
+        const scheduler = new ReminderScheduler(repository, sessionManager);
+        const result = await scheduler.processReminders();
+        res.json({ ok: true, result });
+    }));
+
+    // Log dos últimos 50 lembretes disparados
+    router.get('/psychotherapy/reminders/log', authMiddleware, asyncHandler(async (req, res) => {
+        const { Pool } = require('pg');
+        const dbPool = container.resolve<InstanceType<typeof Pool>>(Pool);
+        const tenantId = (req as any).tenantId;
+        const rows = await dbPool.query(
+            `SELECT rl.id, rl.appointment_id, rl.channel_used, rl.status, rl.error_message, rl.sent_at,
+                    a.scheduled_at, p.name AS patient_name
+             FROM psychotherapy_reminders_log rl
+             JOIN psychotherapy_appointments a ON a.id = rl.appointment_id
+             JOIN psychotherapy_patients p ON p.id = a.patient_id
+             WHERE rl.tenant_id = $1
+             ORDER BY rl.sent_at DESC
+             LIMIT 50`,
+            [tenantId]
+        );
+        res.json({ data: rows.rows });
+    }));
 
     return router;
 }

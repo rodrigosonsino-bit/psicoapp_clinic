@@ -2,29 +2,26 @@ import * as cron from 'node-cron';
 import { IPsychotherapyRepository, UpcomingAppointment } from '../../domain/repositories/IPsychotherapyRepository';
 import { logger } from '../logger';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
+import { EmailService } from '../services/EmailService';
 
-function buildWhatsAppLink(phone: string, message: string): string {
-    const cleaned = phone.replace(/\D/g, '');
-    const withCountryCode = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
-    return `https://wa.me/${withCountryCode}?text=${encodeURIComponent(message)}`;
-}
+// ── Formatação ─────────────────────────────────────────────────────────────────
 
-function formatDateTime(date: Date): string {
+function formatDateTimeBR(date: Date): string {
     return date.toLocaleString('pt-BR', {
         timeZone: 'America/Sao_Paulo',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
     });
 }
 
-function buildReminderMessage(appointment: UpcomingAppointment): string {
-    const dateStr = formatDateTime(appointment.scheduledAt);
+function buildWhatsAppMessage(appointment: UpcomingAppointment): string {
+    const dateStr = formatDateTimeBR(appointment.scheduledAt);
     return (
         `Olá, ${appointment.patientName}! 😊\n\n` +
-        `Lembrando que você tem uma sessão agendada amanhã:\n` +
+        `Lembrando que você tem uma sessão agendada:\n` +
         `📅 ${dateStr}\n` +
         `⏱️ Duração: ${appointment.durationMinutes} minutos\n\n` +
         `Por favor, confirme sua presença respondendo esta mensagem.\n` +
@@ -32,16 +29,30 @@ function buildReminderMessage(appointment: UpcomingAppointment): string {
     );
 }
 
+// ── Resultado do processamento ─────────────────────────────────────────────────
+
+export interface ReminderRunResult {
+    totalAppointments: number;
+    whatsappSent: number;
+    whatsappFailed: number;
+    emailSent: number;
+    emailFailed: number;
+    skipped: number;
+}
+
+// ── Scheduler ──────────────────────────────────────────────────────────────────
+
 export class ReminderScheduler {
     private task: ReturnType<typeof cron.schedule> | null = null;
+    private readonly emailService = new EmailService();
 
     constructor(
         private readonly repository: IPsychotherapyRepository,
         private readonly whatsappSessionManager?: WhatsappSessionManager
     ) {}
 
+    /** Inicia o cron — executa de hora em hora no minuto 0. */
     start(): void {
-        // Executa a cada hora, nos minutos 0 (ex: 08:00, 09:00, 10:00...)
         this.task = cron.schedule('0 * * * *', async () => {
             await this.processReminders();
         }, { timezone: 'America/Sao_Paulo' });
@@ -54,108 +65,151 @@ export class ReminderScheduler {
         logger.info('🔕 Scheduler de lembretes parado');
     }
 
-    async processReminders(): Promise<void> {
+    /**
+     * Processa os lembretes pendentes para as próximas ~24 horas.
+     * Pode ser chamado manualmente (ex: via endpoint de teste).
+     */
+    async processReminders(): Promise<ReminderRunResult> {
+        const result: ReminderRunResult = {
+            totalAppointments: 0,
+            whatsappSent: 0,
+            whatsappFailed: 0,
+            emailSent: 0,
+            emailFailed: 0,
+            skipped: 0,
+        };
+
         try {
-            // Janela: sessões que ocorrem entre 23h e 25h a partir de agora (garante cobertura de 1 execução/hora)
+            // Janela: 23h–25h a partir de agora (cobre 1 execução/hora sem lacunas)
             const now = new Date();
             const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-            const windowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+            const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
 
             const appointments = await this.repository.findUpcomingAppointments(windowStart, windowEnd);
+            result.totalAppointments = appointments.length;
 
-            if (appointments.length === 0) return;
+            if (appointments.length === 0) return result;
 
             logger.info({ count: appointments.length }, '🔔 Processando lembretes de agendamentos');
 
-            for (const appointment of appointments) {
-                await this.sendReminder(appointment);
+            for (const appt of appointments) {
+                await this.dispatchReminder(appt, result);
             }
+
+            logger.info(result, '🔔 Ciclo de lembretes concluído');
         } catch (err) {
             logger.error({ err }, 'Erro ao processar lembretes de agendamentos');
         }
+
+        return result;
     }
 
-    private async sendReminder(appointment: UpcomingAppointment): Promise<void> {
-        const message = buildReminderMessage(appointment);
+    // ── Despacho por canal ─────────────────────────────────────────────────────
 
-        if (!appointment.patientPhone) {
-            logger.warn({
-                appointmentId: appointment.appointmentId,
-                patientName: appointment.patientName
-            }, '⚠️ Paciente sem telefone cadastrado — lembrete não enviado');
+    private async dispatchReminder(
+        appt: UpcomingAppointment,
+        result: ReminderRunResult
+    ): Promise<void> {
+        const channel = appt.reminderChannel;
+
+        const needsWhatsApp = channel === 'whatsapp' || channel === 'both';
+        const needsEmail    = channel === 'email'    || channel === 'both';
+
+        // ── WhatsApp ─────────────────────────────────────────────────────────
+        if (needsWhatsApp) {
+            const alreadySent = await this.repository.hasReminderBeenSent(appt.appointmentId, 'whatsapp');
+            if (alreadySent) {
+                result.skipped++;
+            } else if (!appt.patientPhone) {
+                logger.warn({ appointmentId: appt.appointmentId, patientName: appt.patientName },
+                    '⚠️ Paciente sem telefone — WhatsApp não enviado');
+                result.skipped++;
+            } else {
+                await this.sendViaWhatsApp(appt, result);
+            }
+        }
+
+        // ── Email ─────────────────────────────────────────────────────────────
+        if (needsEmail) {
+            const alreadySent = await this.repository.hasReminderBeenSent(appt.appointmentId, 'email');
+            if (alreadySent) {
+                result.skipped++;
+            } else if (!appt.patientEmail) {
+                logger.warn({ appointmentId: appt.appointmentId, patientName: appt.patientName },
+                    '⚠️ Paciente sem e-mail — e-mail não enviado');
+                result.skipped++;
+            } else {
+                await this.sendViaEmail(appt, result);
+            }
+        }
+    }
+
+    // ── Envio WhatsApp ─────────────────────────────────────────────────────────
+
+    private async sendViaWhatsApp(
+        appt: UpcomingAppointment,
+        result: ReminderRunResult
+    ): Promise<void> {
+        const message = buildWhatsAppMessage(appt);
+
+        if (!this.whatsappSessionManager) {
+            logger.warn({ appointmentId: appt.appointmentId },
+                '⚠️ WhatsappSessionManager não disponível — WhatsApp não enviado');
+            result.skipped++;
             return;
         }
 
-        // Tentativa 1: Envio direto via WhatsApp (Baileys)
-        if (this.whatsappSessionManager) {
-            try {
-                const client = await this.whatsappSessionManager.getSession(appointment.tenantId);
-                if (client && client.isConnected()) {
-                    await client.sendMessage(appointment.patientPhone, message);
-                    logger.info({
-                        appointmentId: appointment.appointmentId,
-                        tenantId: appointment.tenantId,
-                        patientName: appointment.patientName,
-                        scheduledAt: appointment.scheduledAt
-                    }, '✅ Lembrete enviado via WhatsApp');
-                    return; // Sucesso — não precisa do fallback
-                } else {
-                    logger.warn({
-                        appointmentId: appointment.appointmentId,
-                        tenantId: appointment.tenantId
-                    }, '⚠️ Sessão WhatsApp não conectada para este tenant — usando fallback');
-                }
-            } catch (err) {
-                logger.error({ err, appointmentId: appointment.appointmentId }, 'Erro ao enviar lembrete via WhatsApp — usando fallback');
+        try {
+            const client = await this.whatsappSessionManager.getSession(appt.tenantId);
+            if (!client || !client.isConnected()) {
+                throw new Error('Sessão WhatsApp não conectada para este tenant');
             }
+
+            await client.sendMessage(appt.patientPhone!, message);
+            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'whatsapp', 'success');
+
+            logger.info({
+                appointmentId: appt.appointmentId,
+                tenantId: appt.tenantId,
+                patientName: appt.patientName,
+                scheduledAt: appt.scheduledAt,
+            }, '✅ Lembrete enviado via WhatsApp');
+
+            result.whatsappSent++;
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            await this.repository.markReminderSent(
+                appt.appointmentId, appt.tenantId, 'whatsapp', 'failed', errorMsg
+            );
+            logger.error({ err, appointmentId: appt.appointmentId }, '❌ Falha ao enviar lembrete via WhatsApp');
+            result.whatsappFailed++;
         }
-
-        // Fallback: loga o link para envio manual ou via webhook externo
-        const whatsappLink = buildWhatsAppLink(appointment.patientPhone, message);
-        logger.info({
-            appointmentId: appointment.appointmentId,
-            tenantId: appointment.tenantId,
-            patientName: appointment.patientName,
-            scheduledAt: appointment.scheduledAt,
-            whatsappLink
-        }, '📱 Lembrete WhatsApp gerado (fallback — conecte o WhatsApp para envio automático)');
-
-        await this.dispatchToWebhook(appointment, message, whatsappLink);
     }
 
-    private async dispatchToWebhook(
-        appointment: UpcomingAppointment,
-        message: string,
-        whatsappLink: string
+    // ── Envio Email ────────────────────────────────────────────────────────────
+
+    private async sendViaEmail(
+        appt: UpcomingAppointment,
+        result: ReminderRunResult
     ): Promise<void> {
-        const webhookUrl = process.env.REMINDER_WEBHOOK_URL;
-        if (!webhookUrl) return;
-
         try {
-            const payload = {
-                event: 'appointment.reminder',
-                appointmentId: appointment.appointmentId,
-                tenantId: appointment.tenantId,
-                patientId: appointment.patientId,
-                patientName: appointment.patientName,
-                patientPhone: appointment.patientPhone,
-                scheduledAt: appointment.scheduledAt.toISOString(),
-                message,
-                whatsappLink
-            };
-
-            const response = await fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: AbortSignal.timeout(5000)
+            await this.emailService.sendAppointmentReminder({
+                to: appt.patientEmail!,
+                patientName: appt.patientName,
+                therapistName: appt.tenantName,
+                scheduledAt: appt.scheduledAt,
+                durationMinutes: appt.durationMinutes,
             });
 
-            if (!response.ok) {
-                logger.warn({ status: response.status, webhookUrl }, 'Webhook de lembrete retornou status não-OK');
-            }
+            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'email', 'success');
+            result.emailSent++;
         } catch (err) {
-            logger.error({ err, webhookUrl }, 'Falha ao enviar webhook de lembrete');
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            await this.repository.markReminderSent(
+                appt.appointmentId, appt.tenantId, 'email', 'failed', errorMsg
+            );
+            logger.error({ err, appointmentId: appt.appointmentId }, '❌ Falha ao enviar lembrete por e-mail');
+            result.emailFailed++;
         }
     }
 }

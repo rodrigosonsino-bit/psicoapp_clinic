@@ -1,5 +1,6 @@
 export type PatientStatus = 'weekly' | 'biweekly' | 'one_off' | 'inactive';
 export type PaymentType = 'monthly' | 'per_session';
+export type ReminderChannel = 'whatsapp' | 'email' | 'both' | 'none';
 
 export class PsychotherapyPatient {
     constructor(
@@ -14,6 +15,7 @@ export class PsychotherapyPatient {
         public readonly phone: string | null,
         public readonly email: string | null,
         public readonly createdAt: Date,
-        public readonly updatedAt: Date
+        public readonly updatedAt: Date,
+        public readonly reminderChannel: ReminderChannel = 'whatsapp'
     ) {}
 }

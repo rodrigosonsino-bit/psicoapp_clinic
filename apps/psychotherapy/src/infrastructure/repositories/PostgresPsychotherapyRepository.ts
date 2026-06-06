@@ -69,9 +69,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const tenantId = this.validateTenantId(data.tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_patients (
-                id, tenant_id, name, status, payment_type, default_session_price_cents, notes, document, phone, email
+                id, tenant_id, name, status, payment_type, default_session_price_cents,
+                notes, document, phone, email, reminder_channel
             )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 status = EXCLUDED.status,
@@ -81,6 +82,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 document = EXCLUDED.document,
                 phone = EXCLUDED.phone,
                 email = EXCLUDED.email,
+                reminder_channel = EXCLUDED.reminder_channel,
                 updated_at = NOW()
             WHERE psychotherapy_patients.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
@@ -94,7 +96,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.notes || null,
             data.document || null,
             data.phone || null,
-            data.email || null
+            data.email || null,
+            data.reminderChannel ?? 'whatsapp'
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
@@ -1033,30 +1036,63 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async findUpcomingAppointments(windowStart: Date, windowEnd: Date): Promise<UpcomingAppointment[]> {
         const result = await this.dbPool.query(`
             SELECT
-                a.id AS appointment_id,
+                a.id            AS appointment_id,
                 a.tenant_id,
+                t.name          AS tenant_name,
                 a.patient_id,
-                p.name AS patient_name,
-                p.phone AS patient_phone,
+                p.name          AS patient_name,
+                p.phone         AS patient_phone,
+                p.email         AS patient_email,
+                p.reminder_channel,
                 a.scheduled_at,
                 a.duration_minutes
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
+            JOIN tenants t ON t.id = a.tenant_id
             WHERE a.scheduled_at >= $1
               AND a.scheduled_at < $2
               AND a.status IN ('scheduled', 'confirmed')
+              AND p.reminder_channel <> 'none'
             ORDER BY a.scheduled_at ASC;
         `, [windowStart, windowEnd]);
 
         return result.rows.map(row => ({
-            appointmentId: row.appointment_id,
-            tenantId: row.tenant_id,
-            patientId: row.patient_id,
-            patientName: row.patient_name,
-            patientPhone: row.patient_phone,
-            scheduledAt: new Date(row.scheduled_at),
-            durationMinutes: row.duration_minutes
+            appointmentId:  row.appointment_id,
+            tenantId:       row.tenant_id,
+            tenantName:     row.tenant_name,
+            patientId:      row.patient_id,
+            patientName:    row.patient_name,
+            patientPhone:   row.patient_phone,
+            patientEmail:   row.patient_email,
+            reminderChannel: row.reminder_channel ?? 'whatsapp',
+            scheduledAt:    new Date(row.scheduled_at),
+            durationMinutes: row.duration_minutes,
         }));
+    }
+
+    async markReminderSent(
+        appointmentId: string,
+        tenantId: string,
+        channelUsed: 'whatsapp' | 'email',
+        status: 'success' | 'failed',
+        errorMessage?: string
+    ): Promise<void> {
+        await this.dbPool.query(`
+            INSERT INTO psychotherapy_reminders_log
+                (tenant_id, appointment_id, channel_used, status, error_message)
+            VALUES ($1, $2, $3, $4, $5);
+        `, [tenantId, appointmentId, channelUsed, status, errorMessage ?? null]);
+    }
+
+    async hasReminderBeenSent(appointmentId: string, channelUsed: 'whatsapp' | 'email'): Promise<boolean> {
+        const result = await this.dbPool.query(`
+            SELECT 1 FROM psychotherapy_reminders_log
+            WHERE appointment_id = $1
+              AND channel_used = $2
+              AND status = 'success'
+            LIMIT 1;
+        `, [appointmentId, channelUsed]);
+        return result.rows.length > 0;
     }
 
     // ── Google OAuth Tokens ───────────────────────────────────────────────────
@@ -1335,7 +1371,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.phone,
             row.email,
             new Date(row.created_at),
-            new Date(row.updated_at)
+            new Date(row.updated_at),
+            row.reminder_channel ?? 'whatsapp'
         );
     }
 

@@ -1,5 +1,5 @@
 import { PaymentStatus, PsychotherapyMonthlyRecord } from '../models/PsychotherapyMonthlyRecord';
-import { PatientStatus, PaymentType, PsychotherapyPatient } from '../models/PsychotherapyPatient';
+import { PatientStatus, PaymentType, PsychotherapyPatient, ReminderChannel } from '../models/PsychotherapyPatient';
 import { PsychotherapyReceipt } from '../models/PsychotherapyReceipt';
 import { PsychotherapySession, SessionStatus } from '../models/PsychotherapySession';
 import { ExpenseCategory, PsychotherapyExpense } from '../models/PsychotherapyExpense';
@@ -20,6 +20,7 @@ export interface SavePatientDTO {
     document?: string | null;
     phone?: string | null;
     email?: string | null;
+    reminderChannel?: ReminderChannel;
 }
 
 export interface SaveMonthlyRecordDTO {
@@ -111,12 +112,18 @@ export interface ListAppointmentsOptions {
 export interface UpcomingAppointment {
     appointmentId: string;
     tenantId: string;
+    tenantName: string;
     patientId: string;
     patientName: string;
     patientPhone: string | null;
+    patientEmail: string | null;
+    reminderChannel: ReminderChannel;
     scheduledAt: Date;
     durationMinutes: number;
 }
+
+export type ReminderLogStatus = 'success' | 'failed';
+export type ReminderLogChannel = 'whatsapp' | 'email';
 
 export interface SaveClinicalNoteDTO {
     id?: string;
@@ -180,6 +187,8 @@ export interface IPsychotherapyRepository {
     deleteAppointment(tenantId: string, id: string): Promise<void>;
     updateAppointmentStatus(tenantId: string, id: string, status: AppointmentStatus): Promise<PsychotherapyAppointment>;
     findUpcomingAppointments(windowStart: Date, windowEnd: Date): Promise<UpcomingAppointment[]>;
+    markReminderSent(appointmentId: string, tenantId: string, channelUsed: ReminderLogChannel, status: ReminderLogStatus, errorMessage?: string): Promise<void>;
+    hasReminderBeenSent(appointmentId: string, channelUsed: ReminderLogChannel): Promise<boolean>;
     countScheduledSessionsByPatient(tenantId: string, month: string): Promise<Map<string, number>>;
     saveClinicalNote(data: SaveClinicalNoteDTO): Promise<ClinicalNote>;
     listClinicalNotes(tenantId: string, patientId: string, page?: number, limit?: number): Promise<PaginatedResult<ClinicalNote>>;

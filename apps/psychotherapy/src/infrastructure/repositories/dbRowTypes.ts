@@ -10,6 +10,7 @@ export interface PatientRow {
     document: string | null;
     phone: string | null;
     email: string | null;
+    reminder_channel: 'whatsapp' | 'email' | 'both' | 'none' | null;
     created_at: Date;
     updated_at: Date;
 }
