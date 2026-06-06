@@ -198,7 +198,9 @@ async function importForTenant(tenant: {
                 const initExpected = p.payment_type === 'monthly'
                     ? (SESSIONS_BY_STATUS[p.status] ?? 0)
                     : 1;
+                const deltaExpected = p.payment_type === 'monthly' ? 0 : 1;
 
+                // 1. Sincroniza faturamento mensal
                 await pool.query(`
                     INSERT INTO psychotherapy_monthly_records (
                         id, tenant_id, patient_id, month,
@@ -212,13 +214,28 @@ async function importForTenant(tenant: {
                     ON CONFLICT (tenant_id, month, patient_id)
                     WHERE patient_id IS NOT NULL
                     DO UPDATE SET
-                        expected_sessions = psychotherapy_monthly_records.expected_sessions + 1,
+                        expected_sessions = psychotherapy_monthly_records.expected_sessions + $9,
                         updated_at = NOW()
                 `, [
                     tenant.tenant_id, patientId, monthStr,
                     p.name, p.status, p.payment_type,
                     p.default_session_price_cents, initExpected,
+                    deltaExpected
                 ]);
+
+                // 2. Sincroniza diário de sessões
+                const sessionCheck = await pool.query(`
+                    SELECT id FROM psychotherapy_sessions
+                    WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
+                    LIMIT 1;
+                `, [tenant.tenant_id, patientId, start]);
+
+                if (sessionCheck.rows.length === 0) {
+                    await pool.query(`
+                        INSERT INTO psychotherapy_sessions (id, tenant_id, patient_id, date, status, notes)
+                        VALUES (gen_random_uuid(), $1, $2, $3, 'attended', $4);
+                    `, [tenant.tenant_id, patientId, start, event.description ?? null]);
+                }
             }
 
             const dateStr = start.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });

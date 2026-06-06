@@ -10,7 +10,7 @@
     "migrate": "ts-node src/runMigrations.ts",
     "import:workbook": "ts-node src/scripts/importPsychotherapyWorkbook.ts",
     "import:gcal": "ts-node src/scripts/importFromGoogleCalendar.ts",
-    "billing:backfill": "ts-node src/scripts/backfillBilling.ts",
+    "billing:backfill": "ts-node src/scripts/backfillBillingRecords.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
