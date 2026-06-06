@@ -170,4 +170,68 @@ export class GroupController {
             meta: { month: effectiveMonth },
         });
     }
+    /** POST /psychotherapy/groups/:groupId/members */
+    async addGroupMember(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { groupId } = req.params;
+        const { patientId } = req.body;
+
+        if (!patientId) {
+            throw new AppError('patientId é obrigatório', 400);
+        }
+
+        // Verifica se o grupo pertence ao tenant
+        const groupCheck = await this.dbPool.query('SELECT id FROM therapy_groups WHERE id = $1 AND tenant_id = $2', [groupId, tenantId]);
+        if (groupCheck.rows.length === 0) {
+            throw new AppError('Grupo não encontrado', 404);
+        }
+
+        // Verifica se o paciente pertence ao tenant
+        const patientCheck = await this.dbPool.query('SELECT id FROM psychotherapy_patients WHERE id = $1 AND tenant_id = $2', [patientId, tenantId]);
+        if (patientCheck.rows.length === 0) {
+            throw new AppError('Paciente não encontrado', 404);
+        }
+
+        try {
+            await this.dbPool.query(`
+                INSERT INTO therapy_group_members (group_id, patient_id)
+                VALUES ($1, $2)
+                ON CONFLICT (group_id, patient_id) DO UPDATE SET left_at = NULL
+            `, [groupId, patientId]);
+            
+            res.status(201).json({ success: true, message: 'Paciente adicionado ao grupo' });
+        } catch (error: any) {
+            logger.error({ tenantId, groupId, patientId, err: error.message }, 'Erro ao adicionar membro');
+            throw new AppError('Erro ao vincular paciente ao grupo', 500);
+        }
+    }
+
+    /** DELETE /psychotherapy/groups/:groupId/members/:patientId */
+    async removeGroupMember(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { groupId, patientId } = req.params;
+
+        // Verifica se o grupo pertence ao tenant
+        const groupCheck = await this.dbPool.query('SELECT id FROM therapy_groups WHERE id = $1 AND tenant_id = $2', [groupId, tenantId]);
+        if (groupCheck.rows.length === 0) {
+            throw new AppError('Grupo não encontrado', 404);
+        }
+
+        // Soft delete (marcar left_at) ou deletar hard?
+        // A migration usava ON DELETE CASCADE, mas o ideal é preencher left_at para manter histórico se o paciente sair do grupo?
+        // Vamos apenas deletar hard por agora, seguindo o padrão de simplificação, ou setar left_at = NOW() se preferir histórico.
+        // O select de list members filtra "WHERE tgm.left_at IS NULL" então left_at = NOW() é o mais seguro clinicamente.
+        
+        await this.dbPool.query(`
+            UPDATE therapy_group_members
+            SET left_at = CURRENT_DATE
+            WHERE group_id = $1 AND patient_id = $2
+        `, [groupId, patientId]);
+
+        res.status(200).json({ success: true, message: 'Paciente removido do grupo' });
+    }
 }

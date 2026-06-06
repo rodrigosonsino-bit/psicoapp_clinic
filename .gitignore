@@ -3,3 +3,7 @@ node_modules/
 .env.local
 coverage/
 dist/
+
+# Dados de pacientes — nunca versionar
+planilha_real*.csv
+import_report_*.json

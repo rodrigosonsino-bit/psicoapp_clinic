@@ -304,6 +304,15 @@ export function createPsychotherapyRoutes(): Router {
         month: z.string().regex(/^\d{4}-\d{2}$/, 'Formato de mês inválido (esperado YYYY-MM)').optional(),
     });
 
+    const addGroupMemberSchema = z.object({
+        patientId: z.string().uuid('patientId inválido (esperado UUID)'),
+    });
+
+    const groupMemberParamSchema = z.object({
+        groupId: z.string().uuid('groupId inválido (esperado UUID)'),
+        patientId: z.string().uuid('patientId inválido (esperado UUID)'),
+    });
+
     const listGroupsQuerySchema = z.object({
         includeInactive: z.enum(['true', 'false']).optional(),
     });
@@ -318,6 +327,17 @@ export function createPsychotherapyRoutes(): Router {
         validateParams(groupIdParamSchema),
         validateQuery(listGroupMembersQuerySchema),
         asyncHandler((req, res) => groupController.listGroupMembers(req, res)));
+
+    // Adicionar membro ao grupo
+    router.post('/psychotherapy/groups/:groupId/members',
+        validateParams(groupIdParamSchema),
+        validateBody(addGroupMemberSchema),
+        asyncHandler((req, res) => groupController.addGroupMember(req, res)));
+
+    // Remover membro do grupo
+    router.delete('/psychotherapy/groups/:groupId/members/:patientId',
+        validateParams(groupMemberParamSchema),
+        asyncHandler((req, res) => groupController.removeGroupMember(req, res)));
 
     // Registrar sessão de grupo (presença + faturamento)
     router.post('/psychotherapy/groups/:groupId/sessions',
