@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import {
     IPsychotherapyRepository,
     PsychotherapyMonthSummary,
@@ -739,6 +739,20 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment> {
         const tenantId = this.validateTenantId(data.tenantId);
+
+        // Pré-leitura do mês antigo (para reagendamentos)
+        let oldMonth: string | null = null;
+        if (data.id) {
+            const prev = await this.dbPool.query(
+                `SELECT scheduled_at FROM psychotherapy_appointments
+                 WHERE id = $1 AND tenant_id = $2`,
+                [data.id, tenantId]
+            );
+            if (prev.rows[0]) {
+                oldMonth = toMonthStr(new Date(prev.rows[0].scheduled_at));
+            }
+        }
+
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_appointments (
                 id, tenant_id, patient_id, scheduled_at, duration_minutes,
@@ -769,7 +783,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Agendamento não encontrado ou não autorizado');
-        return this.mapAppointment(result.rows[0]);
+        const appointment = this.mapAppointment(result.rows[0]);
+
+        const newMonth = toMonthStr(data.scheduledAt);
+        await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, newMonth);
+        if (oldMonth && oldMonth !== newMonth) {
+            await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, oldMonth);
+        }
+
+        return appointment;
     }
 
     async listAppointments(tenantId: string, options: ListAppointmentsOptions = {}): Promise<PaginatedResult<PsychotherapyAppointment>> {
@@ -843,26 +865,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
             const { patient_id, scheduled_at, status, payment_type } = appQuery.rows[0];
 
-            // 2. Reverte faturamento se o agendamento já estava contabilizado
-            if (status === 'attended' || status === 'no_show') {
-                const deltaExpected = payment_type === 'monthly' ? 0 : -1;
-                const deltaAbsences = status === 'no_show' ? -1 : 0;
-
-                await client.query(`
-                    UPDATE psychotherapy_monthly_records
-                    SET
-                        expected_sessions = GREATEST(expected_sessions + $1, 0),
-                        absences          = GREATEST(absences + $2, 0),
-                        payment_status = CASE
-                            WHEN paid_sessions >= GREATEST(expected_sessions + $1 - GREATEST(absences + $2, 0), 0) THEN 'paid'
-                            WHEN paid_sessions > 0 THEN 'partial'
-                            ELSE 'pending'
-                        END,
-                        updated_at        = NOW()
-                    WHERE tenant_id = $3 AND patient_id = $4 AND month = $5
-                `, [deltaExpected, deltaAbsences, validTenantId, patient_id, toMonthStr(new Date(scheduled_at))]);
-            }
-
             // 3. Remove sessão correspondente (somente se sem notas clínicas)
             await client.query(`
                 DELETE FROM psychotherapy_sessions
@@ -882,6 +884,13 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
             if (del.rowCount === 0)
                 throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+
+            await this.syncMonthlyRecord(
+                client,
+                validTenantId,
+                patient_id,
+                toMonthStr(new Date(scheduled_at))
+            );
 
             await client.query('COMMIT');
         } catch (err) {
@@ -968,60 +977,12 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 `, [validTenantId, patient_id, scheduled_at]);
             }
 
-            // ── 3. Sincronização com Faturamento Mensal ───────────────────────
-            const wasBilled = old_status === 'attended' || old_status === 'no_show';
-            const isBilled  = status    === 'attended' || status    === 'no_show';
-
-            const deltaExpected = payment_type === 'monthly'
-                ? 0
-                : (isBilled ? 1 : 0) - (wasBilled ? 1 : 0);
-
-            const deltaAbsences = (status    === 'no_show' ? 1 : 0)
-                                - (old_status === 'no_show' ? 1 : 0);
-
-            // Dispara sempre que há mudança real OU na primeira vez que o status
-            // se torna attended/no_show (garante criação do registro mensal para
-            // pacientes monthly onde deltaExpected é sempre 0)
-            if (deltaExpected !== 0 || deltaAbsences !== 0 || isBilled) {
-                const monthStr    = toMonthStr(new Date(scheduled_at));
-                const initExpected = payment_type === 'monthly'
-                    ? (SESSIONS_BY_PATIENT_STATUS[patient_status] ?? 0)
-                    : (isBilled ? 1 : 0);
-                const initAbsences = status === 'no_show' ? 1 : 0;
-
-                await client.query(`
-                    INSERT INTO psychotherapy_monthly_records (
-                        id, tenant_id, patient_id, month,
-                        patient_name_snapshot, status, payment_type,
-                        session_price_cents, expected_sessions, absences,
-                        paid_sessions, payment_status, previous_month_paid_cents
-                    ) VALUES (
-                        gen_random_uuid(), $1, $2, $3,
-                        $4, $5, $6,
-                        $7, $8, $9,
-                        0, 'pending', 0
-                    )
-                    ON CONFLICT (tenant_id, month, patient_id)
-                    WHERE patient_id IS NOT NULL
-                    DO UPDATE SET
-                        expected_sessions = GREATEST(
-                            psychotherapy_monthly_records.expected_sessions + $10, 0),
-                        absences = GREATEST(
-                            psychotherapy_monthly_records.absences + $11, 0),
-                        payment_status = CASE
-                            WHEN psychotherapy_monthly_records.paid_sessions >= GREATEST(
-                                psychotherapy_monthly_records.expected_sessions + $10 - GREATEST(psychotherapy_monthly_records.absences + $11, 0), 0) THEN 'paid'
-                            WHEN psychotherapy_monthly_records.paid_sessions > 0 THEN 'partial'
-                            ELSE 'pending'
-                        END,
-                        updated_at = NOW()
-                `, [
-                    validTenantId, patient_id, monthStr,
-                    patient_name, patient_status, payment_type,
-                    default_session_price_cents, initExpected, initAbsences,
-                    deltaExpected, deltaAbsences,
-                ]);
-            }
+            await this.syncMonthlyRecord(
+                client,
+                validTenantId,
+                patient_id,
+                toMonthStr(new Date(scheduled_at))
+            );
 
             await client.query('COMMIT');
             return this.mapAppointment(appointment);
@@ -1503,6 +1464,88 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             new Date(row.created_at),
             new Date(row.updated_at)
         );
+    }
+
+    private async syncMonthlyRecord(
+        client: Pool | PoolClient,
+        tenantId: string,
+        patientId: string,
+        month: string
+    ): Promise<void> {
+        const patientRes = await client.query(`
+            SELECT name, status, payment_type, default_session_price_cents
+            FROM psychotherapy_patients
+            WHERE tenant_id = $1 AND id = $2
+        `, [tenantId, patientId]);
+
+        if (patientRes.rows.length === 0) return;
+        const patient = patientRes.rows[0];
+
+        // month = 'YYYY-MM'; BRT = UTC-3 (sem horário de verão desde 2019)
+        const monthStart = new Date(`${month}-01T03:00:00.000Z`);
+        const monthEnd   = new Date(monthStart);
+        monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+
+        const apptsRes = await client.query(`
+            SELECT
+                COUNT(*) FILTER (WHERE status != 'canceled') AS active_count,
+                COUNT(*) FILTER (WHERE status = 'no_show')   AS no_show_count
+            FROM psychotherapy_appointments
+            WHERE tenant_id = $1 AND patient_id = $2
+              AND scheduled_at >= $3 AND scheduled_at < $4
+        `, [tenantId, patientId, monthStart, monthEnd]);
+
+        const activeCount = parseInt(apptsRes.rows[0].active_count, 10);
+        const absences    = parseInt(apptsRes.rows[0].no_show_count, 10);
+
+        const SESSIONS_BY_STATUS: Record<string, number> = {
+            weekly: 4, biweekly: 2, one_off: 0, inactive: 0,
+        };
+        const defaultSessions  = SESSIONS_BY_STATUS[patient.status] ?? 0;
+        const expectedSessions = Math.max(defaultSessions, activeCount);
+
+        // Se não há sessões esperadas nem pagas, limpar o registro e sair
+        if (expectedSessions === 0) {
+            await client.query(`
+                DELETE FROM psychotherapy_monthly_records
+                WHERE tenant_id = $1 AND patient_id = $2 AND month = $3
+                  AND paid_sessions = 0
+            `, [tenantId, patientId, month]);
+            return;
+        }
+
+        await client.query(`
+            INSERT INTO psychotherapy_monthly_records (
+                id, tenant_id, patient_id, month,
+                patient_name_snapshot, status, payment_type,
+                session_price_cents, expected_sessions, absences,
+                paid_sessions, payment_status, previous_month_paid_cents
+            ) VALUES (
+                gen_random_uuid(), $1, $2, $3,
+                $4, $5, $6, $7, $8, $9,
+                0, 'pending', 0
+            )
+            ON CONFLICT (tenant_id, month, patient_id) WHERE patient_id IS NOT NULL
+            DO UPDATE SET
+                patient_name_snapshot = EXCLUDED.patient_name_snapshot,
+                status                = EXCLUDED.status,
+                payment_type          = EXCLUDED.payment_type,
+                expected_sessions     = EXCLUDED.expected_sessions,
+                absences              = EXCLUDED.absences,
+                payment_status = CASE
+                    WHEN psychotherapy_monthly_records.paid_sessions >=
+                         GREATEST(EXCLUDED.expected_sessions - EXCLUDED.absences, 0)
+                         AND GREATEST(EXCLUDED.expected_sessions - EXCLUDED.absences, 0) > 0
+                        THEN 'paid'
+                    WHEN psychotherapy_monthly_records.paid_sessions > 0 THEN 'partial'
+                    ELSE 'pending'
+                END,
+                updated_at = NOW()
+        `, [
+            tenantId, patientId, month,
+            patient.name, patient.status, patient.payment_type,
+            patient.default_session_price_cents, expectedSessions, absences
+        ]);
     }
 
     private mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
