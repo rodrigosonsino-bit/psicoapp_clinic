@@ -58,18 +58,6 @@ export class SavePsychotherapyAppointmentUseCase {
             this.syncWithGoogleCalendar(appointment, data.tenantId).catch(err => {
                 logger.error({ err, appointmentId: appointment.id }, 'Falha no sync Google Calendar (background)');
             });
-
-            if (data.recurrence && data.recurrence !== 'none' && data.recurrenceEndDate && !appointment.parentId) {
-                const series = await this.repository.listSeriesAppointments(data.tenantId, appointment.id);
-                if (series.length <= 1) {
-                    const occurrences = this.calculateOccurrences(data.scheduledAt, data.recurrenceEndDate, data.recurrence);
-                    if (occurrences.length > 52) {
-                        throw new AppError('Máximo de 52 ocorrências por série recorrente', 400);
-                    }
-                    await this.generateChildren(appointment.id, data, occurrences);
-                }
-            }
-
             return appointment;
         }
 
