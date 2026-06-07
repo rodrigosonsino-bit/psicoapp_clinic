@@ -124,6 +124,26 @@ export class SyncGoogleCalendarEventsUseCase {
         const existingAppt = await this.repository.findAppointmentByGoogleEventId(config.tenantId, event.id);
 
         if (!existingAppt) {
+            // Verificar se existe agendamento sem googleEventId para esse paciente nessa data/hora.
+            // Isso resolve a race condition: o app cria o agendamento e dispara o sync GCal em
+            // fire-and-forget; se o cron de 5 min rodar antes de o googleEventId ser persistido,
+            // ele enxergaria null e criaria um duplicado.
+            const windowStart = new Date(start.getTime() - 60_000);
+            const windowEnd = new Date(start.getTime() + 60_000);
+            const nearby = await this.repository.listAppointments(config.tenantId, {
+                patientId: patient.id,
+                start: windowStart,
+                end: windowEnd
+            });
+            const unlinked = nearby.data.find(a => !a.googleEventId);
+
+            if (unlinked) {
+                await this.repository.updateAppointmentGoogleEvent(unlinked.id, config.tenantId, event.id, event.htmlLink ?? '');
+                await this.updateExistingAppointment(config, unlinked, { start, durationMinutes, targetStatus, event });
+                logger.info({ tenantId: config.tenantId, appointmentId: unlinked.id, eventId: event.id }, '🔗 Agendamento avulso vinculado ao evento do Google Calendar (race condition resolvida)');
+                return;
+            }
+
             const appt = await this.repository.saveAppointment({
                 tenantId: config.tenantId,
                 patientId: patient.id,
@@ -161,6 +181,26 @@ export class SyncGoogleCalendarEventsUseCase {
         for (const existing of existingMap.values()) {
             rootId = existing.parentId ?? existing.id;
             break;
+        }
+
+        // Fallback: o app pode ter criado um root com google_event_id = recurringEventId
+        // (ID da série GCal base), enquanto singleEvents=true retorna IDs de ocorrências
+        // no formato {baseId}_{timestamp}. Se existingMap ficou vazio, buscar pelo baseId.
+        if (rootId === null) {
+            const appRoot = await this.repository.findAppointmentByGoogleEventId(config.tenantId, recurringEventId);
+            if (appRoot) {
+                rootId = appRoot.parentId ?? appRoot.id;
+                // Mapear a ocorrência na janela atual que coincide com o horário do root
+                for (const ev of events) {
+                    if (!existingMap.has(ev.id)) {
+                        const t = new Date(ev.start.dateTime).getTime();
+                        if (Math.abs(appRoot.scheduledAt.getTime() - t) < 60_000) {
+                            existingMap.set(ev.id, appRoot);
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // Inferir tipo de recorrência pelo intervalo entre as duas primeiras ocorrências
