@@ -3,7 +3,7 @@ import { google } from 'googleapis';
 import { IPsychotherapyRepository, GoogleOAuthTokens } from '../../domain/repositories/IPsychotherapyRepository';
 import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalendarService';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
-import { AppointmentStatus } from '../../domain/models/PsychotherapyAppointment';
+import { AppointmentStatus, RecurrenceType } from '../../domain/models/PsychotherapyAppointment';
 import { logger } from '../../infrastructure/logger';
 
 @injectable()
@@ -56,9 +56,9 @@ export class SyncGoogleCalendarEventsUseCase {
 
         const patients = await this.repository.listPatients(config.tenantId);
 
+        // ── 1. Processar exclusões primeiro ─────────────────────────────────
         for (const event of events) {
             if (!event.id) continue;
-
             if (event.status === 'cancelled') {
                 try {
                     const existingAppt = await this.repository.findAppointmentByGoogleEventId(config.tenantId, event.id);
@@ -69,85 +69,236 @@ export class SyncGoogleCalendarEventsUseCase {
                 } catch (eventErr) {
                     logger.error({ err: eventErr, eventId: event.id, tenantId: config.tenantId }, 'Erro ao remover agendamento cancelado no Google Calendar');
                 }
-                continue;
             }
+        }
 
-            if (!event.start?.dateTime || !event.end?.dateTime) continue;
+        // ── 2. Separar eventos ativos em standalone e séries recorrentes ────
+        const activeEvents = events.filter(
+            e => e.id && e.status !== 'cancelled' && e.start?.dateTime && e.end?.dateTime
+        );
 
+        const seriesMap = new Map<string, typeof activeEvents>();
+        const standaloneEvents: typeof activeEvents = [];
+
+        for (const event of activeEvents) {
+            if (event.recurringEventId) {
+                const group = seriesMap.get(event.recurringEventId) ?? [];
+                group.push(event);
+                seriesMap.set(event.recurringEventId, group);
+            } else {
+                standaloneEvents.push(event);
+            }
+        }
+
+        // ── 3. Processar eventos avulsos (comportamento atual, inalterado) ──
+        for (const event of standaloneEvents) {
             try {
-                const parsed = this.parsePatientFromEvent(event);
-                let patient = this.findExistingPatient(parsed, patients);
+                await this.syncSingleEvent(config, event, patients);
+            } catch (eventErr) {
+                logger.error({ err: eventErr, eventId: event.id, tenantId: config.tenantId }, 'Erro ao sincronizar evento individual');
+            }
+        }
 
-                if (!patient) {
-                    logger.info({ tenantId: config.tenantId, patientName: parsed.name }, '👤 Paciente não encontrado. Cadastrando automaticamente...');
-                    patient = await this.repository.savePatient({
-                        tenantId: config.tenantId,
-                        name: parsed.name,
-                        status: 'one_off',
-                        paymentType: 'per_session',
-                        defaultSessionPriceCents: null,
-                        phone: parsed.phone,
-                        email: parsed.email,
-                        reminderChannel: 'whatsapp'
-                    });
-                    patients.push(patient);
-                }
+        // ── 4. Processar séries recorrentes do Google Calendar ──────────────
+        for (const [recurringEventId, occurrences] of seriesMap) {
+            try {
+                await this.syncSeriesGroup(config, recurringEventId, occurrences, patients);
+            } catch (seriesErr) {
+                logger.error({ err: seriesErr, recurringEventId, tenantId: config.tenantId }, 'Erro ao sincronizar série recorrente do Google Calendar');
+            }
+        }
+    }
 
+    // Lógica original para eventos avulsos (sem recurringEventId)
+    private async syncSingleEvent(
+        config: GoogleOAuthTokens,
+        event: any,
+        patients: PsychotherapyPatient[]
+    ): Promise<void> {
+        const patient = await this.findOrCreatePatient(config, event, patients);
+        const start = new Date(event.start.dateTime);
+        const end = new Date(event.end.dateTime);
+        const durationMinutes = Math.max(10, Math.round((end.getTime() - start.getTime()) / 60_000));
+        const targetStatus = this.resolveStatus(event.status ?? 'tentative');
+
+        const existingAppt = await this.repository.findAppointmentByGoogleEventId(config.tenantId, event.id);
+
+        if (!existingAppt) {
+            const appt = await this.repository.saveAppointment({
+                tenantId: config.tenantId,
+                patientId: patient.id,
+                scheduledAt: start,
+                durationMinutes,
+                status: targetStatus,
+                notes: event.description ?? null
+            });
+            await this.repository.updateAppointmentGoogleEvent(appt.id, config.tenantId, event.id, event.htmlLink ?? '');
+            logger.info({ tenantId: config.tenantId, appointmentId: appt.id, eventId: event.id }, '✅ Novo agendamento importado do Google Calendar');
+        } else {
+            await this.updateExistingAppointment(config, existingAppt, { start, durationMinutes, targetStatus, event });
+        }
+    }
+
+    // Processa um grupo de ocorrências com o mesmo recurringEventId
+    private async syncSeriesGroup(
+        config: GoogleOAuthTokens,
+        recurringEventId: string,
+        events: any[],
+        patients: PsychotherapyPatient[]
+    ): Promise<void> {
+        // Ordenar por data de início para garantir que a primeira ocorrência seja o root
+        events.sort((a, b) => new Date(a.start.dateTime).getTime() - new Date(b.start.dateTime).getTime());
+
+        // Verificar quais já existem no banco
+        const existingMap = new Map<string, any>();
+        for (const event of events) {
+            const existing = await this.repository.findAppointmentByGoogleEventId(config.tenantId, event.id);
+            if (existing) existingMap.set(event.id, existing);
+        }
+
+        // Descobrir o rootId a partir dos registros já existentes
+        let rootId: string | null = null;
+        for (const existing of existingMap.values()) {
+            rootId = existing.parentId ?? existing.id;
+            break;
+        }
+
+        // Inferir tipo de recorrência pelo intervalo entre as duas primeiras ocorrências
+        const inferredRecurrence = this.inferRecurrenceType(events);
+
+        // Data fim aproximada = última ocorrência na janela atual
+        const lastOccurrenceDate = events.length > 0
+            ? new Date(events[events.length - 1].start.dateTime)
+            : null;
+
+        for (const event of events) {
+            try {
+                const existing = existingMap.get(event.id) ?? null;
                 const start = new Date(event.start.dateTime);
                 const end = new Date(event.end.dateTime);
                 const durationMinutes = Math.max(10, Math.round((end.getTime() - start.getTime()) / 60_000));
                 const targetStatus = this.resolveStatus(event.status ?? 'tentative');
 
-                const existingAppt = await this.repository.findAppointmentByGoogleEventId(config.tenantId, event.id);
+                if (!existing) {
+                    const patient = await this.findOrCreatePatient(config, event, patients);
+                    const isRoot = rootId === null;
 
-                if (!existingAppt) {
                     const appt = await this.repository.saveAppointment({
                         tenantId: config.tenantId,
                         patientId: patient.id,
                         scheduledAt: start,
                         durationMinutes,
                         status: targetStatus,
-                        notes: event.description ?? null
+                        notes: event.description ?? null,
+                        recurrence: isRoot && inferredRecurrence ? inferredRecurrence : 'none',
+                        recurrenceEndDate: isRoot && inferredRecurrence ? lastOccurrenceDate : null,
+                        parentId: isRoot ? null : rootId
                     });
 
-                    await this.repository.updateAppointmentGoogleEvent(
-                        appt.id,
-                        config.tenantId,
-                        event.id,
-                        event.htmlLink ?? ''
-                    );
+                    await this.repository.updateAppointmentGoogleEvent(appt.id, config.tenantId, event.id, event.htmlLink ?? '');
 
-                    logger.info({ tenantId: config.tenantId, appointmentId: appt.id, eventId: event.id }, '✅ Novo agendamento importado do Google Calendar');
+                    if (isRoot) rootId = appt.id;
+
+                    logger.info({
+                        tenantId: config.tenantId,
+                        appointmentId: appt.id,
+                        eventId: event.id,
+                        isRoot,
+                        recurrence: isRoot ? inferredRecurrence : 'child'
+                    }, '✅ Ocorrência recorrente importada do Google Calendar');
                 } else {
-                    const timeChanged = existingAppt.scheduledAt.getTime() !== start.getTime();
-                    const durationChanged = existingAppt.durationMinutes !== durationMinutes;
-                    const notesChanged = existingAppt.notes !== (event.description ?? null);
-
-                    if (timeChanged || durationChanged || notesChanged) {
+                    // Garantir que parentId está correto para ocorrências já existentes sem vínculo
+                    if (!existing.parentId && rootId && existing.id !== rootId) {
                         await this.repository.saveAppointment({
-                            id: existingAppt.id,
+                            id: existing.id,
                             tenantId: config.tenantId,
-                            patientId: existingAppt.patientId,
-                            scheduledAt: start,
-                            durationMinutes,
-                            status: existingAppt.status,
-                            notes: event.description ?? null,
-                            recurrence: existingAppt.recurrence,
-                            recurrenceEndDate: existingAppt.recurrenceEndDate,
-                            parentId: existingAppt.parentId
+                            patientId: existing.patientId,
+                            scheduledAt: existing.scheduledAt,
+                            durationMinutes: existing.durationMinutes,
+                            status: existing.status,
+                            notes: existing.notes,
+                            recurrence: existing.recurrence,
+                            recurrenceEndDate: existing.recurrenceEndDate,
+                            parentId: rootId
                         });
-                        logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id }, '🔄 Dados do agendamento atualizados a partir do Google Calendar');
                     }
 
-                    if (existingAppt.status !== targetStatus) {
-                        await this.repository.updateAppointmentStatus(config.tenantId, existingAppt.id, targetStatus);
-                        logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id, newStatus: targetStatus }, '🔄 Status do agendamento atualizado a partir do Google Calendar');
-                    }
+                    await this.updateExistingAppointment(config, existing, { start, durationMinutes, targetStatus, event });
                 }
             } catch (eventErr) {
-                logger.error({ err: eventErr, eventId: event.id, tenantId: config.tenantId }, 'Erro ao sincronizar evento individual');
+                logger.error({ err: eventErr, eventId: event.id, tenantId: config.tenantId }, 'Erro ao sincronizar ocorrência de série do Google Calendar');
             }
         }
+    }
+
+    // Atualiza dados de um agendamento existente se algo mudou
+    private async updateExistingAppointment(
+        config: GoogleOAuthTokens,
+        existingAppt: any,
+        { start, durationMinutes, targetStatus, event }: { start: Date; durationMinutes: number; targetStatus: AppointmentStatus; event: any }
+    ): Promise<void> {
+        const timeChanged = existingAppt.scheduledAt.getTime() !== start.getTime();
+        const durationChanged = existingAppt.durationMinutes !== durationMinutes;
+        const notesChanged = existingAppt.notes !== (event.description ?? null);
+
+        if (timeChanged || durationChanged || notesChanged) {
+            await this.repository.saveAppointment({
+                id: existingAppt.id,
+                tenantId: config.tenantId,
+                patientId: existingAppt.patientId,
+                scheduledAt: start,
+                durationMinutes,
+                status: existingAppt.status,
+                notes: event.description ?? null,
+                recurrence: existingAppt.recurrence,
+                recurrenceEndDate: existingAppt.recurrenceEndDate,
+                parentId: existingAppt.parentId
+            });
+            logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id }, '🔄 Dados do agendamento atualizados a partir do Google Calendar');
+        }
+
+        if (existingAppt.status !== targetStatus) {
+            await this.repository.updateAppointmentStatus(config.tenantId, existingAppt.id, targetStatus);
+            logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id, newStatus: targetStatus }, '🔄 Status do agendamento atualizado a partir do Google Calendar');
+        }
+    }
+
+    // Encontra ou cadastra automaticamente o paciente a partir do evento
+    private async findOrCreatePatient(
+        config: GoogleOAuthTokens,
+        event: any,
+        patients: PsychotherapyPatient[]
+    ): Promise<PsychotherapyPatient> {
+        const parsed = this.parsePatientFromEvent(event);
+        let patient = this.findExistingPatient(parsed, patients);
+
+        if (!patient) {
+            logger.info({ tenantId: config.tenantId, patientName: parsed.name }, '👤 Paciente não encontrado. Cadastrando automaticamente...');
+            patient = await this.repository.savePatient({
+                tenantId: config.tenantId,
+                name: parsed.name,
+                status: 'one_off',
+                paymentType: 'per_session',
+                defaultSessionPriceCents: null,
+                phone: parsed.phone,
+                email: parsed.email,
+                reminderChannel: 'whatsapp'
+            });
+            patients.push(patient);
+        }
+
+        return patient;
+    }
+
+    // Infere 'weekly' ou 'biweekly' pelo intervalo entre as duas primeiras ocorrências
+    private inferRecurrenceType(events: any[]): RecurrenceType | null {
+        if (events.length < 2) return null;
+        const t0 = new Date(events[0].start.dateTime).getTime();
+        const t1 = new Date(events[1].start.dateTime).getTime();
+        const diffDays = Math.round((t1 - t0) / (1000 * 60 * 60 * 24));
+        if (diffDays === 7) return 'weekly';
+        if (diffDays === 14) return 'biweekly';
+        return null;
     }
 
     private parsePatientFromEvent(event: any): { name: string; phone: string | null; email: string | null } {
