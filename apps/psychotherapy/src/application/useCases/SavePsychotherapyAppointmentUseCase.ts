@@ -137,7 +137,7 @@ export class SavePsychotherapyAppointmentUseCase {
         occurrences: Date[]
     ): Promise<void> {
         for (let i = 1; i < occurrences.length; i++) {
-            const child = await this.repository.saveAppointment({
+            await this.repository.saveAppointment({
                 tenantId: data.tenantId,
                 patientId: data.patientId,
                 scheduledAt: occurrences[i],
@@ -148,9 +148,9 @@ export class SavePsychotherapyAppointmentUseCase {
                 notes: data.notes,
                 parentId: rootId
             });
-            this.syncWithGoogleCalendar(child, data.tenantId).catch(err => {
-                logger.error({ err, appointmentId: child.id }, 'Falha no sync Google Calendar (background)');
-            });
+            // Filhos não são sincronizados individualmente com o GCal:
+            // o evento recorrente criado para o root (via RRULE) cobre todas as ocorrências.
+            // O pull-sync (cron de 5 min) vinculará cada filho ao seu google_event_id correspondente.
         }
     }
 

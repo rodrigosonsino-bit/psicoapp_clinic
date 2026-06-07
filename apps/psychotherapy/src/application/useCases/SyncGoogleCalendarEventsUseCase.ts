@@ -171,6 +171,13 @@ export class SyncGoogleCalendarEventsUseCase {
             ? new Date(events[events.length - 1].start.dateTime)
             : null;
 
+        // Carregar membros da série do banco para detectar filhos criados pelo app sem googleEventId
+        // (gerados via SavePsychotherapyAppointmentUseCase que não sincroniza filhos individualmente)
+        let seriesMembers: any[] = [];
+        if (rootId !== null) {
+            seriesMembers = await this.repository.listSeriesAppointments(config.tenantId, rootId);
+        }
+
         for (const event of events) {
             try {
                 const existing = existingMap.get(event.id) ?? null;
@@ -180,6 +187,20 @@ export class SyncGoogleCalendarEventsUseCase {
                 const targetStatus = this.resolveStatus(event.status ?? 'tentative');
 
                 if (!existing) {
+                    // Verificar se já existe um filho da série nessa data sem googleEventId
+                    // (criado pelo app antes do pull-sync vincular)
+                    const unlinkedSibling = seriesMembers.find(m =>
+                        !m.googleEventId &&
+                        Math.abs(m.scheduledAt.getTime() - start.getTime()) < 60_000
+                    );
+
+                    if (unlinkedSibling) {
+                        await this.repository.updateAppointmentGoogleEvent(unlinkedSibling.id, config.tenantId, event.id, event.htmlLink ?? '');
+                        await this.updateExistingAppointment(config, unlinkedSibling, { start, durationMinutes, targetStatus, event });
+                        logger.info({ tenantId: config.tenantId, appointmentId: unlinkedSibling.id, eventId: event.id }, '🔗 Filho de série vinculado ao evento do Google Calendar');
+                        continue;
+                    }
+
                     const patient = await this.findOrCreatePatient(config, event, patients);
                     const isRoot = rootId === null;
 
@@ -197,7 +218,10 @@ export class SyncGoogleCalendarEventsUseCase {
 
                     await this.repository.updateAppointmentGoogleEvent(appt.id, config.tenantId, event.id, event.htmlLink ?? '');
 
-                    if (isRoot) rootId = appt.id;
+                    if (isRoot) {
+                        rootId = appt.id;
+                        seriesMembers = await this.repository.listSeriesAppointments(config.tenantId, rootId);
+                    }
 
                     logger.info({
                         tenantId: config.tenantId,

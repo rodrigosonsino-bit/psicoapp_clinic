@@ -150,6 +150,12 @@ export class GoogleCalendarService {
         const start = new Date(appointment.scheduledAt);
         const end = new Date(start.getTime() + appointment.durationMinutes * 60_000);
 
+        // Filhos de série sem googleEventId ainda serão vinculados pelo pull-sync — não criar evento individual
+        if (appointment.parentId && !appointment.googleEventId) {
+            logger.debug({ appointmentId: appointment.id }, 'Filho de série sem googleEventId — aguardando vinculação pelo pull-sync');
+            return;
+        }
+
         const eventBody: calendar_v3.Schema$Event = {
             summary: `Sessão — ${patientName}`,
             description: [
@@ -171,6 +177,15 @@ export class GoogleCalendarService {
                 ],
             },
         };
+
+        // Root de série recorrente: adicionar RRULE para que o GCal exiba como evento recorrente
+        if (appointment.recurrence !== 'none' && appointment.recurrenceEndDate && !appointment.parentId) {
+            const until = new Date(appointment.recurrenceEndDate);
+            until.setUTCHours(23, 59, 59, 0);
+            const untilStr = until.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+            const interval = appointment.recurrence === 'biweekly' ? ';INTERVAL=2' : '';
+            eventBody.recurrence = [`RRULE:FREQ=WEEKLY${interval};UNTIL=${untilStr}`];
+        }
 
         try {
             if (appointment.googleEventId) {
