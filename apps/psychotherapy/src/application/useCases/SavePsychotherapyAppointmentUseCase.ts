@@ -30,19 +30,7 @@ export class SavePsychotherapyAppointmentUseCase {
 
         if (!data.id) {
             if (data.recurrence && data.recurrence !== 'none' && data.recurrenceEndDate) {
-                const occurrences: Date[] = [data.scheduledAt];
-                const intervalDays = data.recurrence === 'weekly' ? 7 : 14;
-                let current = new Date(data.scheduledAt);
-                while (true) {
-                    const next = new Date(current);
-                    next.setDate(next.getDate() + intervalDays);
-                    if (next > data.recurrenceEndDate) {
-                        break;
-                    }
-                    occurrences.push(next);
-                    current = next;
-                }
-
+                const occurrences = this.calculateOccurrences(data.scheduledAt, data.recurrenceEndDate, data.recurrence);
                 if (occurrences.length > 52) {
                     throw new AppError('Máximo de 52 ocorrências por série recorrente', 400);
                 }
@@ -52,23 +40,7 @@ export class SavePsychotherapyAppointmentUseCase {
                     logger.error({ err, appointmentId: rootAppointment.id }, 'Falha no sync Google Calendar (background)');
                 });
 
-                for (let i = 1; i < occurrences.length; i++) {
-                    const child = await this.repository.saveAppointment({
-                        tenantId: data.tenantId,
-                        patientId: data.patientId,
-                        scheduledAt: occurrences[i],
-                        durationMinutes: data.durationMinutes,
-                        status: 'scheduled',
-                        recurrence: 'none',
-                        recurrenceEndDate: null,
-                        notes: data.notes,
-                        parentId: rootAppointment.id
-                    });
-                    this.syncWithGoogleCalendar(child, data.tenantId).catch(err => {
-                        logger.error({ err, appointmentId: child.id }, 'Falha no sync Google Calendar (background)');
-                    });
-                }
-
+                await this.generateChildren(rootAppointment.id, data, occurrences);
                 return rootAppointment;
             } else {
                 const appointment = await this.repository.saveAppointment(data);
@@ -86,6 +58,18 @@ export class SavePsychotherapyAppointmentUseCase {
             this.syncWithGoogleCalendar(appointment, data.tenantId).catch(err => {
                 logger.error({ err, appointmentId: appointment.id }, 'Falha no sync Google Calendar (background)');
             });
+
+            if (data.recurrence && data.recurrence !== 'none' && data.recurrenceEndDate && !appointment.parentId) {
+                const series = await this.repository.listSeriesAppointments(data.tenantId, appointment.id);
+                if (series.length <= 1) {
+                    const occurrences = this.calculateOccurrences(data.scheduledAt, data.recurrenceEndDate, data.recurrence);
+                    if (occurrences.length > 52) {
+                        throw new AppError('Máximo de 52 ocorrências por série recorrente', 400);
+                    }
+                    await this.generateChildren(appointment.id, data, occurrences);
+                }
+            }
+
             return appointment;
         }
 
@@ -131,6 +115,43 @@ export class SavePsychotherapyAppointmentUseCase {
         }
 
         return updatedTarget;
+    }
+
+    private calculateOccurrences(start: Date, endDate: Date, recurrence: 'weekly' | 'biweekly'): Date[] {
+        const intervalDays = recurrence === 'weekly' ? 7 : 14;
+        const occurrences: Date[] = [start];
+        let current = new Date(start);
+        while (true) {
+            const next = new Date(current);
+            next.setDate(next.getDate() + intervalDays);
+            if (next > endDate) break;
+            occurrences.push(next);
+            current = next;
+        }
+        return occurrences;
+    }
+
+    private async generateChildren(
+        rootId: string,
+        data: SaveAppointmentDTO & { mode?: 'single' | 'future' | 'all' },
+        occurrences: Date[]
+    ): Promise<void> {
+        for (let i = 1; i < occurrences.length; i++) {
+            const child = await this.repository.saveAppointment({
+                tenantId: data.tenantId,
+                patientId: data.patientId,
+                scheduledAt: occurrences[i],
+                durationMinutes: data.durationMinutes,
+                status: 'scheduled',
+                recurrence: 'none',
+                recurrenceEndDate: null,
+                notes: data.notes,
+                parentId: rootId
+            });
+            this.syncWithGoogleCalendar(child, data.tenantId).catch(err => {
+                logger.error({ err, appointmentId: child.id }, 'Falha no sync Google Calendar (background)');
+            });
+        }
     }
 
     private async syncWithGoogleCalendar(
