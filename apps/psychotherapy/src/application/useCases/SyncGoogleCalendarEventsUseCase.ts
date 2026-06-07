@@ -48,7 +48,7 @@ export class SyncGoogleCalendarEventsUseCase {
             timeMax: timeMax.toISOString(),
             singleEvents: true,
             orderBy: 'startTime',
-            showDeleted: false
+            showDeleted: true
         });
 
         const events = response.data.items ?? [];
@@ -58,6 +58,20 @@ export class SyncGoogleCalendarEventsUseCase {
 
         for (const event of events) {
             if (!event.id) continue;
+
+            if (event.status === 'cancelled') {
+                try {
+                    const existingAppt = await this.repository.findAppointmentByGoogleEventId(config.tenantId, event.id);
+                    if (existingAppt) {
+                        await this.repository.deleteAppointment(config.tenantId, existingAppt.id);
+                        logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id, eventId: event.id }, '🗑️ Agendamento removido por exclusão no Google Calendar');
+                    }
+                } catch (eventErr) {
+                    logger.error({ err: eventErr, eventId: event.id, tenantId: config.tenantId }, 'Erro ao remover agendamento cancelado no Google Calendar');
+                }
+                continue;
+            }
+
             if (!event.start?.dateTime || !event.end?.dateTime) continue;
 
             try {
