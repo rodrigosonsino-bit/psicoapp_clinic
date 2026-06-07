@@ -1136,6 +1136,30 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         `, [validTenantId, accessToken, expiryDate]);
     }
 
+    async listAllGoogleOAuthTokens(): Promise<GoogleOAuthTokens[]> {
+        const result = await this.dbPool.query(`
+            SELECT tenant_id, access_token, refresh_token, expiry_date, calendar_id
+            FROM google_oauth_tokens
+            WHERE refresh_token IS NOT NULL AND calendar_id IS NOT NULL;
+        `);
+        return result.rows.map(row => ({
+            tenantId: row.tenant_id,
+            accessToken: row.access_token,
+            refreshToken: row.refresh_token,
+            expiryDate: row.expiry_date ? Number(row.expiry_date) : null,
+            calendarId: row.calendar_id
+        }));
+    }
+
+    async findAppointmentByGoogleEventId(tenantId: string, googleEventId: string): Promise<PsychotherapyAppointment | null> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT * FROM psychotherapy_appointments
+            WHERE tenant_id = $1 AND google_event_id = $2;
+        `, [validTenantId, googleEventId]);
+        return result.rows[0] ? this.mapAppointment(result.rows[0]) : null;
+    }
+
     async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
         await this.dbPool.query(`

@@ -14,6 +14,8 @@ import { logger } from './infrastructure/logger';
 import { container } from './container';
 import { Pool } from 'pg';
 import { ReminderScheduler } from './infrastructure/scheduler/ReminderScheduler';
+import { SyncGoogleCalendarEventsUseCase } from './application/useCases/SyncGoogleCalendarEventsUseCase';
+import { GoogleCalendarSyncJob } from './infrastructure/scheduler/GoogleCalendarSyncJob';
 import { IPsychotherapyRepository } from './domain/repositories/IPsychotherapyRepository';
 import { PixController } from './presentation/controllers/PixController';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
@@ -136,6 +138,12 @@ if (require.main === module) {
                         process.env.ENABLE_WHATSAPP !== 'false' ? sessionManager : undefined
                     );
                     scheduler.start();
+                }
+
+                if (process.env.ENABLE_GCAL_SYNC === 'true') {
+                    const syncUseCase = container.resolve(SyncGoogleCalendarEventsUseCase);
+                    const syncJob = new GoogleCalendarSyncJob(syncUseCase);
+                    syncJob.start();
                 }
             });
         })

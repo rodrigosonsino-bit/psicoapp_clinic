@@ -200,6 +200,8 @@ export interface IPsychotherapyRepository {
     saveGoogleOAuthTokens(tenantId: string, accessToken: string, refreshToken: string, expiryDate: number, calendarId?: string): Promise<void>;
     getGoogleOAuthTokens(tenantId: string): Promise<GoogleOAuthTokens | null>;
     updateGoogleAccessToken(tenantId: string, accessToken: string, expiryDate: number): Promise<void>;
+    listAllGoogleOAuthTokens(): Promise<GoogleOAuthTokens[]>;
+    findAppointmentByGoogleEventId(tenantId: string, googleEventId: string): Promise<PsychotherapyAppointment | null>;
 
     // Availability slots
     saveAvailabilitySlot(data: SaveAvailabilitySlotDTO): Promise<AvailabilitySlot>;
