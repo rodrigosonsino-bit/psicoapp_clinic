@@ -92,18 +92,8 @@ export class GoogleCalendarClient {
             }
             userId = decoded.tenantId;
         } catch (err) {
-            logger.warn({ err }, 'Falha na verificação rígida do JWT State. Tentando decodificação direta de fallback...');
-            try {
-                const decoded = jwt.decode(stateToken) as { tenantId?: string };
-                if (decoded && decoded.tenantId) {
-                    userId = decoded.tenantId;
-                    logger.info(`Conexão restaurada via decodificação de fallback para o usuário: ${userId}`);
-                } else {
-                    throw new Error('Google OAuth State inválido ou expirado.');
-                }
-            } catch (fallbackErr) {
-                throw new Error('Google OAuth State inválido ou expirado.');
-            }
+            logger.error({ err }, 'Falha na verificação de assinatura do JWT State do Google OAuth.');
+            throw new Error('Google OAuth State inválido ou expirado.');
         }
 
         if (!isMock) {

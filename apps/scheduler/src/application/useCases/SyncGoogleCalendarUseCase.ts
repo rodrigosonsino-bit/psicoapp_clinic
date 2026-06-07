@@ -36,45 +36,51 @@ export class SyncGoogleCalendarUseCase {
         logger.info(`📅 Encontrados ${events.length} eventos para o usuário ${config.userId} (${config.email})`);
 
         for (const event of events) {
-            const phone = this.extractPhoneNumber(event.summary + ' ' + (event.description || ''));
-            if (!phone) {
-                continue;
+            try {
+                const phone = this.extractPhoneNumber(event.summary + ' ' + (event.description || ''));
+                if (!phone) {
+                    continue;
+                }
+
+                const eventId = event.id;
+
+                // Verificar se o usuário desativou o envio automático para este evento
+                const autoSendEnabled = await this.googleClient.isEventAutoSendEnabled(config.userId, eventId);
+                if (!autoSendEnabled) {
+                    logger.info(`⏭️ Evento ${eventId} tem envio automático DESATIVADO pelo usuário. Pulando.`);
+                    continue;
+                }
+
+                const startDateTime = new Date(event.start.dateTime || event.start.date);
+                const clientName = this.extractClientName(event.summary);
+
+                // 1. Agendamento para o Cliente (24h antes do compromisso)
+                const clientSendAt = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+                await this.scheduleReminder(
+                    config.userId,
+                    eventId,
+                    'client',
+                    phone,
+                    `Olá ${clientName}, lembrete do seu compromisso amanhã (${this.formatDate(startDateTime)}) às ${this.formatTime(startDateTime)}!`,
+                    clientSendAt
+                );
+
+                // 2. Agendamento para Você/Profissional (30 minutos antes do compromisso)
+                const profPhone = process.env.PROFESSIONAL_PHONE; 
+                if (profPhone) {
+                    const profSendAt = new Date(startDateTime.getTime() - 30 * 60 * 1000);
+                    await this.scheduleReminder(
+                        config.userId,
+                        eventId,
+                        'professional',
+                        profPhone,
+                        `Lembrete: Você tem um compromisso com ${clientName} em 30 minutos (${this.formatTime(startDateTime)})!`,
+                        profSendAt
+                    );
+                }
+            } catch (eventErr) {
+                logger.error({ err: eventErr, eventId: event.id, userId: config.userId }, 'Erro ao processar sincronização de evento individual do Google Calendar. Continuando.');
             }
-
-            const eventId = event.id;
-
-            // Verificar se o usuário desativou o envio automático para este evento
-            const autoSendEnabled = await this.googleClient.isEventAutoSendEnabled(config.userId, eventId);
-            if (!autoSendEnabled) {
-                logger.info(`⏭️ Evento ${eventId} tem envio automático DESATIVADO pelo usuário. Pulando.`);
-                continue;
-            }
-
-            const startDateTime = new Date(event.start.dateTime || event.start.date);
-            const clientName = this.extractClientName(event.summary);
-
-            // 1. Agendamento para o Cliente (24h antes do compromisso)
-            const clientSendAt = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
-            await this.scheduleReminder(
-                config.userId,
-                eventId,
-                'client',
-                phone,
-                `Olá ${clientName}, lembrete do seu compromisso amanhã (${this.formatDate(startDateTime)}) às ${this.formatTime(startDateTime)}!`,
-                clientSendAt
-            );
-
-            // 2. Agendamento para Você/Profissional (30 minutos antes do compromisso)
-            const profSendAt = new Date(startDateTime.getTime() - 30 * 60 * 1000);
-            const profPhone = process.env.PROFESSIONAL_PHONE || phone; 
-            await this.scheduleReminder(
-                config.userId,
-                eventId,
-                'professional',
-                profPhone,
-                `Lembrete: Você tem um compromisso com ${clientName} em 30 minutos (${this.formatTime(startDateTime)})!`,
-                profSendAt
-            );
         }
     }
 
@@ -129,7 +135,8 @@ export class SyncGoogleCalendarUseCase {
             FROM scheduled_messages 
             WHERE user_id = $1 
               AND metadata->>'googleEventId' = $2 
-              AND metadata->>'reminderType' = $3;
+              AND metadata->>'reminderType' = $3
+              AND status IN ('pending', 'sent');
         `;
         const result = await this.dbPool.query(query, [userId, eventId, reminderType]);
         return parseInt(result.rows[0].count, 10) > 0;
@@ -153,10 +160,7 @@ export class SyncGoogleCalendarUseCase {
 
     private extractClientName(summary: string): string {
         const parts = summary.split('-');
-        if (parts.length > 1) {
-            return parts[parts.length - 1].trim();
-        }
-        return summary;
+        return parts[0].trim() || summary;
     }
 
     private formatDate(date: Date): string {
