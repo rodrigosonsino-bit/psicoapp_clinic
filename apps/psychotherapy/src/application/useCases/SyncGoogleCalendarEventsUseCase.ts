@@ -131,7 +131,10 @@ export class SyncGoogleCalendarEventsUseCase {
                             scheduledAt: start,
                             durationMinutes,
                             status: existingAppt.status,
-                            notes: event.description ?? null
+                            notes: event.description ?? null,
+                            recurrence: existingAppt.recurrence,
+                            recurrenceEndDate: existingAppt.recurrenceEndDate,
+                            parentId: existingAppt.parentId
                         });
                         logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id }, '🔄 Dados do agendamento atualizados a partir do Google Calendar');
                     }
