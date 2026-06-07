@@ -16,7 +16,8 @@ describe('GeneratePsychotherapyMonthUseCase', () => {
         const inactivePatient = new PsychotherapyPatient('id2', tenantId, 'Alice', 'inactive', 'monthly', 12000, null, null, null, null, new Date(), new Date());
         
         (repositoryMock.listPatients as any).mockResolvedValue([activePatient]);
-        repositoryMock.bulkSaveMonthlyRecords.mockResolvedValue([]); // return value not fully mocked
+        repositoryMock.countScheduledSessionsByPatient.mockResolvedValue(new Map());
+        repositoryMock.bulkSaveMonthlyRecords.mockResolvedValue([]);
 
         await useCase.execute(tenantId, month);
         

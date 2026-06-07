@@ -16,7 +16,8 @@ export class PsychotherapyAppointment {
         public readonly googleEventUrl: string | null,
         public readonly confirmToken: string | null,
         public readonly confirmedAt: Date | null,
-        public readonly createdAt: Date,
-        public readonly updatedAt: Date
+        public readonly parentId: string | null = null,
+        public readonly createdAt: Date = new Date(),
+        public readonly updatedAt: Date = new Date()
     ) {}
 }

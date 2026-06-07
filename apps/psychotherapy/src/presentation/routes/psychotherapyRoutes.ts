@@ -186,7 +186,8 @@ export function createPsychotherapyRoutes(): Router {
         status: z.enum(['scheduled', 'confirmed', 'attended', 'canceled', 'no_show']).optional(),
         recurrence: z.enum(['none', 'weekly', 'biweekly']).optional().default('none'),
         recurrenceEndDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).transform(val => new Date(val)).nullable().optional(),
-        notes: z.string().nullable().optional()
+        notes: z.string().nullable().optional(),
+        mode: z.enum(['single', 'future', 'all']).optional()
     });
 
     const updateAppointmentStatusSchema = z.object({

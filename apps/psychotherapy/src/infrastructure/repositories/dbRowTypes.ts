@@ -137,6 +137,7 @@ export interface AppointmentRow {
     google_event_url: string | null;
     confirm_token: string | null;
     confirmed_at: Date | null;
+    parent_id: string | null;
     created_at: Date;
     updated_at: Date;
 }

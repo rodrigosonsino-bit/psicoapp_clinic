@@ -99,6 +99,7 @@ export interface SaveAppointmentDTO {
     recurrence?: RecurrenceType;
     recurrenceEndDate?: Date | null;
     notes?: string | null;
+    parentId?: string | null;
 }
 
 export interface ListAppointmentsOptions {
@@ -213,6 +214,8 @@ export interface IPsychotherapyRepository {
     upsertBookingLink(tenantId: string, patientId: string, expiresAt?: Date | null): Promise<BookingLink>;
     findBookingLinkByToken(token: string): Promise<BookingLink | null>;
     deactivateBookingLink(tenantId: string, patientId: string): Promise<void>;
+
+    listSeriesAppointments(tenantId: string, rootId: string): Promise<PsychotherapyAppointment[]>;
 }
 
 export interface SaveAvailabilitySlotDTO {

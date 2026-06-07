@@ -48,7 +48,8 @@ export class AppointmentController {
 
     async deleteAppointment(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);
-        await this.deleteUseCase.execute(tenantId, req.params.id);
+        const mode = (req.query.mode as 'single' | 'future' | 'all') ?? 'single';
+        await this.deleteUseCase.execute(tenantId, req.params.id, mode);
         return res.status(204).send();
     }
 

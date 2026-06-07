@@ -50,7 +50,8 @@ describe('Models', () => {
                 fullName: 'Full Name',
                 document: 'CPF/CNPJ',
                 professionalId: 'Professional ID',
-                address: 'Address'
+                address: 'Address',
+                twoFactorEnabled: false
             });
         });
     });

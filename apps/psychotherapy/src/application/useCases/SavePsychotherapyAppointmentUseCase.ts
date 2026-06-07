@@ -14,7 +14,7 @@ export class SavePsychotherapyAppointmentUseCase {
         @inject('GoogleCalendarService') private readonly googleCalendar: GoogleCalendarService
     ) {}
 
-    async execute(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment> {
+    async execute(data: SaveAppointmentDTO & { mode?: 'single' | 'future' | 'all' }): Promise<PsychotherapyAppointment> {
         if (data.scheduledAt <= new Date(Date.now() - 60_000) && !data.id) {
             throw new AppError('Não é possível agendar sessões no passado', 400);
         }
@@ -28,14 +28,109 @@ export class SavePsychotherapyAppointmentUseCase {
             throw new AppError('Duração da sessão deve estar entre 10 e 240 minutos', 400);
         }
 
-        const appointment = await this.repository.saveAppointment(data);
+        if (!data.id) {
+            if (data.recurrence && data.recurrence !== 'none' && data.recurrenceEndDate) {
+                const occurrences: Date[] = [data.scheduledAt];
+                const intervalDays = data.recurrence === 'weekly' ? 7 : 14;
+                let current = new Date(data.scheduledAt);
+                while (true) {
+                    const next = new Date(current);
+                    next.setDate(next.getDate() + intervalDays);
+                    if (next > data.recurrenceEndDate) {
+                        break;
+                    }
+                    occurrences.push(next);
+                    current = next;
+                }
 
-        // Sync com Google Calendar de forma assíncrona (não bloqueia a resposta)
-        this.syncWithGoogleCalendar(appointment, data.tenantId).catch(err => {
-            logger.error({ err, appointmentId: appointment.id }, 'Falha no sync Google Calendar (background)');
+                if (occurrences.length > 52) {
+                    throw new AppError('Máximo de 52 ocorrências por série recorrente', 400);
+                }
+
+                const rootAppointment = await this.repository.saveAppointment(data);
+                this.syncWithGoogleCalendar(rootAppointment, data.tenantId).catch(err => {
+                    logger.error({ err, appointmentId: rootAppointment.id }, 'Falha no sync Google Calendar (background)');
+                });
+
+                for (let i = 1; i < occurrences.length; i++) {
+                    const child = await this.repository.saveAppointment({
+                        tenantId: data.tenantId,
+                        patientId: data.patientId,
+                        scheduledAt: occurrences[i],
+                        durationMinutes: data.durationMinutes,
+                        status: 'scheduled',
+                        recurrence: 'none',
+                        recurrenceEndDate: null,
+                        notes: data.notes,
+                        parentId: rootAppointment.id
+                    });
+                    this.syncWithGoogleCalendar(child, data.tenantId).catch(err => {
+                        logger.error({ err, appointmentId: child.id }, 'Falha no sync Google Calendar (background)');
+                    });
+                }
+
+                return rootAppointment;
+            } else {
+                const appointment = await this.repository.saveAppointment(data);
+                this.syncWithGoogleCalendar(appointment, data.tenantId).catch(err => {
+                    logger.error({ err, appointmentId: appointment.id }, 'Falha no sync Google Calendar (background)');
+                });
+                return appointment;
+            }
+        }
+
+        const mode = data.mode ?? 'single';
+
+        if (mode === 'single') {
+            const appointment = await this.repository.saveAppointment(data);
+            this.syncWithGoogleCalendar(appointment, data.tenantId).catch(err => {
+                logger.error({ err, appointmentId: appointment.id }, 'Falha no sync Google Calendar (background)');
+            });
+            return appointment;
+        }
+
+        const currentAppt = await this.repository.findAppointmentById(data.tenantId, data.id);
+        if (!currentAppt) {
+            throw new AppError('Agendamento não encontrado', 404);
+        }
+
+        const deltaMs = data.scheduledAt.getTime() - currentAppt.scheduledAt.getTime();
+
+        const updatedTarget = await this.repository.saveAppointment(data);
+        this.syncWithGoogleCalendar(updatedTarget, data.tenantId).catch(err => {
+            logger.error({ err, appointmentId: updatedTarget.id }, 'Falha no sync Google Calendar (background)');
         });
 
-        return appointment;
+        const rootId = currentAppt.parentId ?? currentAppt.id;
+        const series = await this.repository.listSeriesAppointments(data.tenantId, rootId);
+
+        for (const sibling of series) {
+            if (sibling.id === updatedTarget.id) {
+                continue;
+            }
+
+            if (mode === 'future' && sibling.scheduledAt < currentAppt.scheduledAt) {
+                continue;
+            }
+
+            const newScheduledAt = new Date(sibling.scheduledAt.getTime() + deltaMs);
+            const childUpdate = await this.repository.saveAppointment({
+                id: sibling.id,
+                tenantId: data.tenantId,
+                patientId: sibling.patientId,
+                scheduledAt: newScheduledAt,
+                durationMinutes: data.durationMinutes ?? sibling.durationMinutes,
+                notes: data.notes !== undefined ? data.notes : sibling.notes,
+                status: sibling.status,
+                parentId: sibling.parentId
+            });
+
+            this.syncWithGoogleCalendar(childUpdate, data.tenantId).catch(err => {
+                logger.error({ err, appointmentId: childUpdate.id }, 'Falha no sync Google Calendar (background)');
+            });
+        }
+
+        return updatedTarget;
     }
 
     private async syncWithGoogleCalendar(

@@ -182,6 +182,7 @@ describe('E2E - API Integration Tests', () => {
 
         it('DELETE /api/psychotherapy/patients/:id - Should delete patient', async () => {
             const patientId = 'e3b0c442-98fc-11ee-b9d1-0242ac120002';
+            mockRepo.listAppointments.mockResolvedValue({ data: [], total: 0 });
             mockRepo.deletePatient.mockResolvedValue();
 
             const res = await request(app)
@@ -215,7 +216,7 @@ describe('E2E - API Integration Tests', () => {
                     '2026-06',
                     'Patient A',
                     'weekly',
-                    'monthly',
+                    'per_session',
                     2500, // sessionPriceCents
                     4,    // expectedSessions
                     0,    // paidSessions
@@ -243,6 +244,7 @@ describe('E2E - API Integration Tests', () => {
             mockRepo.listPatients.mockResolvedValue([
                 { id: 'pat-1', name: 'Patient A', status: 'weekly', paymentType: 'monthly', defaultSessionPriceCents: 10000 }
             ] as any);
+            mockRepo.countScheduledSessionsByPatient.mockResolvedValue(new Map());
             mockRepo.listMonthlyRecords.mockResolvedValue([]);
             mockRepo.bulkSaveMonthlyRecords.mockResolvedValue([
                 { id: 'rec-1', month: '2026-06', patientNameSnapshot: 'Patient A', status: 'weekly', paymentStatus: 'pending' }

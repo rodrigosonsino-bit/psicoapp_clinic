@@ -756,9 +756,9 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_appointments (
                 id, tenant_id, patient_id, scheduled_at, duration_minutes,
-                status, recurrence, recurrence_end_date, notes
+                status, recurrence, recurrence_end_date, notes, parent_id
             )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (id) DO UPDATE SET
                 patient_id = EXCLUDED.patient_id,
                 scheduled_at = EXCLUDED.scheduled_at,
@@ -767,6 +767,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 recurrence = EXCLUDED.recurrence,
                 recurrence_end_date = EXCLUDED.recurrence_end_date,
                 notes = EXCLUDED.notes,
+                parent_id = EXCLUDED.parent_id,
                 updated_at = NOW()
             WHERE psychotherapy_appointments.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
@@ -779,7 +780,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.status ?? 'scheduled',
             data.recurrence ?? 'none',
             data.recurrenceEndDate ?? null,
-            data.notes ?? null
+            data.notes ?? null,
+            data.parentId || null
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Agendamento não encontrado ou não autorizado');
@@ -1563,8 +1565,19 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.google_event_url ?? null,
             row.confirm_token ?? null,
             row.confirmed_at ? new Date(row.confirmed_at) : null,
+            row.parent_id ?? null,
             new Date(row.created_at),
             new Date(row.updated_at)
         );
+    }
+
+    async listSeriesAppointments(tenantId: string, rootId: string): Promise<PsychotherapyAppointment[]> {
+        const result = await this.dbPool.query(
+            `SELECT * FROM psychotherapy_appointments
+             WHERE tenant_id = $1 AND (id = $2 OR parent_id = $2)
+             ORDER BY scheduled_at ASC`,
+            [tenantId, rootId]
+        );
+        return result.rows.map(row => this.mapAppointment(row));
     }
 }
