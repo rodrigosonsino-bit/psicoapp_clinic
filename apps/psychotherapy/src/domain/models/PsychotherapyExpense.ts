@@ -7,6 +7,8 @@ export interface PsychotherapyExpense {
     amountCents: number;
     description: string;
     category: ExpenseCategory;
+    fixedExpenseId?: string | null;
+    referenceMonth?: string | null;
     createdAt: Date;
     updatedAt: Date;
 }

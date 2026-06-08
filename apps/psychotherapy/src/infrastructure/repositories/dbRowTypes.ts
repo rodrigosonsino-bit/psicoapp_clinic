@@ -81,6 +81,23 @@ export interface ExpenseRow {
     amount_cents: number;
     description: string;
     category: 'rent' | 'taxes' | 'software' | 'marketing' | 'other';
+    fixed_expense_id: string | null;
+    reference_month: string | null;
+    created_at: Date;
+    updated_at: Date;
+}
+
+// Linha da tabela: psychotherapy_fixed_expenses
+export interface FixedExpenseRow {
+    id: string;
+    tenant_id: string;
+    description: string;
+    amount_cents: number;
+    day_of_month: number;
+    category: string | null;
+    start_date: string; // 'YYYY-MM-DD'
+    end_date: string | null; // 'YYYY-MM-DD'
+    active: boolean;
     created_at: Date;
     updated_at: Date;
 }

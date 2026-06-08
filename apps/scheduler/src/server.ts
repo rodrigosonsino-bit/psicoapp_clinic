@@ -17,6 +17,7 @@ import { SyncGoogleCalendarUseCase } from './application/useCases/SyncGoogleCale
 import { GoogleCalendarSyncJob } from './infrastructure/cron/GoogleCalendarSyncJob';
 import { WeeklyReportUseCase } from './application/useCases/WeeklyReportUseCase';
 import { WeeklyReportCronJob } from './infrastructure/cron/WeeklyReportCronJob';
+import { FixedExpensesCronJob } from './infrastructure/cron/FixedExpensesCronJob';
 
 import * as dotenv from 'dotenv';
 
@@ -437,6 +438,10 @@ async function bootstrap() {
         const weeklyReportUseCase = new WeeklyReportUseCase(messageRepository);
         const weeklyReportCronJob = new WeeklyReportCronJob(weeklyReportUseCase, sessionManager, dbPool);
         weeklyReportCronJob.start();
+
+        // 8.5. Iniciar Serviço de Geração de Despesas Fixas (Cron Job)
+        const fixedExpensesCronJob = new FixedExpensesCronJob(dbPool);
+        fixedExpensesCronJob.start();
 
         // 9. Cron de manutenção da Sarah: Limpeza de bloqueios expirados + Watchdog de conexão zombie para todos os tenants ativos
         const cron = require('node-cron');

@@ -122,6 +122,21 @@ const expenseSchema = z.object({
     category: z.enum(['rent', 'taxes', 'software', 'marketing', 'other'])
 });
 
+const fixedExpenseSchema = z.object({
+    id: z.string().uuid().optional(),
+    description: z.string().min(1, 'A descrição é obrigatória'),
+    amountCents: z.number().int().positive('Valor deve ser positivo'),
+    dayOfMonth: z.number().int().min(1).max(28, 'Dia do mês deve ser entre 1 e 28'),
+    category: z.string().nullable().optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de início inválida (esperado YYYY-MM-DD)'),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de término inválida (esperado YYYY-MM-DD)').nullable().optional(),
+    active: z.boolean().optional()
+});
+
+const toggleFixedExpenseSchema = z.object({
+    active: z.boolean()
+});
+
 export function createPsychotherapyRoutes(): Router {
     const router = Router();
 
@@ -175,6 +190,11 @@ export function createPsychotherapyRoutes(): Router {
     router.get('/psychotherapy/expenses', validateQuery(listExpensesQuerySchema), asyncHandler((req, res) => expenseController.listExpenses(req, res)));
     router.delete('/psychotherapy/expenses/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => expenseController.deleteExpense(req, res)));
     router.get('/psychotherapy/analytics/dashboard', validateQuery(analyticsQuerySchema), asyncHandler((req, res) => expenseController.getAnalytics(req, res)));
+
+    router.get('/psychotherapy/fixed-expenses', asyncHandler((req, res) => expenseController.listFixedExpenses(req, res)));
+    router.post('/psychotherapy/fixed-expenses', validateBody(fixedExpenseSchema), asyncHandler((req, res) => expenseController.saveFixedExpense(req, res)));
+    router.delete('/psychotherapy/fixed-expenses/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => expenseController.deleteFixedExpense(req, res)));
+    router.patch('/psychotherapy/fixed-expenses/:id/toggle', validateParams(uuidParamSchema), validateBody(toggleFixedExpenseSchema), asyncHandler((req, res) => expenseController.toggleFixedExpense(req, res)));
 
     // Appointments
     const appointmentController = container.resolve(AppointmentController);

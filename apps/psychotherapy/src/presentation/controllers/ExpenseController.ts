@@ -5,6 +5,7 @@ import { SavePsychotherapyExpenseUseCase } from '../../application/useCases/Save
 import { ListPsychotherapyExpensesUseCase } from '../../application/useCases/ListPsychotherapyExpensesUseCase';
 import { DeletePsychotherapyExpenseUseCase } from '../../application/useCases/DeletePsychotherapyExpenseUseCase';
 import { GetDashboardAnalyticsUseCase } from '../../application/useCases/GetDashboardAnalyticsUseCase';
+import { IPsychotherapyRepository } from '../../domain/repositories/IPsychotherapyRepository';
 
 @injectable()
 export class ExpenseController {
@@ -12,7 +13,8 @@ export class ExpenseController {
         @inject(SavePsychotherapyExpenseUseCase) private saveExpenseUseCase: SavePsychotherapyExpenseUseCase,
         @inject(ListPsychotherapyExpensesUseCase) private listExpensesUseCase: ListPsychotherapyExpensesUseCase,
         @inject(DeletePsychotherapyExpenseUseCase) private deleteExpenseUseCase: DeletePsychotherapyExpenseUseCase,
-        @inject(GetDashboardAnalyticsUseCase) private getDashboardAnalyticsUseCase: GetDashboardAnalyticsUseCase
+        @inject(GetDashboardAnalyticsUseCase) private getDashboardAnalyticsUseCase: GetDashboardAnalyticsUseCase,
+        @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository
     ) {}
 
     async saveExpense(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -56,5 +58,33 @@ export class ExpenseController {
         const { month } = req.query; // YYYY-MM
         const analytics = await this.getDashboardAnalyticsUseCase.execute(tenantId, month as string | undefined);
         res.status(200).json(analytics);
+    }
+
+    async listFixedExpenses(req: AuthenticatedRequest, res: Response): Promise<void> {
+        const tenantId = req.tenantId!;
+        const fixedExpenses = await this.repository.listFixedExpenses(tenantId);
+        res.status(200).json(fixedExpenses);
+    }
+
+    async saveFixedExpense(req: AuthenticatedRequest, res: Response): Promise<void> {
+        const tenantId = req.tenantId!;
+        const data = { ...req.body, tenantId };
+        const fixedExpense = await this.repository.saveFixedExpense(data);
+        res.status(200).json(fixedExpense);
+    }
+
+    async deleteFixedExpense(req: AuthenticatedRequest, res: Response): Promise<void> {
+        const tenantId = req.tenantId!;
+        const { id } = req.params;
+        await this.repository.deleteFixedExpense(tenantId, id);
+        res.status(204).send();
+    }
+
+    async toggleFixedExpense(req: AuthenticatedRequest, res: Response): Promise<void> {
+        const tenantId = req.tenantId!;
+        const { id } = req.params;
+        const { active } = req.body;
+        const fixedExpense = await this.repository.toggleFixedExpense(tenantId, id, active);
+        res.status(200).json(fixedExpense);
     }
 }

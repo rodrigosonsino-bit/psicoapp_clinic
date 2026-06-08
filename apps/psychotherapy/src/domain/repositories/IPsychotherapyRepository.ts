@@ -3,6 +3,7 @@ import { PatientStatus, PaymentType, PsychotherapyPatient, ReminderChannel } fro
 import { PsychotherapyReceipt } from '../models/PsychotherapyReceipt';
 import { PsychotherapySession, SessionStatus } from '../models/PsychotherapySession';
 import { ExpenseCategory, PsychotherapyExpense } from '../models/PsychotherapyExpense';
+import { PsychotherapyFixedExpense } from '../models/PsychotherapyFixedExpense';
 import { TenantProfile } from '../models/TenantProfile';
 import { AppointmentStatus, PsychotherapyAppointment, RecurrenceType } from '../models/PsychotherapyAppointment';
 import { ClinicalNote } from '../models/ClinicalNote';
@@ -88,6 +89,20 @@ export interface SaveExpenseDTO {
     amountCents: number;
     description: string;
     category: ExpenseCategory;
+    fixedExpenseId?: string | null;
+    referenceMonth?: string | null;
+}
+
+export interface SaveFixedExpenseDTO {
+    id?: string;
+    tenantId: string;
+    description: string;
+    amountCents: number;
+    dayOfMonth: number;
+    category?: string | null;
+    startDate: string; // 'YYYY-MM-DD'
+    endDate?: string | null; // 'YYYY-MM-DD' or null
+    active?: boolean;
 }
 
 export interface SaveAppointmentDTO {
@@ -182,6 +197,11 @@ export interface IPsychotherapyRepository {
     saveExpense(data: SaveExpenseDTO): Promise<PsychotherapyExpense>;
     listExpenses(tenantId: string, start?: Date, end?: Date, pagination?: PaginationOptions): Promise<PaginatedResult<PsychotherapyExpense>>;
     deleteExpense(tenantId: string, id: string): Promise<void>;
+    listFixedExpenses(tenantId: string): Promise<PsychotherapyFixedExpense[]>;
+    saveFixedExpense(data: SaveFixedExpenseDTO): Promise<PsychotherapyFixedExpense>;
+    deleteFixedExpense(tenantId: string, id: string): Promise<void>;
+    toggleFixedExpense(tenantId: string, id: string, active: boolean): Promise<PsychotherapyFixedExpense>;
+    expenseExistsForMonth(tenantId: string, fixedExpenseId: string, month: string): Promise<boolean>;
     getDashboardAnalytics(tenantId: string, currentMonthStr: string): Promise<DashboardAnalytics>;
     saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment>;
     listAppointments(tenantId: string, options?: ListAppointmentsOptions): Promise<PaginatedResult<PsychotherapyAppointment>>;
