@@ -668,23 +668,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         // Query 1: Trend of revenue and expenses for the 6 months (includes the current month)
         // Revenue sourced from monthly_records so payments marked in Faturamento Mensal
         // appear here — not just formally issued receipts.
-        // Logic mirrors frontend getReceivedAmount:
-        //   monthly type → full fee only when payment_status = 'paid'
-        //   per_session type → session_price_cents * paid_sessions
+        // Formula: session_price_cents * paid_sessions for ALL payment types.
+        // Regardless of monthly vs per_session billing, each paid session represents
+        // real cash received. The distinction only matters for pending calculations.
         const startMonthStr = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}`;
         const endMonthStr = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}`;
         const trendResult = await this.dbPool.query(`
             WITH monthly_records_revenue AS (
                 SELECT month, COALESCE(SUM(
-                    CASE
-                        WHEN payment_type = 'monthly' THEN
-                            CASE WHEN payment_status = 'paid'
-                                 THEN COALESCE(session_price_cents, 0)
-                                 ELSE 0
-                            END
-                        ELSE
-                            COALESCE(session_price_cents, 0) * paid_sessions + previous_month_paid_cents
-                    END
+                    COALESCE(session_price_cents, 0) * paid_sessions + previous_month_paid_cents
                 ), 0) as total
                 FROM psychotherapy_monthly_records
                 WHERE tenant_id = $1 AND month >= $4 AND month < $5
