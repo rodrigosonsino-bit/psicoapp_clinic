@@ -666,11 +666,28 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const endDate = new Date(Date.UTC(currentYearNum, currentMonthNum, 1));
 
         // Query 1: Trend of revenue and expenses for the 6 months (includes the current month)
+        // Revenue sourced from monthly_records so payments marked in Faturamento Mensal
+        // appear here — not just formally issued receipts.
+        // Logic mirrors frontend getReceivedAmount:
+        //   monthly type → full fee only when payment_status = 'paid'
+        //   per_session type → session_price_cents * paid_sessions
+        const startMonthStr = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}`;
+        const endMonthStr = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}`;
         const trendResult = await this.dbPool.query(`
-            WITH receipts_by_month AS (
-                SELECT TO_CHAR(issue_date, 'YYYY-MM') as month, COALESCE(SUM(amount_cents), 0) as total
-                FROM psychotherapy_receipts
-                WHERE tenant_id = $1 AND issue_date >= $2 AND issue_date < $3
+            WITH monthly_records_revenue AS (
+                SELECT month, COALESCE(SUM(
+                    CASE
+                        WHEN payment_type = 'monthly' THEN
+                            CASE WHEN payment_status = 'paid'
+                                 THEN COALESCE(session_price_cents, 0)
+                                 ELSE 0
+                            END
+                        ELSE
+                            COALESCE(session_price_cents, 0) * paid_sessions + previous_month_paid_cents
+                    END
+                ), 0) as total
+                FROM psychotherapy_monthly_records
+                WHERE tenant_id = $1 AND month >= $4 AND month < $5
                 GROUP BY 1
             ),
             expenses_by_month AS (
@@ -679,13 +696,13 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 WHERE tenant_id = $1 AND date >= $2 AND date < $3
                 GROUP BY 1
             )
-            SELECT 
+            SELECT
                 COALESCE(r.month, e.month) as month,
                 COALESCE(r.total, 0) as revenue,
                 COALESCE(e.total, 0) as expenses
-            FROM receipts_by_month r
+            FROM monthly_records_revenue r
             FULL OUTER JOIN expenses_by_month e ON r.month = e.month
-        `, [validTenantId, startDate, endDate]);
+        `, [validTenantId, startDate, endDate, startMonthStr, endMonthStr]);
 
         // Query 2: Pending amount in cents for the current month
         const pendingResult = await this.dbPool.query(`
