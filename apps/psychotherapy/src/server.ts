@@ -19,6 +19,7 @@ import { GoogleCalendarSyncJob } from './infrastructure/scheduler/GoogleCalendar
 import { IPsychotherapyRepository } from './domain/repositories/IPsychotherapyRepository';
 import { PixController } from './presentation/controllers/PixController';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
+import { createPaymentReceiptHandler } from './infrastructure/whatsapp/PaymentReceiptHandler';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3333;
@@ -125,7 +126,8 @@ if (require.main === module) {
                 const sessionManager = container.resolve<WhatsappSessionManager>('WhatsappSessionManager');
                 if (process.env.ENABLE_WHATSAPP !== 'false') {
                     const dbPool = container.resolve(Pool);
-                    sessionManager.initializeAll(dbPool).catch(err => {
+                    const receiptHandler = createPaymentReceiptHandler(dbPool);
+                    sessionManager.initializeAll(dbPool, receiptHandler).catch(err => {
                         logger.error({ err }, '⚠️ Falha ao inicializar sessões WhatsApp (não crítico — app continua)');
                     });
                     logger.info('📱 WhatsApp Session Manager inicializado');

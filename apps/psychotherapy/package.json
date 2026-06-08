@@ -16,15 +16,16 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
     "@antigravity/whatsapp-core": "*",
     "bcrypt": "^6.0.0",
-    "ioredis": "^5.10.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
     "googleapis": "^173.0.0",
     "helmet": "^8.0.0",
+    "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1",
     "otplib": "^13.4.1",
