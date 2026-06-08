@@ -72,7 +72,8 @@ const patientSchema = z.object({
     document: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
     email: z.string().nullable().optional(),
-    reminderChannel: reminderChannelSchema.optional().default('whatsapp')
+    reminderChannel: reminderChannelSchema.optional().default('whatsapp'),
+    fullName: z.string().nullable().optional()
 });
 
 const monthlyRecordSchema = z.object({

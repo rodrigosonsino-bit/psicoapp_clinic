@@ -70,9 +70,9 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_patients (
                 id, tenant_id, name, status, payment_type, default_session_price_cents,
-                notes, document, phone, email, reminder_channel
+                notes, document, phone, email, reminder_channel, full_name
             )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 status = EXCLUDED.status,
@@ -83,6 +83,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 phone = EXCLUDED.phone,
                 email = EXCLUDED.email,
                 reminder_channel = EXCLUDED.reminder_channel,
+                full_name = EXCLUDED.full_name,
                 updated_at = NOW()
             WHERE psychotherapy_patients.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
@@ -97,10 +98,21 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.document || null,
             data.phone || null,
             data.email || null,
-            data.reminderChannel ?? 'whatsapp'
+            data.reminderChannel ?? 'whatsapp',
+            data.fullName ?? null
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
+
+        if (data.id) {
+            await this.dbPool.query(
+                `UPDATE psychotherapy_monthly_records
+                 SET patient_name_snapshot = $1
+                 WHERE patient_id = $2 AND tenant_id = $3`,
+                [data.name, data.id, tenantId]
+            );
+        }
+
         return this.mapPatient(result.rows[0]);
     }
 
@@ -1359,7 +1371,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.email,
             new Date(row.created_at),
             new Date(row.updated_at),
-            row.reminder_channel ?? 'whatsapp'
+            row.reminder_channel ?? 'whatsapp',
+            row.full_name ?? null
         );
     }
 

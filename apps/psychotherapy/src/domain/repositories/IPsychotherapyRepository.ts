@@ -21,6 +21,7 @@ export interface SavePatientDTO {
     phone?: string | null;
     email?: string | null;
     reminderChannel?: ReminderChannel;
+    fullName?: string | null;
 }
 
 export interface SaveMonthlyRecordDTO {

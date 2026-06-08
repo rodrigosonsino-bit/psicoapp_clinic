@@ -13,6 +13,7 @@ export interface PatientRow {
     reminder_channel: 'whatsapp' | 'email' | 'both' | 'none' | null;
     created_at: Date;
     updated_at: Date;
+    full_name: string | null;
 }
 
 // Linha da tabela: psychotherapy_monthly_records

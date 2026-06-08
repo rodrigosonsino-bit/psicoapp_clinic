@@ -7,3 +7,5 @@ dist/
 # Dados de pacientes — nunca versionar
 planilha_real*.csv
 import_report_*.json
+
+.vercel

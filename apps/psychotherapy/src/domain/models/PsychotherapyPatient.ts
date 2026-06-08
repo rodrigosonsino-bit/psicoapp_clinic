@@ -16,6 +16,7 @@ export class PsychotherapyPatient {
         public readonly email: string | null,
         public readonly createdAt: Date,
         public readonly updatedAt: Date,
-        public readonly reminderChannel: ReminderChannel = 'whatsapp'
+        public readonly reminderChannel: ReminderChannel = 'whatsapp',
+        public readonly fullName: string | null = null
     ) {}
 }

@@ -180,6 +180,7 @@ export class ExportController {
             const patientsResult = await client.query<{
                 patient_id: string;
                 patient_name: string;
+                patient_full_name: string | null;
                 document: string | null;
                 total_paid_cents: string;
                 session_count: string;
@@ -188,6 +189,7 @@ export class ExportController {
                 `SELECT
                      p.id                                                    AS patient_id,
                      p.name                                                  AS patient_name,
+                     p.full_name                                             AS patient_full_name,
                      p.document,
                      COALESCE(SUM(mr.received_amount_cents), 0)::bigint      AS total_paid_cents,
                      COALESCE(SUM(mr.paid_sessions), 0)::bigint              AS session_count,
@@ -197,7 +199,7 @@ export class ExportController {
                  WHERE mr.tenant_id = $1
                    AND EXTRACT(YEAR FROM mr.month::date)::int = $2
                    AND mr.received_amount_cents > 0
-                 GROUP BY p.id, p.name, p.document
+                 GROUP BY p.id, p.name, p.full_name, p.document
                  ORDER BY p.name`,
                 [tenantId, year],
             );
@@ -235,6 +237,7 @@ export class ExportController {
                 patientSummaries: patientsResult.rows.map(r => ({
                     patientId:      r.patient_id,
                     patientName:    r.patient_name,
+                    patientFullName: r.patient_full_name ?? null,
                     document:       r.document,
                     totalPaidCents: parseInt(r.total_paid_cents, 10),
                     sessionCount:   parseInt(r.session_count, 10),
