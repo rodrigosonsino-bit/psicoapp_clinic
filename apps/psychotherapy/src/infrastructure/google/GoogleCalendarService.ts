@@ -157,7 +157,7 @@ export class GoogleCalendarService {
         }
 
         const eventBody: calendar_v3.Schema$Event = {
-            summary: `Sessão — ${patientName}`,
+            summary: patientName,
             description: [
                 `Paciente: ${patientName}`,
                 patientPhone ? `WhatsApp: ${patientPhone}` : null,
