@@ -698,7 +698,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 END
             ), 0) as pending
             FROM psychotherapy_monthly_records
-            WHERE tenant_id = $1 AND month = $2 AND payment_status != 'paid'
+            WHERE tenant_id = $1 AND month < $2 AND payment_status != 'paid'
         `, [validTenantId, currentMonthStr]);
 
         const pendingCents = parseInt(pendingResult.rows[0].pending, 10);
