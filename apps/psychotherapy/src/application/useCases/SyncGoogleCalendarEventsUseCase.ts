@@ -124,23 +124,32 @@ export class SyncGoogleCalendarEventsUseCase {
         const existingAppt = await this.repository.findAppointmentByGoogleEventId(config.tenantId, event.id);
 
         if (!existingAppt) {
-            // Verificar se existe agendamento sem googleEventId para esse paciente nessa data/hora.
-            // Isso resolve a race condition: o app cria o agendamento e dispara o sync GCal em
-            // fire-and-forget; se o cron de 5 min rodar antes de o googleEventId ser persistido,
-            // ele enxergaria null e criaria um duplicado.
-            const windowStart = new Date(start.getTime() - 60_000);
-            const windowEnd = new Date(start.getTime() + 60_000);
+            // Busca ampla por horário: cobre race conditions E o caso onde o app salvou
+            // o ID base da série GCal enquanto o sync retorna IDs de ocorrência (_timestamp).
+            const windowStart = new Date(start.getTime() - 120_000);
+            const windowEnd   = new Date(start.getTime() + 120_000);
             const nearby = await this.repository.listAppointments(config.tenantId, {
                 patientId: patient.id,
                 start: windowStart,
                 end: windowEnd
             });
-            const unlinked = nearby.data.find(a => !a.googleEventId);
 
+            // Prioridade 1: sem googleEventId (criado pelo app, ainda não vinculado)
+            const unlinked = nearby.data.find(a => !a.googleEventId);
             if (unlinked) {
                 await this.repository.updateAppointmentGoogleEvent(unlinked.id, config.tenantId, event.id, event.htmlLink ?? '');
                 await this.updateExistingAppointment(config, unlinked, { start, durationMinutes, targetStatus, event });
-                logger.info({ tenantId: config.tenantId, appointmentId: unlinked.id, eventId: event.id }, '🔗 Agendamento avulso vinculado ao evento do Google Calendar (race condition resolvida)');
+                logger.info({ tenantId: config.tenantId, appointmentId: unlinked.id, eventId: event.id }, '🔗 Agendamento avulso vinculado ao evento do Google Calendar');
+                return;
+            }
+
+            // Prioridade 2: mesmo paciente, mesmo horário, googleEventId diferente
+            // (ex: app armazenou ID base da série; sync retornou ID de ocorrência)
+            if (nearby.data.length > 0) {
+                const sameSlot = nearby.data[0];
+                logger.info({ tenantId: config.tenantId, appointmentId: sameSlot.id, existingGcalId: sameSlot.googleEventId, newGcalId: event.id }, '🔗 Agendamento existente no mesmo horário — vinculando novo eventId (evita duplicata)');
+                await this.repository.updateAppointmentGoogleEvent(sameSlot.id, config.tenantId, event.id, event.htmlLink ?? '');
+                await this.updateExistingAppointment(config, sameSlot, { start, durationMinutes, targetStatus, event });
                 return;
             }
 
@@ -231,7 +240,7 @@ export class SyncGoogleCalendarEventsUseCase {
                     // (criado pelo app antes do pull-sync vincular)
                     const unlinkedSibling = seriesMembers.find(m =>
                         !m.googleEventId &&
-                        Math.abs(m.scheduledAt.getTime() - start.getTime()) < 60_000
+                        Math.abs(m.scheduledAt.getTime() - start.getTime()) < 120_000
                     );
 
                     if (unlinkedSibling) {
@@ -241,7 +250,28 @@ export class SyncGoogleCalendarEventsUseCase {
                         continue;
                     }
 
+                    // Busca ampla: qualquer agendamento do paciente no mesmo horário,
+                    // mesmo fora da série (orphan criado pelo app ou ID base vs. ocorrência)
                     const patient = await this.findOrCreatePatient(config, event, patients);
+                    const wStart = new Date(start.getTime() - 120_000);
+                    const wEnd   = new Date(start.getTime() + 120_000);
+                    const nearby = await this.repository.listAppointments(config.tenantId, {
+                        patientId: patient.id,
+                        start: wStart,
+                        end: wEnd
+                    });
+                    const anyExisting = nearby.data.find(a =>
+                        !existingMap.has(event.id) &&
+                        (!a.googleEventId || Math.abs(a.scheduledAt.getTime() - start.getTime()) < 120_000)
+                    );
+                    if (anyExisting) {
+                        await this.repository.updateAppointmentGoogleEvent(anyExisting.id, config.tenantId, event.id, event.htmlLink ?? '');
+                        await this.updateExistingAppointment(config, anyExisting, { start, durationMinutes, targetStatus, event });
+                        existingMap.set(event.id, anyExisting);
+                        logger.info({ tenantId: config.tenantId, appointmentId: anyExisting.id, eventId: event.id }, '🔗 Agendamento orphan no mesmo horário vinculado (evita duplicata em série)');
+                        continue;
+                    }
+
                     const isRoot = rootId === null;
 
                     const appt = await this.repository.saveAppointment({
