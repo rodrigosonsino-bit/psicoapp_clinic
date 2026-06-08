@@ -73,7 +73,7 @@ const patientSchema = z.object({
     phone: z.string().nullable().optional(),
     email: z.string().nullable().optional(),
     reminderChannel: reminderChannelSchema.optional().default('whatsapp'),
-    fullName: z.string().nullable().optional()
+    fullName: z.string().min(1).nullable().optional()
 });
 
 const monthlyRecordSchema = z.object({
@@ -92,7 +92,7 @@ const monthlyRecordSchema = z.object({
 });
 
 const updateProfileSchema = z.object({
-    fullName: z.string().nullable().optional(),
+    fullName: z.string().min(1).nullable().optional(),
     document: z.string().nullable().optional(),
     professionalId: z.string().nullable().optional(),
     address: z.string().nullable().optional()
