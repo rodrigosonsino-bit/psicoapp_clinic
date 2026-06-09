@@ -393,6 +393,44 @@ export function createPsychotherapyRoutes(): Router {
         includeInactive: z.enum(['true', 'false']).optional(),
     });
 
+    const createGroupSchema = z.object({
+        name:               z.string().min(1, 'Nome é obrigatório'),
+        description:        z.string().nullable().optional(),
+        monthly_fee_cents:  z.number().int().nonnegative('Mensalidade inválida'),
+        day_of_week:        z.number().int().min(0).max(6).nullable().optional(),
+        start_time:         z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+        duration_minutes:   z.number().int().positive().optional().default(90),
+        start_date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+        duration_months:    z.number().int().positive().nullable().optional(),
+    });
+
+    const updateGroupSchema = createGroupSchema.partial().extend({
+        is_active:          z.boolean().optional(),
+    });
+
+    const registerGroupPaymentSchema = z.object({
+        patient_id:         z.string().uuid('patient_id inválido'),
+        reference_month:    z.string().regex(/^\d{4}-\d{2}$/, 'Formato YYYY-MM'),
+        amount_cents:       z.number().int().positive('Valor inválido'),
+        payment_method:     z.enum(['pix', 'cash', 'debit_card', 'credit_card']),
+        total_installments: z.number().int().min(1).optional().default(1),
+        installment_number: z.number().int().min(1).optional().default(1),
+        notes:              z.string().nullable().optional(),
+    });
+
+    const deletePaymentParamSchema = z.object({
+        groupId:   z.string().uuid(),
+        paymentId: z.string().uuid(),
+    });
+
+    const deletePaymentQuerySchema = z.object({
+        mode: z.enum(['single', 'all']).optional().default('single'),
+    });
+
+    const listGroupPaymentsQuerySchema = z.object({
+        month: z.string().regex(/^\d{4}-\d{2}$/, 'Formato de mês inválido (esperado YYYY-MM)').optional(),
+    });
+
     // Listar grupos
     router.get('/psychotherapy/groups',
         validateQuery(listGroupsQuerySchema),
@@ -426,6 +464,40 @@ export function createPsychotherapyRoutes(): Router {
         validateParams(groupIdParamSchema),
         validateQuery(listGroupSessionsQuerySchema),
         asyncHandler((req, res) => groupController.listGroupSessions(req, res)));
+
+    // Criar grupo
+    router.post('/psychotherapy/groups',
+        validateBody(createGroupSchema),
+        asyncHandler((req, res) => groupController.createGroup(req, res)));
+
+    // Editar grupo
+    router.put('/psychotherapy/groups/:groupId',
+        validateParams(groupIdParamSchema),
+        validateBody(updateGroupSchema),
+        asyncHandler((req, res) => groupController.updateGroup(req, res)));
+
+    // Excluir grupo
+    router.delete('/psychotherapy/groups/:groupId',
+        validateParams(groupIdParamSchema),
+        asyncHandler((req, res) => groupController.deleteGroup(req, res)));
+
+    // Listar pagamentos de grupo
+    router.get('/psychotherapy/groups/:groupId/payments',
+        validateParams(groupIdParamSchema),
+        validateQuery(listGroupPaymentsQuerySchema),
+        asyncHandler((req, res) => groupController.listGroupPayments(req, res)));
+
+    // Registrar pagamento de grupo
+    router.post('/psychotherapy/groups/:groupId/payments',
+        validateParams(groupIdParamSchema),
+        validateBody(registerGroupPaymentSchema),
+        asyncHandler((req, res) => groupController.registerPayment(req, res)));
+
+    // Estornar pagamento de grupo
+    router.delete('/psychotherapy/groups/:groupId/payments/:paymentId',
+        validateParams(deletePaymentParamSchema),
+        validateQuery(deletePaymentQuerySchema),
+        asyncHandler((req, res) => groupController.deletePayment(req, res)));
 
     // ── Lembretes automáticos ─────────────────────────────────────────────────
     // Trigger manual para teste / diagnóstico

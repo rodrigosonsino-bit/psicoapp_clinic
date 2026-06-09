@@ -85,7 +85,7 @@ export class RegisterGroupSessionUseCase {
 
             // ── 1. Verificar grupo existe e pertence ao tenant ────────────────
             const groupResult = await client.query(`
-                SELECT id, name, session_price_cents, start_time, duration_minutes, is_active, deleted_at
+                SELECT id, name, session_price_cents, start_time, duration_minutes, is_active, deleted_at, monthly_fee_cents
                 FROM therapy_groups
                 WHERE id = $1 AND tenant_id = $2
                 LIMIT 1;
@@ -204,19 +204,23 @@ export class RegisterGroupSessionUseCase {
                 // 4c. Atualizar monthly_record de faturamento
                 // presente ou falta-não-justificada = sessão cobrada
                 const isBillable = attendance.status === 'present' || attendance.status === 'absent';
-                await this.upsertMonthlyRecord(client, {
-                    tenantId,
-                    patientId: attendance.patientId,
-                    patientName: member.name,
-                    patientStatus: member.status,
-                    paymentType: member.paymentType,
-                    sessionDate,
-                    scheduledAt,
-                    sessionPriceCents: effectivePriceCents,
-                    isBillable,
-                    isAbsence: attendance.status === 'absent',
-                });
-                monthlyRecordsUpdated++;
+                const hasMonthlyFee = group.monthly_fee_cents !== null && group.monthly_fee_cents > 0;
+                
+                if (!hasMonthlyFee) {
+                    await this.upsertMonthlyRecord(client, {
+                        tenantId,
+                        patientId: attendance.patientId,
+                        patientName: member.name,
+                        patientStatus: member.status,
+                        paymentType: member.paymentType,
+                        sessionDate,
+                        scheduledAt,
+                        sessionPriceCents: effectivePriceCents,
+                        isBillable,
+                        isAbsence: attendance.status === 'absent',
+                    });
+                    monthlyRecordsUpdated++;
+                }
             }
 
             await client.query('COMMIT');

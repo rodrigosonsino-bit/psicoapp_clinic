@@ -15,7 +15,10 @@ export class TherapyGroup {
         public readonly isActive: boolean,
         public readonly deletedAt: Date | null,
         public readonly createdAt: Date,
-        public readonly updatedAt: Date
+        public readonly updatedAt: Date,
+        public readonly monthlyFeeCents: number | null = null,
+        public readonly startDate: Date | null = null,
+        public readonly durationMonths: number | null = null
     ) {}
 }
 
