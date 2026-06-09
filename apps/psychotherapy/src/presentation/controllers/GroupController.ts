@@ -150,17 +150,44 @@ export class GroupController {
                 p.status        AS patient_status,
                 tgm.joined_at,
                 tgm.left_at,
-                -- Indicadores de pagamento do mês: 🟢 pago, 🟡 parcial, 🔴 pendente
-                COALESCE(pmr.payment_status, 'pending') AS payment_status,
-                COALESCE(pmr.paid_sessions,  0)         AS paid_sessions,
-                COALESCE(pmr.expected_sessions, 0)      AS expected_sessions,
-                COALESCE(pmr.absences, 0)               AS absences
+                -- Indicadores de presença calculados direto de group_session_records
+                COALESCE(sess.present_count, 0)  AS paid_sessions,
+                COALESCE(sess.total_count,   0)  AS expected_sessions,
+                COALESCE(sess.absent_count,  0)  AS absences,
+                -- Status de pagamento vem de group_payments (mensalidade flat)
+                COALESCE(gp_status.payment_status, 'pending') AS payment_status
             FROM therapy_group_members tgm
             JOIN psychotherapy_patients p ON p.id = tgm.patient_id
-            LEFT JOIN psychotherapy_monthly_records pmr
-                ON pmr.tenant_id  = p.tenant_id
-               AND pmr.patient_id = p.id
-               AND pmr.month      = $3
+            -- Presença: contagem de sessões do mês para este membro neste grupo
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(*) FILTER (WHERE gsr.attendance_status = 'present') AS present_count,
+                    COUNT(*) FILTER (WHERE gsr.attendance_status = 'absent')  AS absent_count,
+                    COUNT(*)                                                   AS total_count
+                FROM group_session_records gsr
+                WHERE gsr.group_id   = tgm.group_id
+                  AND gsr.patient_id = tgm.patient_id
+                  AND gsr.tenant_id  = $2
+                  AND TO_CHAR(gsr.session_date, 'YYYY-MM') = $3
+            ) sess ON true
+            -- Status de pagamento: vem dos pagamentos de grupo do mês
+            LEFT JOIN LATERAL (
+                SELECT
+                    CASE
+                        WHEN tg.monthly_fee_cents IS NULL OR tg.monthly_fee_cents = 0 THEN 'paid'
+                        WHEN COALESCE(SUM(gp.amount_cents), 0) = 0                    THEN 'pending'
+                        WHEN COALESCE(SUM(gp.amount_cents), 0) >= tg.monthly_fee_cents THEN 'paid'
+                        ELSE 'partial'
+                    END AS payment_status
+                FROM therapy_groups tg
+                LEFT JOIN group_payments gp
+                    ON  gp.group_id        = tgm.group_id
+                    AND gp.patient_id      = tgm.patient_id
+                    AND gp.reference_month = $3
+                    AND gp.tenant_id       = $2
+                WHERE tg.id = tgm.group_id
+                GROUP BY tg.monthly_fee_cents
+            ) gp_status ON true
             WHERE tgm.group_id   = $1
               AND p.tenant_id    = $2
               AND tgm.left_at IS NULL
