@@ -577,7 +577,7 @@ export class GroupController {
         const result = await this.dbPool.query(
             `UPDATE group_payments
                 SET amount_cents   = $1,
-                    payment_method = $2,
+                    payment_method = $2::group_payment_method,
                     notes          = $3
               WHERE id = $4 AND group_id = $5 AND tenant_id = $6
           RETURNING *`,
