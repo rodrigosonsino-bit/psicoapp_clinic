@@ -423,6 +423,12 @@ export function createPsychotherapyRoutes(): Router {
         paymentId: z.string().uuid(),
     });
 
+    const updateGroupPaymentSchema = z.object({
+        amount_cents:   z.number().int().positive('Valor inválido'),
+        payment_method: z.enum(['pix', 'cash', 'debit_card', 'credit_card']),
+        notes:          z.string().nullable().optional(),
+    });
+
     const deletePaymentQuerySchema = z.object({
         mode: z.enum(['single', 'all']).optional().default('single'),
     });
@@ -492,6 +498,12 @@ export function createPsychotherapyRoutes(): Router {
         validateParams(groupIdParamSchema),
         validateBody(registerGroupPaymentSchema),
         asyncHandler((req, res) => groupController.registerPayment(req, res)));
+
+    // Editar pagamento de grupo
+    router.put('/psychotherapy/groups/:groupId/payments/:paymentId',
+        validateParams(deletePaymentParamSchema),
+        validateBody(updateGroupPaymentSchema),
+        asyncHandler((req, res) => groupController.updatePayment(req, res)));
 
     // Estornar pagamento de grupo
     router.delete('/psychotherapy/groups/:groupId/payments/:paymentId',

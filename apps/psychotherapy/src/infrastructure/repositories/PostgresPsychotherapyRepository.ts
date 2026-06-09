@@ -771,6 +771,21 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 WHERE tenant_id = $1 AND month >= $4 AND month < $5
                 GROUP BY 1
             ),
+            group_payments_revenue AS (
+                SELECT reference_month AS month, COALESCE(SUM(amount_cents), 0) AS total
+                FROM group_payments
+                WHERE tenant_id = $1 AND reference_month >= $4 AND reference_month < $5
+                GROUP BY 1
+            ),
+            combined_revenue AS (
+                SELECT month, SUM(total) AS total
+                FROM (
+                    SELECT month, total FROM monthly_records_revenue
+                    UNION ALL
+                    SELECT month, total FROM group_payments_revenue
+                ) all_revenue
+                GROUP BY 1
+            ),
             expenses_by_month AS (
                 SELECT TO_CHAR(date, 'YYYY-MM') as month, COALESCE(SUM(amount_cents), 0) as total
                 FROM psychotherapy_expenses
@@ -781,7 +796,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 COALESCE(r.month, e.month) as month,
                 COALESCE(r.total, 0) as revenue,
                 COALESCE(e.total, 0) as expenses
-            FROM monthly_records_revenue r
+            FROM combined_revenue r
             FULL OUTER JOIN expenses_by_month e ON r.month = e.month
         `, [validTenantId, startDate, endDate, startMonthStr, endMonthStr]);
 

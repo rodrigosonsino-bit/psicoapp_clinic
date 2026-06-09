@@ -558,6 +558,39 @@ export class GroupController {
         }
     }
 
+    /** PUT /psychotherapy/groups/:groupId/payments/:paymentId */
+    async updatePayment(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { groupId, paymentId } = req.params;
+        const { amount_cents, payment_method, notes } = req.body;
+
+        const groupCheck = await this.dbPool.query(
+            'SELECT id FROM therapy_groups WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+            [groupId, tenantId]
+        );
+        if (groupCheck.rows.length === 0) {
+            throw new AppError('Grupo não encontrado', 404);
+        }
+
+        const result = await this.dbPool.query(
+            `UPDATE group_payments
+                SET amount_cents   = $1,
+                    payment_method = $2,
+                    notes          = $3
+              WHERE id = $4 AND group_id = $5 AND tenant_id = $6
+          RETURNING *`,
+            [amount_cents, payment_method, notes ?? null, paymentId, groupId, tenantId]
+        );
+
+        if (result.rows.length === 0) {
+            throw new AppError('Pagamento não encontrado', 404);
+        }
+
+        res.status(200).json({ success: true, data: result.rows[0] });
+    }
+
     /** DELETE /psychotherapy/groups/:groupId/payments/:paymentId */
     async deletePayment(req: Request, res: Response): Promise<void> {
         const tenantId = (req as any).tenantId as string;
