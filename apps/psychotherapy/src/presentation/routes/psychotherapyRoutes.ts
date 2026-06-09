@@ -499,7 +499,7 @@ export function createPsychotherapyRoutes(): Router {
         validateBody(registerGroupPaymentSchema),
         asyncHandler((req, res) => groupController.registerPayment(req, res)));
 
-    // Editar pagamento de grupo
+    // Editar pagamento de grupo (valor, método, notas)
     router.put('/psychotherapy/groups/:groupId/payments/:paymentId',
         validateParams(deletePaymentParamSchema),
         validateBody(updateGroupPaymentSchema),
