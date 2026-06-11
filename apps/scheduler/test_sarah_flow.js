@@ -89,31 +89,27 @@ assert.strictEqual(parsedJson.action.params.time, '10:00');
 assert.strictEqual(parsedJson.action.requiresConfirmation, true);
 console.log('✅ parseStructuredResponse (JSON): Passed!');
 
-// Test Fallback Legacy Parsing - BOOK action
-const legacyBookText = 'Com certeza! Seu agendamento foi iniciado. [ACTION: BOOK | paciente: João Silva | data: 2026-05-18 | hora: 10:00]';
-const parsedLegacyBook = parseStructuredResponse(legacyBookText);
-assert.strictEqual(parsedLegacyBook.replyText, 'Com certeza! Seu agendamento foi iniciado.');
-assert.strictEqual(parsedLegacyBook.action.type, 'create_event');
-assert.strictEqual(parsedLegacyBook.action.params.patientName, 'João Silva');
-assert.strictEqual(parsedLegacyBook.action.params.date, '2026-05-18');
-assert.strictEqual(parsedLegacyBook.action.params.time, '10:00');
-assert.strictEqual(parsedLegacyBook.action.requiresConfirmation, false);
-console.log('✅ parseStructuredResponse (Legacy BOOK): Passed!');
+// Test Defensive Defaults - Missing properties in JSON
+const incompleteJson = `{
+  "replyText": "Olá! Agendamento pré-confirmado."
+}`;
+const parsedIncomplete = parseStructuredResponse(incompleteJson);
+assert.strictEqual(parsedIncomplete.replyText, 'Olá! Agendamento pré-confirmado.');
+assert.strictEqual(parsedIncomplete.intent, '');
+assert.strictEqual(parsedIncomplete.conversationStage, 'greeting');
+assert.strictEqual(parsedIncomplete.summaryUpdate, '');
+assert.deepStrictEqual(parsedIncomplete.preferences, {});
+assert.strictEqual(parsedIncomplete.action.type, 'none');
+assert.strictEqual(parsedIncomplete.action.requiresConfirmation, false);
+assert.strictEqual(parsedIncomplete.requiresHuman, false);
+console.log('✅ parseStructuredResponse (Defensive Defaults): Passed!');
 
-// Test Fallback Legacy Parsing - CANCEL action
-const legacyCancelText = 'Sua sessão foi cancelada. [ACTION: CANCEL | cancelamento confirmado]';
-const parsedLegacyCancel = parseStructuredResponse(legacyCancelText);
-assert.strictEqual(parsedLegacyCancel.replyText, 'Sua sessão foi cancelada.');
-assert.strictEqual(parsedLegacyCancel.action.type, 'cancel_event');
-assert.strictEqual(parsedLegacyCancel.action.params.cancellationInfo, 'cancelamento confirmado');
-console.log('✅ parseStructuredResponse (Legacy CANCEL): Passed!');
-
-// Test Handoff Tag [FIM_ATENDIMENTO]
-const handoffText = 'Certo, vou te passar para o Rodrigo falar diretamente! [FIM_ATENDIMENTO]';
-const parsedHandoff = parseStructuredResponse(handoffText);
-assert.strictEqual(parsedHandoff.replyText, 'Certo, vou te passar para o Rodrigo falar diretamente!');
-assert.strictEqual(parsedHandoff.requiresHuman, true);
-console.log('✅ parseStructuredResponse (Handoff Tag): Passed!');
+// Test Fatal Parse Error
+const invalidJson = `{"replyText": "Olá", "action": { "type"`;
+const parsedInvalid = parseStructuredResponse(invalidJson);
+assert.strictEqual(parsedInvalid.requiresHuman, true);
+assert.strictEqual(parsedInvalid.action.type, 'none');
+console.log('✅ parseStructuredResponse (Fatal Parse Error): Passed!');
 console.log('');
 
 

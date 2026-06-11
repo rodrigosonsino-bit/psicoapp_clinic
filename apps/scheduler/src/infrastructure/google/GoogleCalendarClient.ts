@@ -2,6 +2,11 @@ import { google } from 'googleapis';
 import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger/logger';
+import { 
+    getSaoPauloTodayParts, 
+    buildSaoPauloDateTimeIso, 
+    addMinutesToSaoPauloIso 
+} from '../gemini/SarahTimezoneHelper';
 
 export interface GoogleCalendarConfig {
     userId: string;
@@ -465,5 +470,187 @@ export class GoogleCalendarClient {
             logger.error({ err, userId, summary }, 'Erro ao criar evento no Google Calendar');
             throw new Error('Falha ao criar evento no Google Calendar.');
         }
+    }
+
+    public async getEventsForNextDays(config: GoogleCalendarConfig, days: number): Promise<any[]> {
+        if (config.accessToken === 'mock_access_token') {
+            logger.info('Simulando eventos do Google Calendar via Mock para getEventsForNextDays...');
+            const now = new Date();
+            
+            // Evento 1: Amanhã às 14h00 (50 min)
+            const tomorrow = new Date(now);
+            tomorrow.setDate(now.getDate() + 1);
+            tomorrow.setHours(14, 0, 0, 0);
+
+            // Evento 2: Amanhã às 16h30 (50 min)
+            const tomorrow2 = new Date(now);
+            tomorrow2.setDate(now.getDate() + 1);
+            tomorrow2.setHours(16, 30, 0, 0);
+
+            // Evento 3: Dia seguinte - Dia Inteiro
+            const dayAfterTomorrow = new Date(now);
+            dayAfterTomorrow.setDate(now.getDate() + 2);
+            const dateStr = dayAfterTomorrow.toISOString().split('T')[0];
+
+            return [
+                {
+                    id: 'mock_event_1',
+                    summary: 'Consulta Dr. Rodrigo - João Silva',
+                    start: { dateTime: tomorrow.toISOString() },
+                    end: { dateTime: new Date(tomorrow.getTime() + 50 * 60 * 1000).toISOString() }
+                },
+                {
+                    id: 'mock_event_2',
+                    summary: 'Reunião de Alinhamento - Maria Souza',
+                    start: { dateTime: tomorrow2.toISOString() },
+                    end: { dateTime: new Date(tomorrow2.getTime() + 50 * 60 * 1000).toISOString() }
+                },
+                {
+                    id: 'mock_all_day_1',
+                    summary: 'Bloqueio Dia Inteiro',
+                    start: { date: dateStr },
+                    end: { date: dateStr }
+                }
+            ];
+        }
+
+        const client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            process.env.GOOGLE_REDIRECT_URI
+        );
+
+        client.setCredentials({
+            access_token: config.accessToken,
+            refresh_token: config.refreshToken,
+            expiry_date: config.expiryDate
+        });
+
+        client.on('tokens', async (tokens) => {
+            if (tokens.access_token) {
+                config.accessToken = tokens.access_token;
+                if (tokens.expiry_date) config.expiryDate = tokens.expiry_date;
+                await this.saveConfig(config);
+            }
+        });
+
+        const calendar = google.calendar({ version: 'v3', auth: client });
+        const now = new Date();
+        const maxTime = new Date();
+        maxTime.setDate(now.getDate() + days);
+
+        try {
+            const selectedCalId = config.calendarId || 'primary';
+            const response = await calendar.events.list({
+                calendarId: selectedCalId,
+                timeMin: now.toISOString(),
+                timeMax: maxTime.toISOString(),
+                singleEvents: true,
+                orderBy: 'startTime'
+            });
+
+            return response.data.items || [];
+        } catch (err) {
+            logger.error({ err, userId: config.userId }, 'Erro ao buscar eventos em getEventsForNextDays');
+            return [];
+        }
+    }
+
+    public async getFreeSlotsForNextDays(config: GoogleCalendarConfig, officeHours: any, days = 14): Promise<Array<{ date: string; time: string; startIso: string; endIso: string }>> {
+        // 1. Tratar officeHours nulo, vazio ou inválido
+        let oh = officeHours;
+        if (!oh) return [];
+        if (typeof oh === 'string') {
+            try {
+                oh = JSON.parse(oh);
+            } catch (err) {
+                logger.error({ err }, 'Failed to parse officeHours string in getFreeSlotsForNextDays');
+                return [];
+            }
+        }
+        if (typeof oh !== 'object' || oh === null) {
+            return [];
+        }
+
+        // 2. Obter eventos do Google Calendar
+        const events = await this.getEventsForNextDays(config, days);
+
+        // 3. Obter hoje em SP
+        const todayParts = getSaoPauloTodayParts();
+        const weekdayKeys = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+        const freeSlots: Array<{ date: string; time: string; startIso: string; endIso: string }> = [];
+
+        // 4. Iterar sobre os próximos 'days' dias
+        for (let i = 0; i < days; i++) {
+            const targetDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day + i, 12, 0, 0));
+            const dateStr = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            const weekdayNum = targetDate.getUTCDay();
+            const weekdayKey = weekdayKeys[weekdayNum];
+
+            const slotsForDay: string[] = oh[weekdayKey] || [];
+            if (!slotsForDay || slotsForDay.length === 0) {
+                continue;
+            }
+
+            for (const slotTime of slotsForDay) {
+                // slotTime format expected: "HH:MM" (e.g. "09:00")
+                const slotStartIso = buildSaoPauloDateTimeIso(dateStr, slotTime);
+                const slotEndIso = addMinutesToSaoPauloIso(slotStartIso, 50); // Sessões de 50 minutos
+                
+                const slotStartMs = new Date(slotStartIso).getTime();
+                const slotEndMs = new Date(slotEndIso).getTime();
+
+                // Filtrar slots no passado
+                if (slotStartMs <= Date.now()) {
+                    continue;
+                }
+
+                // Verificar conflito com eventos do Google Calendar
+                let isBlocked = false;
+                for (const event of events) {
+                    // Tratar eventos de dia inteiro
+                    if (event.start && event.start.date) {
+                        const allDayStart = event.start.date;
+                        const allDayEnd = event.end?.date || allDayStart;
+                        if (allDayStart === allDayEnd) {
+                            if (dateStr === allDayStart) {
+                                isBlocked = true;
+                                break;
+                            }
+                        } else {
+                            if (dateStr >= allDayStart && dateStr < allDayEnd) {
+                                isBlocked = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Tratar eventos normais (com dateTime)
+                    if (event.start?.dateTime && event.end?.dateTime) {
+                        const eventStartMs = new Date(event.start.dateTime).getTime();
+                        const eventEndMs = new Date(event.end.dateTime).getTime();
+                        if (!isNaN(eventStartMs) && !isNaN(eventEndMs)) {
+                            // Sobreposição se slotStart < eventEnd E eventStart < slotEnd
+                            if (slotStartMs < eventEndMs && eventStartMs < slotEndMs) {
+                                isBlocked = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!isBlocked) {
+                    freeSlots.push({
+                        date: dateStr,
+                        time: slotTime,
+                        startIso: slotStartIso,
+                        endIso: slotEndIso
+                    });
+                }
+            }
+        }
+
+        return freeSlots;
     }
 }

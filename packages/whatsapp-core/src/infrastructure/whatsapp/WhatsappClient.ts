@@ -36,6 +36,15 @@ export class WhatsappClient {
     private contactsCache: Map<string, string> = new Map();
     private aiSentMessagesJid: Set<string> = new Set();
     private processedMessageIds: Set<string> = new Set();
+    private messageBuffers: Map<string, {
+        timer: NodeJS.Timeout;
+        messages: string[];
+        name: string;
+        isAudio: boolean;
+        isImage: boolean;
+        isDocument: boolean;
+        mediaData?: { mimeType: string; data: string };
+    }> = new Map();
     private lastMessageReceivedAt: number = Date.now();
     private tenantId: string;
     private lastQrDataUrl: string | null = null;
@@ -396,6 +405,7 @@ export class WhatsappClient {
                                     }
                                 }
 
+                                // Download media immediately if present
                                 let mediaData: { mimeType: string; data: string } | undefined = undefined;
                                 if (isMedia) {
                                     try {
@@ -418,35 +428,74 @@ export class WhatsappClient {
                                     }
                                 }
 
-                                try {
-                                    await this.sock.sendPresenceUpdate('composing', from);
-                                } catch (presErr) {
-                                    logger.warn({ presErr }, 'Erro ao enviar presence update composing');
+                                // Debounce logic: accumulate text messages and flags by JID (from)
+                                let buffer = this.messageBuffers.get(from);
+                                if (buffer) {
+                                    clearTimeout(buffer.timer);
+                                    logger.info(`⏳ Mensagem de ${name} (${from}) adicionada ao buffer de debounce. Reiniciando timer.`);
+                                } else {
+                                    logger.info(`⏳ Iniciando buffer de debounce para ${name} (${from}) com timer de 2.5s.`);
+                                    buffer = {
+                                        timer: null as any,
+                                        messages: [],
+                                        name: name,
+                                        isAudio: false,
+                                        isImage: false,
+                                        isDocument: false,
+                                        mediaData: undefined
+                                    };
+                                    this.messageBuffers.set(from, buffer);
                                 }
 
-                                const replyText = await this.onIncomingMessage({
-                                    tenantId: this.tenantId,
-                                    from,
-                                    name,
-                                    text,
-                                    isAudio,
-                                    isImage,
-                                    isDocument,
-                                    mediaData,
-                                });
+                                buffer.messages.push(text);
+                                if (isAudio) buffer.isAudio = true;
+                                if (isImage) buffer.isImage = true;
+                                if (isDocument) buffer.isDocument = true;
+                                if (mediaData) buffer.mediaData = mediaData;
 
-                                if (replyText) {
-                                    let finalReply = replyText;
-                                    if (finalReply.includes('[FIM_ATENDIMENTO]')) {
-                                        finalReply = finalReply.replace('[FIM_ATENDIMENTO]', '').trim();
-                                        logger.info(`🚫 Tag [FIM_ATENDIMENTO] detectada. Desativando IA para ${name} (${from}).`);
-                                        await this.disableAIForContact(from);
-                                        await this.notifyHumanHandoff(name, from, 'O paciente encerrou o fluxo automatizado ou solicitou ajuda.');
+                                buffer.timer = setTimeout(async () => {
+                                    try {
+                                        const finalBuffer = this.messageBuffers.get(from);
+                                        this.messageBuffers.delete(from);
+                                        if (!finalBuffer) return;
+
+                                        const concatenatedText = finalBuffer.messages.join(' ');
+                                        logger.info(`⏳ Debounce expirado para ${finalBuffer.name} (${from}). Processando mensagens acumuladas:\n${concatenatedText}`);
+
+                                        try {
+                                            await this.sock.sendPresenceUpdate('composing', from);
+                                        } catch (presErr) {
+                                            logger.warn({ presErr }, 'Erro ao enviar presence update composing');
+                                        }
+
+                                        const replyText = await this.onIncomingMessage!({
+                                            tenantId: this.tenantId,
+                                            from,
+                                            name: finalBuffer.name,
+                                            text: concatenatedText,
+                                            isAudio: finalBuffer.isAudio,
+                                            isImage: finalBuffer.isImage,
+                                            isDocument: finalBuffer.isDocument,
+                                            mediaData: finalBuffer.mediaData,
+                                        });
+
+                                        if (replyText) {
+                                            let finalReply = replyText;
+                                            if (finalReply.includes('[FIM_ATENDIMENTO]')) {
+                                                finalReply = finalReply.replace('[FIM_ATENDIMENTO]', '').trim();
+                                                logger.info(`🚫 Tag [FIM_ATENDIMENTO] detectada. Desativando IA para ${finalBuffer.name} (${from}).`);
+                                                await this.disableAIForContact(from);
+                                                await this.notifyHumanHandoff(finalBuffer.name, from, 'O paciente encerrou o fluxo automatizado ou solicitou ajuda.');
+                                            }
+
+                                            logger.info(`🤖 Enviando auto-resposta via WhatsApp para ${finalBuffer.name}: "${finalReply}"`);
+                                            await this.sendMessage(from, finalReply);
+                                        }
+                                    } catch (processErr) {
+                                        logger.error({ processErr }, 'Erro ao processar mensagens acumuladas no timer de debounce.');
                                     }
+                                }, 2500);
 
-                                    logger.info(`🤖 Enviando auto-resposta via WhatsApp para ${name}: "${finalReply}"`);
-                                    await this.sendMessage(from, finalReply);
-                                }
                             } catch (err) {
                                 logger.error({ err }, 'Erro ao processar auto-resposta inteligente');
                             }

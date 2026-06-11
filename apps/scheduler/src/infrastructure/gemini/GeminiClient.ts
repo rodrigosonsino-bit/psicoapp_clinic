@@ -155,7 +155,30 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (Retorne APENAS um JSON válido):
                         parts: [{
                             text: fullPrompt
                         }]
-                    }]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                action: {
+                                    type: "STRING",
+                                    enum: ["schedule", "rewrite", "chat"]
+                                },
+                                data: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        recipientId: { type: "STRING" },
+                                        content: { type: "STRING" },
+                                        sendAt: { type: "STRING" },
+                                        platform: { type: "STRING" }
+                                    }
+                                },
+                                explanation: { type: "STRING" }
+                            },
+                            required: ["action", "data", "explanation"]
+                        }
+                    }
                 })
             });
 
@@ -266,16 +289,56 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (Retorne APENAS um JSON válido):
                  FROM whatsapp_ai_contact_contexts WHERE tenant_id = $1::uuid AND contact_jid = $2;`,
                 [tenantId, contactJid]
             );
+
+            // Buscar do perfil temporário da Sarah também
+            const profileRes = await this.dbPool.query(
+                `SELECT full_name, phone, city, modality, session_type, referral, notes 
+                 FROM sarah_patient_profiles WHERE tenant_id = $1::uuid AND contact_jid = $2;`,
+                [tenantId, contactJid]
+            );
+            const profile = profileRes.rows[0] || {};
+
             if (res.rows.length > 0) {
                 const row = res.rows[0];
+                const prefs = row.preferences || {};
+                
+                // Mesclar preferências do banco com o que está no perfil estruturado para garantir sincronia
+                const mergedPreferences = {
+                    location: profile.modality || prefs.location || null,
+                    patientName: profile.full_name || prefs.patientName || null,
+                    city: profile.city || prefs.city || null,
+                    sessionType: profile.session_type || prefs.sessionType || null,
+                    referral: profile.referral || prefs.referral || null,
+                    ...prefs
+                };
+
                 return {
                     contact_jid: row.contact_jid,
                     display_name: row.display_name || displayName,
-                    summary: row.summary || '',
+                    summary: row.summary || profile.notes || '',
                     current_intent: row.current_intent || '',
                     conversation_stage: row.conversation_stage || 'greeting',
                     pending_action: row.pending_action || null,
-                    preferences: row.preferences || {}
+                    preferences: mergedPreferences
+                };
+            } else {
+                // Caso não exista o contexto de chat ainda, mas exista um perfil estruturado anterior
+                const mergedPreferences = {
+                    location: profile.modality || null,
+                    patientName: profile.full_name || null,
+                    city: profile.city || null,
+                    sessionType: profile.session_type || null,
+                    referral: profile.referral || null
+                };
+
+                return {
+                    contact_jid: contactJid,
+                    display_name: displayName,
+                    summary: profile.notes || '',
+                    current_intent: '',
+                    conversation_stage: 'greeting',
+                    pending_action: null,
+                    preferences: mergedPreferences
                 };
             }
         } catch (err) {
@@ -294,6 +357,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (Retorne APENAS um JSON válido):
 
     private async saveContactContext(context: any, tenantId: string): Promise<void> {
         try {
+            // 1. Salvar no whatsapp_ai_contact_contexts
             await this.dbPool.query(
                 `INSERT INTO whatsapp_ai_contact_contexts 
                  (tenant_id, contact_jid, display_name, summary, current_intent, conversation_stage, pending_action, preferences, last_interaction_at, updated_at)
@@ -319,6 +383,43 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (Retorne APENAS um JSON válido):
                     context.preferences ? JSON.stringify(context.preferences) : null
                 ]
             );
+
+            // 2. Salvar/atualizar na sarah_patient_profiles
+            const phone = context.contact_jid.split('@')[0];
+            const fullName = context.preferences?.patientName || context.display_name || null;
+            const city = context.preferences?.city || null;
+            const modality = context.preferences?.location === 'online' || context.preferences?.location === 'presencial' ? context.preferences.location : null;
+            const sessionType = context.preferences?.sessionType === 'psicoterapia' || context.preferences?.sessionType === 'pastoral' ? context.preferences.sessionType : null;
+            const referral = context.preferences?.referral || null;
+            const notes = context.summary || null;
+
+            await this.dbPool.query(
+                `INSERT INTO sarah_patient_profiles 
+                 (tenant_id, contact_jid, full_name, phone, city, modality, session_type, referral, notes, last_contact, updated_at)
+                 VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, NOW())
+                 ON CONFLICT (tenant_id, contact_jid)
+                 DO UPDATE SET 
+                    full_name = COALESCE($3, sarah_patient_profiles.full_name),
+                    phone = COALESCE($4, sarah_patient_profiles.phone),
+                    city = COALESCE($5, sarah_patient_profiles.city),
+                    modality = COALESCE($6, sarah_patient_profiles.modality),
+                    session_type = COALESCE($7, sarah_patient_profiles.session_type),
+                    referral = COALESCE($8, sarah_patient_profiles.referral),
+                    notes = COALESCE($9, sarah_patient_profiles.notes),
+                    last_contact = CURRENT_DATE,
+                    updated_at = NOW();`,
+                [
+                    tenantId,
+                    context.contact_jid,
+                    fullName,
+                    phone,
+                    city,
+                    modality,
+                    sessionType,
+                    referral,
+                    notes
+                ]
+            );
         } catch (err) {
             logger.error({ err, context }, 'Erro ao salvar contexto de contato da IA');
         }
@@ -331,7 +432,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (Retorne APENAS um JSON válido):
     private buildSecretaryPrompt(
         contactName: string,
         context: any,
-        busySlotsStr: string,
+        freeSlotsStr: string,
         calendarActive: boolean,
         formattedOfficeHours: string,
         conversationHistory: string,
@@ -346,12 +447,12 @@ Seu papel é interagir de forma acolhedora, inteligente, elegante, humana e past
 O tom de voz deve ser equilibrado: maduro, acolhedor, profissional e caloroso.
 
 ---
-### 📅 HORÁRIOS DA AGENDA E INTEGRAÇÃO
+### 📅 HORÁRIOS LIVRES NA AGENDA
 - Integração da Agenda Google: ${calendarActive ? 'ATIVA' : 'DESATIVADA'}
 ${calendarActive ? `
-Estes são os horários que constam como OCUPADOS ou INDISPONÍVEIS na agenda do Rodrigo nos próximos dias. 
-NUNCA ofereça, sugira ou confirme agendamentos nestes dias e horários exatos:
-${busySlotsStr || 'Nenhum horário ocupado registrado nos próximos dias.'}
+Estes são os horários LIVRES e DISPONÍVEIS na agenda do Rodrigo nos próximos 14 dias (calculados a partir do cruzamento de seus horários de atendimento com eventos ocupados e fuso horário).
+Sugira EXCLUSIVAMENTE estes horários para agendamento. Se o cliente pedir outro horário, informe gentilmente que não há disponibilidade:
+${freeSlotsStr || 'Nenhum horário livre disponível nos próximos dias.'}
 ` : `
 ATENÇÃO: A agenda Google do Rodrigo está desconectada no momento.
 - NUNCA invente ou proponha horários de atendimento específicos.
@@ -572,39 +673,50 @@ Motivo/Ação: ${reason}`;
                 conversationContext += `${speaker}: ${msg.message_text}\n`;
             }
 
+            const settings = await this.getAISettings(safeTenantId);
+            
             let calendarActive = false;
-            let busySlotsStr = '';
+            let freeSlotsStr = '';
             try {
                 const calendarClient = new GoogleCalendarClient(this.dbPool);
-                const config = await calendarClient.getConfig(this.getUserId());
+                const config = await calendarClient.getConfig(safeTenantId);
                 if (config && config.isEnabled) {
                     calendarActive = true;
-                    const events = await calendarClient.getUpcomingEvents(config);
-                    if (events && events.length > 0) {
-                        busySlotsStr = events.map(e => {
-                            const eventStartStr = e.start?.dateTime || e.start?.date || '';
-                            const eventEndStr = e.end?.dateTime || e.end?.date || '';
-                            if (eventStartStr) {
-                                try {
-                                    const start = new Date(eventStartStr);
-                                    const end = eventEndStr ? new Date(eventEndStr) : null;
-                                    const formattedStart = start.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-                                    const formattedEnd = end ? end.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '';
-                                    return `- Ocupado: ${formattedStart}${formattedEnd ? ' até ' + formattedEnd : ''} (${e.summary || 'Bloqueado'})`;
-                                } catch (eErr) {
-                                    return `- Ocupado: ${eventStartStr} (${e.summary || 'Bloqueado'})`;
-                                }
-                            }
-                            return null;
-                        }).filter(Boolean).join('\n');
+                    // Obter slots livres nos próximos 14 dias
+                    const officeHours = settings?.officeHours || {};
+                    const freeSlots = await calendarClient.getFreeSlotsForNextDays(config, officeHours, 14);
+                    
+                    // Agrupar por data para exibição amigável
+                    // Exemplo: "Terça (10/06): 09h, 10h, 11h"
+                    const weekdayNamesShort = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                    const slotsByDate: Record<string, string[]> = {};
+                    
+                    for (const slot of freeSlots) {
+                        if (!slotsByDate[slot.date]) {
+                            slotsByDate[slot.date] = [];
+                        }
+                        slotsByDate[slot.date].push(slot.time);
+                    }
+                    
+                    const formattedSlots: string[] = [];
+                    for (const dateStr of Object.keys(slotsByDate).sort()) {
+                        const [year, month, day] = dateStr.split('-').map(Number);
+                        const d = new Date(year, month - 1, day);
+                        const weekday = weekdayNamesShort[d.getDay()];
+                        const formattedDate = `${weekday} (${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')})`;
+                        
+                        const hoursStr = slotsByDate[dateStr].map(h => h.replace(':00', 'h')).join(', ');
+                        formattedSlots.push(`${formattedDate}: ${hoursStr}`);
+                    }
+                    
+                    if (formattedSlots.length > 0) {
+                        freeSlotsStr = formattedSlots.join('\n');
                     }
                 }
             } catch (calErr) {
-                logger.error({ calErr }, 'Erro ao carregar eventos da agenda para injetar no prompt do Gemini');
+                logger.error({ calErr }, 'Erro ao carregar e calcular slots livres para o prompt do Gemini');
             }
 
-            const settings = await this.getAISettings(safeTenantId);
-            
             let formattedOfficeHours = `Atendo de segunda a quinta-feira.
 Segundas-feiras - às 9h, às 10h, às 11, às 13h, às 14h
 Terças-feiras - às 10h, às 11h, às 14h, às 15h
@@ -642,7 +754,7 @@ Quintas-feiras - às 8h, às 9h, às 13h, às 14h`;
             const systemPrompt = this.buildSecretaryPrompt(
                 clientName,
                 context,
-                busySlotsStr,
+                freeSlotsStr,
                 calendarActive,
                 formattedOfficeHours,
                 conversationContext,
@@ -671,7 +783,103 @@ Quintas-feiras - às 8h, às 9h, às 13h, às 14h`;
                 body: JSON.stringify({
                     contents: [{
                         parts: parts
-                    }]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                replyText: {
+                                    type: "STRING",
+                                    description: "Texto acolhedor e profissional a ser enviado de volta para o cliente no WhatsApp. Use pt-BR."
+                                },
+                                intent: {
+                                    type: "STRING",
+                                    description: "Intenção identificada do contato, como greeting, scheduling, canceling, human_handoff, general_chat, etc."
+                                },
+                                conversationStage: {
+                                    type: "STRING",
+                                    description: "Fase atual da conversa, como greeting, identifying_modality, check_slots, confirmation_pending, done."
+                                },
+                                summaryUpdate: {
+                                    type: "STRING",
+                                    description: "Resumo do que foi conversado ou acordado nesta interação para atualizar a memória persistente."
+                                },
+                                preferences: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        location: {
+                                            type: "STRING",
+                                            description: "Local/modalidade de preferência do paciente: 'online', 'presencial', ou nulo.",
+                                            enum: ["online", "presencial"]
+                                        },
+                                        patientName: {
+                                            type: "STRING",
+                                            description: "Nome completo ou preferencial do paciente, caso informado."
+                                        },
+                                        city: {
+                                            type: "STRING",
+                                            description: "Cidade do paciente, caso informado."
+                                        },
+                                        sessionType: {
+                                            type: "STRING",
+                                            description: "Tipo de sessão: 'psicoterapia' ou 'pastoral', caso informado.",
+                                            enum: ["psicoterapia", "pastoral"]
+                                        },
+                                        referral: {
+                                            type: "STRING",
+                                            description: "Como conheceu ou indicação, caso informado."
+                                        }
+                                    }
+                                },
+                                action: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        type: {
+                                            type: "STRING",
+                                            description: "Ação de agendamento a ser executada no sistema.",
+                                            enum: ["none", "propose_slots", "create_event", "cancel_event", "notify_owner", "disable_ai"]
+                                        },
+                                        params: {
+                                            type: "OBJECT",
+                                            properties: {
+                                                patientName: {
+                                                    type: "STRING",
+                                                    description: "Nome do paciente para o evento no calendário."
+                                                },
+                                                date: {
+                                                    type: "STRING",
+                                                    description: "Data do agendamento em formato AAAA-MM-DD."
+                                                },
+                                                time: {
+                                                    type: "STRING",
+                                                    description: "Hora do agendamento em formato HH:MM."
+                                                },
+                                                cancellationInfo: {
+                                                    type: "STRING",
+                                                    description: "Informações de cancelamento (ex: data e hora do evento cancelado)."
+                                                },
+                                                reason: {
+                                                    type: "STRING",
+                                                    description: "Motivo da notificação ao dono ou cancelamento."
+                                                }
+                                            }
+                                        },
+                                        requiresConfirmation: {
+                                            type: "BOOLEAN",
+                                            description: "Se a ação requer que o paciente ou o Rodrigo confirme explicitamente antes de executar no calendário."
+                                        }
+                                    },
+                                    required: ["type", "params", "requiresConfirmation"]
+                                },
+                                requiresHuman: {
+                                    type: "BOOLEAN",
+                                    description: "Defina como true se a IA não puder resolver o problema ou se o usuário pediu especificamente para falar com o terapeuta humano, ou se for necessário desativar a IA."
+                                }
+                            },
+                            required: ["replyText", "intent", "conversationStage", "summaryUpdate", "preferences", "action", "requiresHuman"]
+                        }
+                    }
                 })
             });
 
@@ -1040,6 +1248,62 @@ Data/Hora de Criação: ${new Date().toLocaleString('pt-BR', { timeZone: 'Americ
 
             logger.info(`📅 Criando evento: "${summary}" de ${startTimeIso} até ${endTimeIso}`);
             await calendarClient.createEvent(tenantId, summary, description, startTimeIso, endTimeIso);
+
+            // --- PATIENT PROMOTION TO psychotherapy_patients ---
+            try {
+                // 1. Buscar dados de sarah_patient_profiles
+                const profileRes = await this.dbPool.query(
+                    'SELECT full_name, phone, notes, city, modality, referral FROM sarah_patient_profiles WHERE tenant_id = $1::uuid AND contact_jid = $2;',
+                    [tenantId, contactJid]
+                );
+                
+                const profile = profileRes.rows[0] || {};
+                const finalFullName = profile.full_name || patientName;
+                const cleanPhone = profile.phone || contactJid.split('@')[0];
+                
+                // Formatar anotações extras do prospect
+                let extraNotes = profile.notes || '';
+                if (profile.city) extraNotes += `\nCidade: ${profile.city}`;
+                if (profile.modality) extraNotes += `\nModalidade: ${profile.modality}`;
+                if (profile.referral) extraNotes += `\nIndicação: ${profile.referral}`;
+                extraNotes = extraNotes.trim();
+
+                // 2. Verificar se já existe um paciente com esse phone
+                const existingPatientRes = await this.dbPool.query(
+                    'SELECT id, notes FROM psychotherapy_patients WHERE tenant_id = $1::uuid AND phone = $2;',
+                    [tenantId, cleanPhone]
+                );
+
+                if (existingPatientRes.rows.length > 0) {
+                    // Atualizar paciente existente
+                    const patientId = existingPatientRes.rows[0].id;
+                    const existingNotes = existingPatientRes.rows[0].notes || '';
+                    const updatedNotes = existingNotes.includes(extraNotes) ? existingNotes : `${existingNotes}\n\n${extraNotes}`.trim();
+                    
+                    await this.dbPool.query(
+                        `UPDATE psychotherapy_patients 
+                         SET full_name = COALESCE($3, full_name), 
+                             name = COALESCE($4, name),
+                             notes = $5,
+                             updated_at = NOW()
+                         WHERE id = $1::uuid AND tenant_id = $2::uuid;`,
+                        [patientId, tenantId, finalFullName, patientName, updatedNotes]
+                    );
+                    logger.info(`✅ Paciente atualizado na promoção: ${patientName} (ID: ${patientId})`);
+                } else {
+                    // Inserir novo paciente
+                    const insertRes = await this.dbPool.query(
+                        `INSERT INTO psychotherapy_patients 
+                         (tenant_id, name, full_name, status, payment_type, phone, notes, created_at, updated_at)
+                         VALUES ($1::uuid, $2, $3, 'weekly', 'per_session', $4, $5, NOW(), NOW())
+                         RETURNING id;`,
+                        [tenantId, patientName, finalFullName, cleanPhone, extraNotes]
+                    );
+                    logger.info(`✅ Novo paciente inserido via promoção: ${patientName} (ID: ${insertRes.rows[0].id})`);
+                }
+            } catch (promoErr) {
+                logger.error({ promoErr, contactJid, patientName }, 'Erro ao promover contato para psychotherapy_patients');
+            }
 
             // Avisar o Rodrigo no WhatsApp
             const displayDateStr = startMoment.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
