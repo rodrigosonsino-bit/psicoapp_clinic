@@ -84,6 +84,7 @@ async function ensureDatabaseSchema(pool: Pool) {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
+            ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 
             CREATE TABLE IF NOT EXISTS plans (
                 id VARCHAR(50) PRIMARY KEY,
@@ -106,9 +107,6 @@ async function ensureDatabaseSchema(pool: Pool) {
             -- Seed de planos padrão (removido para ser executado de forma parametrizada com IDs do Stripe)
         `);
 
-        // Tabelas de psicoterapia removidas do scheduler (Fase 4 do monorepo).
-        // Dados clínicos vivem exclusivamente em apps/psychotherapy.
-
         if (shouldSeedDevelopmentTenant) {
             const devHash = process.env.DEV_ADMIN_PASSWORD_HASH;
             if (!devHash) {
@@ -116,7 +114,7 @@ async function ensureDatabaseSchema(pool: Pool) {
             } else {
                 await pool.query(`
                     -- Migrar tenant inicial apenas fora de produção
-                    INSERT INTO tenants (id, name, email, password_hash, plan, status, max_messages_per_month)
+                    INSERT INTO tenants (id, name, email, password_hash, plan, status, max_messages_per_month, is_admin)
                     VALUES (
                         gen_random_uuid(),
                         'Rodrigo',
@@ -124,8 +122,9 @@ async function ensureDatabaseSchema(pool: Pool) {
                         $1,
                         'business',
                         'active',
-                        5000
-                    ) ON CONFLICT (email) DO NOTHING;
+                        5000,
+                        true
+                    ) ON CONFLICT (email) DO UPDATE SET is_admin = true;
                 `, [devHash]);
             }
         }

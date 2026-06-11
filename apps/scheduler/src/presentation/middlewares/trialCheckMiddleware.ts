@@ -10,7 +10,34 @@ export function createTrialCheckMiddleware(dbPool: Pool) {
             return next();
         }
 
+        // Admin preview: usar claims do JWT em vez do banco
+        if (req.isAdminPreview) {
+            if (req.trialExpired) {
+                logger.warn({ tenantId }, 'Admin preview: simulando Trial Expirado');
+                return res.status(403).json({
+                    error: 'TRIAL_EXPIRED',
+                    message: 'Seu período de teste de 30 dias expirou. Ative sua assinatura mensal para continuar usando todos os recursos.'
+                });
+            }
+            return next();
+        }
+
         try {
+            // Se for preview administrativo, ignoramos a busca no banco
+            if (req.isAdminPreview) {
+                if (req.tenantStatus !== 'trial') {
+                    return next();
+                }
+                if (req.trialExpired) {
+                    logger.warn({ tenantId }, 'Tentativa de uso de api bloqueada por Trial Expirado (Preview)');
+                    return res.status(403).json({
+                        error: 'TRIAL_EXPIRED',
+                        message: 'Seu período de teste de 30 dias expirou. Ative sua assinatura mensal para continuar usando todos os recursos.'
+                    });
+                }
+                return next();
+            }
+
             const result = await dbPool.query(
                 'SELECT created_at, status FROM tenants WHERE id = $1',
                 [tenantId]

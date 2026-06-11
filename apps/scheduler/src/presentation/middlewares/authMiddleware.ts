@@ -6,6 +6,9 @@ export interface AuthenticatedRequest extends Request {
     tenantId?: string;
     tenantEmail?: string;
     tenantPlan?: string;
+    tenantStatus?: string;
+    isAdminPreview?: boolean;
+    trialExpired?: boolean;
     // userId continuará existindo para não quebrar controladores antigos (mapeado para tenantId)
     userId?: string;
 }
@@ -33,6 +36,9 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
         authReq.tenantId = payload.tenantId;
         authReq.tenantEmail = payload.email;
         authReq.tenantPlan = payload.plan;
+        authReq.tenantStatus = (payload as any).status;
+        authReq.isAdminPreview = (payload as any).isAdminPreview;
+        authReq.trialExpired = (payload as any).trialExpired;
         
         // Mantém compatibilidade com rotas que ainda usam req.userId
         authReq.userId = payload.tenantId;

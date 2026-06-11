@@ -80,7 +80,7 @@ export function createAuthRoutes(dbPool: Pool): Router {
     router.get('/auth/me', authMiddleware, async (req: AuthenticatedRequest, res) => {
         try {
             const result = await dbPool.query(
-                'SELECT id, name, email, plan, status, max_messages_per_month, whatsapp_connected, created_at FROM tenants WHERE id = $1',
+                'SELECT id, name, email, plan, status, max_messages_per_month, whatsapp_connected, created_at, is_admin FROM tenants WHERE id = $1',
                 [req.tenantId]
             );
             if (result.rows.length === 0) {
@@ -88,26 +88,66 @@ export function createAuthRoutes(dbPool: Pool): Router {
             }
             const tenant = result.rows[0];
 
-            // Calcular dias restantes do trial de 30 dias
-            const createdAt = new Date(tenant.created_at);
-            const trialDurationMs = 30 * 24 * 60 * 60 * 1000;
-            const trialEndsAt = new Date(createdAt.getTime() + trialDurationMs);
-            const now = new Date();
-            
-            let trialDaysRemaining = Math.ceil((trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-            trialDaysRemaining = Math.max(0, trialDaysRemaining);
-            
-            const isTrialExpired = tenant.status === 'trial' && trialDaysRemaining <= 0;
+            const responseData = { ...tenant };
 
-            res.json({
-                ...tenant,
-                trialDaysRemaining,
-                isTrialExpired
-            });
+            if (req.isAdminPreview) {
+                responseData.plan = req.tenantPlan;
+                responseData.status = req.tenantStatus || 'trial';
+                responseData.isTrialExpired = !!req.trialExpired;
+                if (responseData.status === 'trial') {
+                    responseData.trialDaysRemaining = req.trialExpired ? 0 : 15;
+                } else {
+                    delete responseData.trialDaysRemaining;
+                }
+            } else {
+                // Calcular dias restantes do trial de 30 dias
+                const createdAt = new Date(tenant.created_at);
+                const trialDurationMs = 30 * 24 * 60 * 60 * 1000;
+                const trialEndsAt = new Date(createdAt.getTime() + trialDurationMs);
+                const now = new Date();
+                
+                let trialDaysRemaining = Math.ceil((trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+                trialDaysRemaining = Math.max(0, trialDaysRemaining);
+                
+                responseData.trialDaysRemaining = trialDaysRemaining;
+                responseData.isTrialExpired = tenant.status === 'trial' && trialDaysRemaining <= 0;
+            }
+
+            res.json(responseData);
         } catch (err) {
             logger.error({ err }, 'Erro ao buscar dados do tenant');
             res.status(500).json({ error: 'Erro interno ao buscar perfil' });
         }
     });
+
+    router.post('/auth/admin/preview-plan', authMiddleware, async (req: AuthenticatedRequest, res) => {
+        try {
+            const { plan, status, trialExpired } = req.body;
+
+            const result = await dbPool.query(
+                'SELECT is_admin FROM tenants WHERE id = $1',
+                [req.tenantId]
+            );
+
+            if (!result.rows[0]?.is_admin) {
+                return res.status(403).json({ error: 'Acesso negado. Requer permissão de administrador.' });
+            }
+
+            const token = jwtService.generateToken({
+                tenantId: req.tenantId!,
+                email: req.tenantEmail!,
+                plan: plan || 'starter',
+                status: status || 'trial',
+                isAdminPreview: true,
+                trialExpired: !!trialExpired
+            } as any);
+
+            res.json({ token });
+        } catch (err) {
+            logger.error({ err }, 'Erro ao gerar token de preview admin');
+            res.status(500).json({ error: 'Erro interno ao gerar preview' });
+        }
+    });
+
     return router;
 }

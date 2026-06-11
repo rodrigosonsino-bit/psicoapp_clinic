@@ -5,6 +5,9 @@ export interface TokenPayload {
     tenantId: string;
     email: string;
     plan: string;
+    status?: string;
+    isAdminPreview?: boolean;
+    trialExpired?: boolean;
 }
 
 export class JwtService {
