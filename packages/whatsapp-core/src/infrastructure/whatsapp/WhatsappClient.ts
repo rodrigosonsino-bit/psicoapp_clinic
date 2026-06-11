@@ -387,7 +387,7 @@ export class WhatsappClient {
                                 const aiDisabledAt = row?.ai_disabled_at;
 
                                 if (isAiDisabled) {
-                                    const reenableMinutes = parseInt(process.env.SARAH_AUTO_REENABLE_MINUTES || '60', 10);
+                                    const reenableMinutes = parseInt(process.env.SARAH_AUTO_REENABLE_MINUTES || '15', 10);
                                     const reenableMs = reenableMinutes * 60 * 1000;
                                     const disabledRefTime = aiDisabledAt ? new Date(aiDisabledAt).getTime() : (Date.now() - reenableMs);
                                     const elapsedMs = Date.now() - disabledRefTime;
@@ -730,7 +730,7 @@ export class WhatsappClient {
     public async cleanupExpiredAiBlocks(): Promise<void> {
         if (!this.dbPool) return;
         try {
-            const reenableMinutes = parseInt(process.env.SARAH_AUTO_REENABLE_MINUTES || '60', 10);
+            const reenableMinutes = parseInt(process.env.SARAH_AUTO_REENABLE_MINUTES || '15', 10);
             const res1 = await this.dbPool.query(`
                 UPDATE whatsapp_contacts
                 SET ai_disabled = FALSE, ai_disabled_at = NULL
