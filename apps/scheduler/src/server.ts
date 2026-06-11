@@ -192,6 +192,9 @@ async function ensureDatabaseSchema(pool: Pool) {
                 ai_disabled BOOLEAN DEFAULT FALSE,
                 ai_disabled_at TIMESTAMP WITH TIME ZONE
             );
+
+            -- Nome vindo da agenda do Google (People API); tem prioridade na exibição
+            ALTER TABLE whatsapp_contacts ADD COLUMN IF NOT EXISTS google_name VARCHAR(255);
         `);
 
         // Tabela system_settings

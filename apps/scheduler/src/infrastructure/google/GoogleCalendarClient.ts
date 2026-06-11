@@ -68,7 +68,8 @@ export class GoogleCalendarClient {
             prompt: 'select_account consent',
             scope: [
                 'https://www.googleapis.com/auth/calendar.events',
-                'https://www.googleapis.com/auth/userinfo.email'
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/contacts.readonly'
             ],
             state: stateToken
         });

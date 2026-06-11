@@ -10,6 +10,7 @@ import { createAuthRoutes } from './presentation/routes/authRoutes';
 import { createWhatsappRoutes } from './presentation/routes/whatsappRoutes';
 import { WhatsappSessionManager } from './infrastructure/whatsapp/WhatsappSessionManager';
 import { GoogleCalendarClient } from './infrastructure/google/GoogleCalendarClient';
+import { GoogleContactsClient } from './infrastructure/google/GoogleContactsClient';
 import { PostgresMessageRepository } from './infrastructure/repositories/PostgresMessageRepository';
 import { SyncGoogleCalendarUseCase } from './application/useCases/SyncGoogleCalendarUseCase';
 import { GoogleCalendarController } from './presentation/controllers/GoogleCalendarController';
@@ -61,7 +62,8 @@ export function createApp(
     const messageRepository = new PostgresMessageRepository(dbPool);
     const messageScheduler = new BullMQMessageScheduler(redisConnection);
     const googleSyncUseCase = new SyncGoogleCalendarUseCase(googleClient, messageRepository, dbPool, messageScheduler);
-    const googleController = new GoogleCalendarController(googleClient, googleSyncUseCase);
+    const googleContactsClient = new GoogleContactsClient(dbPool, googleClient);
+    const googleController = new GoogleCalendarController(googleClient, googleSyncUseCase, googleContactsClient);
     app.use('/api', createGoogleRoutes(googleController, dbPool));
 
     app.use('/api', createMessageRoutes(dbPool, redisConnection, telegramClient));

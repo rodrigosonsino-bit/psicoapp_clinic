@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Pool } from 'pg';
 import { WhatsappSessionManager } from '../../infrastructure/whatsapp/WhatsappSessionManager';
 import { logger } from '../../infrastructure/logger/logger';
 
@@ -9,7 +10,10 @@ interface AuthenticatedRequest extends Request {
 }
 
 export class WhatsappController {
-    constructor(private readonly sessionManager: WhatsappSessionManager) {}
+    constructor(
+        private readonly sessionManager: WhatsappSessionManager,
+        private readonly dbPool?: Pool
+    ) {}
 
     connect = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
         const tenantId = req.tenantId;
@@ -129,6 +133,21 @@ export class WhatsappController {
         }
 
         try {
+            // Leitura direta do banco com prioridade ao nome da agenda do Google
+            // (google_name) sobre o nome sincronizado via WhatsApp. A lista é útil
+            // mesmo sem sessão ativa, então não exigimos conexão aqui.
+            if (this.dbPool) {
+                const result = await this.dbPool.query(
+                    `SELECT id, COALESCE(NULLIF(google_name, ''), name) AS name
+                     FROM whatsapp_contacts
+                     WHERE tenant_id = $1::uuid
+                     ORDER BY COALESCE(NULLIF(google_name, ''), name) ASC;`,
+                    [tenantId]
+                );
+                res.json(result.rows);
+                return;
+            }
+
             const client = await this.sessionManager.getSession(tenantId);
             if (!client) {
                 res.status(503).json({ error: 'WhatsApp não está conectado' });

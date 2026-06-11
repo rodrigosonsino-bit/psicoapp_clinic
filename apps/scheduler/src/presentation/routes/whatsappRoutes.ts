@@ -7,7 +7,7 @@ import { createTrialCheckMiddleware } from '../middlewares/trialCheckMiddleware'
 
 export function createWhatsappRoutes(sessionManager: WhatsappSessionManager, dbPool: Pool): Router {
     const router = Router();
-    const controller = new WhatsappController(sessionManager);
+    const controller = new WhatsappController(sessionManager, dbPool);
 
     router.use(authMiddleware);
     router.use(createTrialCheckMiddleware(dbPool));

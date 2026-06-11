@@ -15,6 +15,7 @@ export function createGoogleRoutes(controller: GoogleCalendarController, dbPool:
     router.post('/google/select-calendar', authMiddleware, trialCheck, controller.selectCalendar.bind(controller));
     router.post('/google/disconnect', authMiddleware, trialCheck, controller.disconnect.bind(controller));
     router.post('/google/sync', authMiddleware, trialCheck, controller.triggerSync.bind(controller));
+    router.post('/google/sync-contacts', authMiddleware, trialCheck, controller.syncContacts.bind(controller));
     router.get('/google/events', authMiddleware, trialCheck, controller.getEvents.bind(controller));
     router.post('/google/events/toggle', authMiddleware, trialCheck, controller.toggleEventAutoSend.bind(controller));
 

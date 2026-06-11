@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
 import { GoogleCalendarClient } from '../../infrastructure/google/GoogleCalendarClient';
+import { GoogleContactsClient } from '../../infrastructure/google/GoogleContactsClient';
 import { SyncGoogleCalendarUseCase } from '../../application/useCases/SyncGoogleCalendarUseCase';
 import { logger } from '../../infrastructure/logger/logger';
 
 export class GoogleCalendarController {
     constructor(
         private readonly googleClient: GoogleCalendarClient,
-        private readonly syncUseCase: SyncGoogleCalendarUseCase
+        private readonly syncUseCase: SyncGoogleCalendarUseCase,
+        private readonly contactsClient?: GoogleContactsClient
     ) {}
 
     async getAuthUrl(req: Request, res: Response): Promise<void> {
@@ -108,8 +110,36 @@ export class GoogleCalendarController {
         try {
             const userId = (req as any).userId;
             await this.syncUseCase.execute(userId);
+
+            // Sincronizar contatos do Google em paralelo (best-effort: falha aqui
+            // não pode quebrar a sincronização do Calendar, que já funcionava)
+            if (this.contactsClient) {
+                this.contactsClient.syncContacts(userId).catch(err => {
+                    logger.warn({ err, userId }, 'Sincronização de contatos do Google falhou (best-effort, ignorada).');
+                });
+            }
+
             res.json({ success: true, message: 'Sincronização forçada concluída.' });
         } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async syncContacts(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = (req as any).userId;
+            if (!this.contactsClient) {
+                res.status(503).json({ error: 'Sincronização de contatos não está habilitada.' });
+                return;
+            }
+            const result = await this.contactsClient.syncContacts(userId);
+            res.json({
+                success: true,
+                message: `Contatos sincronizados: ${result.matchedUpdated} atualizados, ${result.inserted} novos (de ${result.withPhone} contatos com telefone no Google).`,
+                ...result
+            });
+        } catch (error: any) {
+            logger.error({ error }, 'Erro ao sincronizar contatos do Google');
             res.status(500).json({ error: error.message });
         }
     }
