@@ -23,6 +23,11 @@ export class WhatsappController {
         }
 
         try {
+            // Destruir sessão anterior (se existir) para garantir geração de novo QR.
+            // Sem isso, se o socket antigo ainda está em memória com isReconnecting=true,
+            // createSession retorna o objeto antigo e nenhum QR é gerado.
+            await this.sessionManager.destroySession(tenantId);
+
             const client = await this.sessionManager.createSession(tenantId);
             res.json({ 
                 success: true, 
@@ -74,6 +79,42 @@ export class WhatsappController {
         } catch (error: any) {
             logger.error({ err: error, tenantId }, 'Erro ao desconectar WhatsApp');
             res.status(500).json({ error: 'Erro ao desconectar' });
+        }
+    };
+
+    /**
+     * Limpa forçadamente a sessão do banco e da memória sem depender de
+     * conexão WebSocket ativa. Usar quando disconnect normal falha ou
+     * a sessão está em estado corrompido/irrecuperável.
+     */
+    clearSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+        const tenantId = req.tenantId;
+        if (!tenantId) {
+            res.status(401).json({ error: 'Não autorizado' });
+            return;
+        }
+
+        try {
+            // 1. Remover da memória (sem chamar logout no WS — pode estar morto)
+            await this.sessionManager.forceRemoveSession(tenantId);
+
+            // 2. Apagar TODAS as chaves Signal do banco
+            if (this.dbPool) {
+                await this.dbPool.query(
+                    'DELETE FROM whatsapp_auth WHERE tenant_id = $1::uuid',
+                    [tenantId]
+                );
+                await this.dbPool.query(
+                    'UPDATE tenants SET whatsapp_connected = FALSE WHERE id = $1::uuid',
+                    [tenantId]
+                );
+            }
+
+            logger.info({ tenantId }, '🗑️ Sessão WhatsApp limpa forçadamente (banco + memória).');
+            res.json({ success: true, message: 'Sessão limpa. Reconecte via QR Code.' });
+        } catch (error: any) {
+            logger.error({ err: error, tenantId }, 'Erro ao limpar sessão forçadamente');
+            res.status(500).json({ error: 'Erro ao limpar sessão' });
         }
     };
 

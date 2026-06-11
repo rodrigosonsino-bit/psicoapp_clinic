@@ -88,6 +88,20 @@ export class WhatsappSessionManager {
         }
     }
 
+    /**
+     * Remove a sessão da memória sem tentar fazer logout no WebSocket.
+     * Usar quando o socket está morto/corrompido e logout falharia.
+     * A limpeza do banco deve ser feita pelo chamador.
+     */
+    async forceRemoveSession(tenantId: string): Promise<void> {
+        const client = this.sessions.get(tenantId);
+        if (client) {
+            try { await client.close(); } catch { }
+        }
+        this.sessions.delete(tenantId);
+        logger.info({ tenantId }, 'Sessão WhatsApp removida da memória (force remove).');
+    }
+
     async closeAll(): Promise<void> {
         logger.info('Fechando todos os sockets do WhatsApp (graceful shutdown)...');
         for (const [tenantId, client] of this.sessions.entries()) {
