@@ -31,6 +31,7 @@ export class WhatsappClient {
     private isReady: boolean = false;
     private reconnectAttempts: number = 0;
     private isReconnecting: boolean = false; // guarda contra initialize() simultâneos
+    private loggedOutReinits: number = 0; // cap de reinicializações automáticas pós-deslogue remoto
     private dbPool: Pool | null = null;
     private contactsCache: Map<string, string> = new Map();
     private aiSentMessagesJid: Set<string> = new Set();
@@ -177,21 +178,45 @@ export class WhatsappClient {
 
                     } else {
                         logger.fatal(`🚫 Sessão Deslogada para tenant ${this.tenantId}!`);
-                        if (this.dbPool) {
-                            // Apagar as chaves Signal do banco para forçar sessão limpa na próxima conexão.
-                            // Sem isso, o próximo initialize() carrega chaves inválidas e gera
-                            // mensagens "Aguardando mensagem" nos destinatários.
-                            this.dbPool.query('DELETE FROM whatsapp_auth WHERE tenant_id = $1::uuid', [this.tenantId])
-                                .then(() => logger.info({ tenantId: this.tenantId }, '🗑️ Chaves Signal removidas do banco após deslogue remoto.'))
-                                .catch(err => logger.error({ err }, 'Erro ao limpar whatsapp_auth após deslogue'));
 
-                            this.dbPool.query('UPDATE tenants SET whatsapp_connected = FALSE WHERE id = $1::uuid', [this.tenantId])
-                                .catch(err => logger.error({ err }, 'Erro ao atualizar whatsapp_connected no banco no deslogue'));
+                        // Apagar as chaves Signal do banco para forçar sessão limpa na próxima conexão.
+                        // Sem isso, o próximo initialize() carrega chaves inválidas e gera
+                        // mensagens "Aguardando mensagem" nos destinatários.
+                        const cleanupTasks: Promise<unknown>[] = [];
+                        if (this.dbPool) {
+                            cleanupTasks.push(
+                                this.dbPool.query('DELETE FROM whatsapp_auth WHERE tenant_id = $1::uuid', [this.tenantId])
+                                    .then(() => logger.info({ tenantId: this.tenantId }, '🗑️ Chaves Signal removidas do banco após deslogue remoto.'))
+                                    .catch(err => logger.error({ err }, 'Erro ao limpar whatsapp_auth após deslogue')),
+                                this.dbPool.query('UPDATE tenants SET whatsapp_connected = FALSE WHERE id = $1::uuid', [this.tenantId])
+                                    .catch(err => logger.error({ err }, 'Erro ao atualizar whatsapp_connected no banco no deslogue'))
+                            );
+                        }
+
+                        // Deslogue REMOTO (não iniciado por logout(), que seta isReconnecting=true):
+                        // reinicializar com sessão limpa para emitir um novo QR. Sem isso o cliente
+                        // fica zumbi na memória — sem QR e sem reconexão — e o frontend gira em
+                        // "Gerando QR Code..." para sempre. Cap de tentativas evita loop contra
+                        // o WhatsApp caso o deslogue se repita imediatamente.
+                        if (!this.isReconnecting && this.loggedOutReinits < 3) {
+                            this.loggedOutReinits++;
+                            this.isReconnecting = true;
+                            logger.warn({ tenantId: this.tenantId, attempt: this.loggedOutReinits }, '♻️ Reinicializando sessão limpa após deslogue remoto para gerar novo QR...');
+                            setTimeout(async () => {
+                                try { await Promise.all(cleanupTasks); } catch { }
+                                this.destroySocket();
+                                this.isReconnecting = false;
+                                this.initialize(dbPool).catch(err => {
+                                    logger.error({ err }, 'Erro ao reinicializar sessão após deslogue remoto.');
+                                    this.isReconnecting = false;
+                                });
+                            }, 1000);
                         }
                     }
                 } else if (connection === 'open') {
                     this.isReady = true;
                     this.reconnectAttempts = 0;
+                    this.loggedOutReinits = 0;
                     this.clearWatchdog();
                     this.lastQrDataUrl = null;
                     logger.info(`✅ Conexão com WhatsApp ESTÁVEL e ATIVA para tenant ${this.tenantId}.`);
