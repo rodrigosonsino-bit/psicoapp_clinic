@@ -89,7 +89,8 @@ app.use('/api', createPsychotherapyRoutes());
 
 // WhatsApp integration routes
 const whatsappSessionManager = container.resolve<WhatsappSessionManager>('WhatsappSessionManager');
-app.use('/api', createWhatsappRoutes(whatsappSessionManager));
+const dbPool = container.resolve(Pool);
+app.use('/api', createWhatsappRoutes(whatsappSessionManager, dbPool));
 
 // Webhook Pix — rota pública (sem auth JWT), valida via header da Efí Bank
 app.post('/webhooks/pix', express.json(), (req, res) => {

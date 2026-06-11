@@ -1,11 +1,12 @@
 import { Router } from 'express';
+import { Pool } from 'pg';
 import { WhatsappController } from '../controllers/WhatsappController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
 
-export function createWhatsappRoutes(sessionManager: WhatsappSessionManager): Router {
+export function createWhatsappRoutes(sessionManager: WhatsappSessionManager, dbPool: Pool): Router {
     const router = Router();
-    const controller = new WhatsappController(sessionManager);
+    const controller = new WhatsappController(sessionManager, dbPool);
 
     // Todas as rotas requerem autenticação
     router.use(authMiddleware);
@@ -18,6 +19,9 @@ export function createWhatsappRoutes(sessionManager: WhatsappSessionManager): Ro
 
     // POST /api/whatsapp/disconnect → encerra sessão
     router.post('/whatsapp/disconnect', controller.disconnect);
+
+    // DELETE /api/whatsapp/session  → limpa sessão (banco + memória) forçadamente
+    router.delete('/whatsapp/session', controller.clearSession);
 
     // GET  /api/whatsapp/qr        → retorna QR code como base64 data URL
     router.get('/whatsapp/qr', controller.getQr);
