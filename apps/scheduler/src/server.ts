@@ -110,11 +110,27 @@ async function ensureDatabaseSchema(pool: Pool) {
         // Garantir que o admin de produção tenha is_admin = true (idempotente)
         const prodAdminEmail = process.env.ADMIN_EMAIL;
         if (prodAdminEmail) {
-            await pool.query(
-                `UPDATE tenants SET is_admin = TRUE WHERE email = $1`,
-                [prodAdminEmail]
+            const cleanEmail = prodAdminEmail.trim();
+            const updateRes = await pool.query(
+                `UPDATE tenants SET is_admin = TRUE WHERE LOWER(email) = LOWER($1) RETURNING id, email, is_admin`,
+                [cleanEmail]
             );
-            logger.info({ email: prodAdminEmail }, '✅ is_admin garantido para o admin de produção');
+            logger.info({
+                configuredEmail: prodAdminEmail,
+                cleanEmail,
+                updatedRowCount: updateRes.rowCount,
+                updatedRows: updateRes.rows
+            }, '✅ is_admin garantido para o admin de produção');
+
+            // Logar todos os tenants para podermos ver quem está cadastrado no banco de dados e qual o email exato.
+            try {
+                const listRes = await pool.query('SELECT id, name, email, is_admin FROM tenants');
+                logger.info({ tenantsCount: listRes.rowCount, tenants: listRes.rows }, '🔍 Lista de tenants cadastrados no banco');
+            } catch (listErr) {
+                logger.error({ err: listErr }, '❌ Erro ao listar tenants para diagnóstico');
+            }
+        } else {
+            logger.warn('⚠️  ADMIN_EMAIL não definido no ambiente.');
         }
 
         if (shouldSeedDevelopmentTenant) {
