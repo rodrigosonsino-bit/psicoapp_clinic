@@ -107,6 +107,16 @@ async function ensureDatabaseSchema(pool: Pool) {
             -- Seed de planos padrão (removido para ser executado de forma parametrizada com IDs do Stripe)
         `);
 
+        // Garantir que o admin de produção tenha is_admin = true (idempotente)
+        const prodAdminEmail = process.env.ADMIN_EMAIL;
+        if (prodAdminEmail) {
+            await pool.query(
+                `UPDATE tenants SET is_admin = TRUE WHERE email = $1`,
+                [prodAdminEmail]
+            );
+            logger.info({ email: prodAdminEmail }, '✅ is_admin garantido para o admin de produção');
+        }
+
         if (shouldSeedDevelopmentTenant) {
             const devHash = process.env.DEV_ADMIN_PASSWORD_HASH;
             if (!devHash) {
