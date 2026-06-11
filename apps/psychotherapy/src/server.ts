@@ -24,6 +24,9 @@ import { createPaymentReceiptHandler } from './infrastructure/whatsapp/PaymentRe
 const app = express();
 const PORT = Number(process.env.PORT) || 3333;
 
+// Confia no cabeçalho X-Forwarded-For do Railway/proxy para o rate limiter funcionar
+app.set('trust proxy', true);
+
 // ── Rate Limiters ────────────────────────────────────────────────────────────
 
 // Camada 1: Rate limit global para toda a API (/api)

@@ -35,6 +35,9 @@ export function createApp(
 ): express.Application {
     const app = express();
     
+    // Confia no cabeçalho X-Forwarded-For do Railway/proxy para o rate limiter funcionar
+    app.set('trust proxy', true);
+    
     app.use(helmet({ contentSecurityPolicy: false }));
     
     const origins = process.env.ALLOWED_ORIGINS?.split(',');
