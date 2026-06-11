@@ -30,6 +30,7 @@ export class WhatsappClient {
     private sock: any = null;
     private isReady: boolean = false;
     private reconnectAttempts: number = 0;
+    private isReconnecting: boolean = false; // guarda contra initialize() simultâneos
     private dbPool: Pool | null = null;
     private contactsCache: Map<string, string> = new Map();
     private aiSentMessagesJid: Set<string> = new Set();
@@ -101,11 +102,17 @@ export class WhatsappClient {
                 connectTimeoutMs: 90000,
                 defaultQueryTimeoutMs: 60000,
                 keepAliveIntervalMs: 10000,
-                printQRInTerminal: true,
-                syncFullHistory: true,
+                syncFullHistory: false,
                 generateHighQualityLinkPreview: false,
                 shouldIgnoreJid: (jid: string) => jid.includes('@broadcast'),
                 markOnlineOnConnect: true,
+                // getMessage é obrigatório para que o WhatsApp faça retry correto de
+                // mensagens que falharam na descriptografia ("Aguardando mensagem").
+                // Sem ele, o receptor envia um retry receipt e o remetente não consegue
+                // reenviar a mensagem com as chaves corretas.
+                getMessage: async (key) => {
+                    return undefined;
+                },
             });
 
             this.resetWatchdog();
@@ -137,6 +144,12 @@ export class WhatsappClient {
                     const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
                     if (shouldReconnect) {
+                        // Guarda contra reconexões simultâneas (watchdog + zombie + close handler)
+                        if (this.isReconnecting) {
+                            logger.warn({ statusCode, tenantId: this.tenantId }, '⏸️ Reconexão já em andamento — ignorando disparo duplicado.');
+                            return;
+                        }
+
                         const isRestartRequired = statusCode === DisconnectReason.restartRequired;
                         const delayMs = isRestartRequired ? 500 : Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
 
@@ -149,16 +162,29 @@ export class WhatsappClient {
                             delayMs
                         }, `🔄 Queda detectada. Auto-reconectando WhatsApp em ${delayMs / 1000} segundos...`);
 
+                        this.isReconnecting = true;
                         setTimeout(() => {
-                            try { this.sock?.ws?.close(); } catch { }
+                            // Destruir o socket antigo por completo antes de criar um novo.
+                            // Sem isso, os listeners do socket velho continuam emitindo
+                            // creds.update e sobrescrevem as chaves novas no banco.
+                            this.destroySocket();
+                            this.isReconnecting = false;
                             this.initialize(dbPool).catch(err => {
                                 logger.error({ err }, 'Erro critico durante tentativa de auto-reconexão.');
+                                this.isReconnecting = false;
                             });
                         }, delayMs);
 
                     } else {
                         logger.fatal(`🚫 Sessão Deslogada para tenant ${this.tenantId}!`);
                         if (this.dbPool) {
+                            // Apagar as chaves Signal do banco para forçar sessão limpa na próxima conexão.
+                            // Sem isso, o próximo initialize() carrega chaves inválidas e gera
+                            // mensagens "Aguardando mensagem" nos destinatários.
+                            this.dbPool.query('DELETE FROM whatsapp_auth WHERE tenant_id = $1::uuid', [this.tenantId])
+                                .then(() => logger.info({ tenantId: this.tenantId }, '🗑️ Chaves Signal removidas do banco após deslogue remoto.'))
+                                .catch(err => logger.error({ err }, 'Erro ao limpar whatsapp_auth após deslogue'));
+
                             this.dbPool.query('UPDATE tenants SET whatsapp_connected = FALSE WHERE id = $1::uuid', [this.tenantId])
                                 .catch(err => logger.error({ err }, 'Erro ao atualizar whatsapp_connected no banco no deslogue'));
                         }
@@ -589,6 +615,30 @@ export class WhatsappClient {
         }
     }
 
+    /**
+     * Destrói o socket atual por completo: remove todos os listeners e fecha o WebSocket.
+     * Deve ser chamado ANTES de criar um novo socket (reconexão ou logout) para evitar
+     * que handlers do socket antigo continuem emitindo creds.update e sobrescrevam
+     * as chaves Signal novas no banco — causa direta das mensagens "Aguardando mensagem".
+     */
+    private destroySocket(): void {
+        if (!this.sock) return;
+        try {
+            this.sock.ev.removeAllListeners('connection.update');
+            this.sock.ev.removeAllListeners('creds.update');
+            this.sock.ev.removeAllListeners('messages.upsert');
+            this.sock.ev.removeAllListeners('messaging-history.set');
+            this.sock.ev.removeAllListeners('contacts.upsert');
+            this.sock.ev.removeAllListeners('contacts.update');
+        } catch (err) {
+            logger.warn({ err }, '[destroySocket] Erro ao remover listeners do socket antigo.');
+        }
+        try {
+            this.sock.ws?.close();
+        } catch { }
+        this.sock = null;
+    }
+
     public checkZombieConnection(): void {
         if (!this.isReady) return;
         const zombieTimeoutMin = parseInt(process.env.SARAH_ZOMBIE_TIMEOUT_MINUTES || '10', 10);
@@ -638,6 +688,7 @@ export class WhatsappClient {
         logger.info(`Encerrando sessão WhatsApp (logout) para tenant ${this.tenantId}...`);
         this.clearWatchdog();
         this.isReady = false;
+        this.isReconnecting = true; // impede reconexão automática durante logout
 
         if (this.sock) {
             try {
@@ -645,30 +696,30 @@ export class WhatsappClient {
             } catch (err) {
                 logger.error({ err }, 'Erro ao chamar sock.logout()');
             }
-            try {
-                await this.sock.ws.close();
-            } catch { }
+            this.destroySocket();
         }
 
         if (this.dbPool) {
+            // Apagar as chaves Signal do banco para forçar sessão completamente
+            // limpa na próxima conexão — evita que chaves velhas causem
+            // mensagens "Aguardando mensagem" nos destinatários.
+            try {
+                await this.dbPool.query('DELETE FROM whatsapp_auth WHERE tenant_id = $1::uuid', [this.tenantId]);
+                logger.info({ tenantId: this.tenantId }, '🗑️ Chaves Signal (whatsapp_auth) apagadas do banco após logout.');
+            } catch (err) {
+                logger.error({ err }, 'Erro ao limpar whatsapp_auth no logout');
+            }
             await this.dbPool.query('UPDATE tenants SET whatsapp_connected = FALSE WHERE id = $1::uuid', [this.tenantId]);
         }
+
+        this.isReconnecting = false;
     }
 
     public async close() {
         logger.info(`Fechando socket WhatsApp (shutdown) para tenant ${this.tenantId}...`);
         this.clearWatchdog();
         this.isReady = false;
-
-        if (this.sock) {
-            try {
-                this.sock.ev.removeAllListeners('connection.update');
-                this.sock.ev.removeAllListeners('creds.update');
-                this.sock.ev.removeAllListeners('messages.upsert');
-                await this.sock.ws.close();
-            } catch (err) {
-                logger.error({ err }, 'Erro ao fechar o socket do WhatsApp de forma limpa');
-            }
-        }
+        this.isReconnecting = true; // impede reconexão automática durante shutdown
+        this.destroySocket();
     }
 }
