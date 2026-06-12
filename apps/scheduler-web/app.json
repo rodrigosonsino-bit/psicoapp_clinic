@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "WhatsApp Scheduler",
+    "slug": "whatsapp-scheduler-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#075E54"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rodrigo.whatsappscheduler"
+    },
+    "android": {
+      "package": "com.rodrigo.whatsappscheduler",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#075E54"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "INTERNET"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e40b3cdb-ba56-4d3b-8a9b-e0f23c4a9e2e"
+      }
+    },
+    "owner": "rodrigosonsino"
+  }
+}

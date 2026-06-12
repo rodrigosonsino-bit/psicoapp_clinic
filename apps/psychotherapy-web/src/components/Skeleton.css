@@ -1,0 +1,52 @@
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface-hover) 25%,
+    var(--bg-surface) 50%,
+    var(--bg-surface-hover) 75%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+  display: inline-block;
+}
+
+/* SkeletonText styles */
+.skeleton-text-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.skeleton-text-line {
+  margin-bottom: 0.25rem;
+}
+
+/* SkeletonCard styles */
+.skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.skeleton-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+/* SkeletonTableRow styles */
+.skeleton-table-row td {
+  padding: 1rem;
+}

@@ -1,0 +1,44 @@
+{
+  "name": "whatsapp-scheduler-desktop",
+  "version": "1.0.0",
+  "description": "WhatsApp Scheduler Desktop Client",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --windows",
+    "package": "electron-packager . \"WhatsApp Scheduler\" --platform=win32 --arch=x64 --out=dist-desktop --overwrite --ignore=\"dist-.*\""
+  },
+  "author": "Rodrigo",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-packager": "^17.1.2"
+  },
+  "build": {
+    "appId": "com.rodrigo.whatsappscheduler",
+    "productName": "WhatsApp Scheduler",
+    "directories": {
+      "output": "C:/Users/Rodrigo/.gemini/antigravity/scratch/dist-desktop-temp"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "dist/**/*"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "../assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WhatsApp Scheduler",
+      "artifactName": "WhatsApp-Scheduler-Setup.exe"
+    }
+  }
+}

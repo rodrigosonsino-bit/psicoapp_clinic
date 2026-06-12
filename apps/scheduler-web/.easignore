@@ -1,0 +1,10 @@
+# Exclude desktop Electron files from mobile build
+desktop/
+
+# Standard Expo / React Native ignores
+node_modules/
+.expo/
+dist/
+web-build/
+/ios
+/android

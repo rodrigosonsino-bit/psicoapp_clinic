@@ -5,18 +5,18 @@ WORKDIR /monorepo
 # Copy workspace manifests for layer caching
 COPY package*.json ./
 COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
-COPY apps/scheduler/package.json ./apps/scheduler/
+COPY apps/scheduler-api/package.json ./apps/scheduler-api/
 
 # Install all deps (including devDeps needed for tsc)
-RUN npm ci --ignore-scripts
+RUN npm install --ignore-scripts --legacy-peer-deps
 
 # Copy source
 COPY packages/whatsapp-core/ ./packages/whatsapp-core/
-COPY apps/scheduler/ ./apps/scheduler/
+COPY apps/scheduler-api/ ./apps/scheduler-api/
 
 # Build core first, then app
 RUN npm run build --workspace=packages/whatsapp-core
-RUN npm run build --workspace=apps/scheduler
+RUN npm run build --workspace=apps/scheduler-api
 
 # --- Production Stage ---
 FROM node:20-alpine
@@ -25,15 +25,15 @@ WORKDIR /monorepo
 # Copy workspace manifests
 COPY package*.json ./
 COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
-COPY apps/scheduler/package.json ./apps/scheduler/
+COPY apps/scheduler-api/package.json ./apps/scheduler-api/
 
 # Install only production dependencies (workspace symlinks are created here)
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts --legacy-peer-deps
 
 # Copy compiled output
 COPY --from=builder /monorepo/packages/whatsapp-core/dist ./packages/whatsapp-core/dist
-COPY --from=builder /monorepo/apps/scheduler/dist ./apps/scheduler/dist
+COPY --from=builder /monorepo/apps/scheduler-api/dist ./apps/scheduler-api/dist
 
-WORKDIR /monorepo/apps/scheduler
+WORKDIR /monorepo/apps/scheduler-api
 EXPOSE 3000
 CMD ["node", "dist/server.js"]
