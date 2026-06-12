@@ -437,6 +437,11 @@ export function createPsychotherapyRoutes(): Router {
         month: z.string().regex(/^\d{4}-\d{2}$/, 'Formato de mês inválido (esperado YYYY-MM)').optional(),
     });
 
+    // Listar grupos do paciente
+    router.get('/psychotherapy/patients/:patientId/groups',
+        validateParams(patientIdParamSchema),
+        asyncHandler((req, res) => groupController.listPatientGroups(req, res)));
+
     // Listar grupos
     router.get('/psychotherapy/groups',
         validateQuery(listGroupsQuerySchema),

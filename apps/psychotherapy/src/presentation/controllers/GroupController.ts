@@ -200,6 +200,54 @@ export class GroupController {
             meta: { month: effectiveMonth },
         });
     }
+
+    /** GET /psychotherapy/patients/:patientId/groups */
+    async listPatientGroups(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { patientId } = req.params;
+
+        // Verifica se o paciente pertence ao tenant
+        const patientCheck = await this.dbPool.query('SELECT id FROM psychotherapy_patients WHERE id = $1 AND tenant_id = $2', [patientId, tenantId]);
+        if (patientCheck.rows.length === 0) {
+            throw new AppError('Paciente não encontrado', 404);
+        }
+
+        try {
+            const result = await this.dbPool.query(`
+                SELECT 
+                    tg.id,
+                    tg.name,
+                    tg.description,
+                    tg.session_price_cents,
+                    tg.day_of_week,
+                    tg.start_time,
+                    tg.duration_minutes,
+                    tg.is_active,
+                    tg.monthly_fee_cents,
+                    tg.start_date,
+                    tg.duration_months,
+                    tgm.joined_at
+                FROM therapy_groups tg
+                JOIN therapy_group_members tgm ON tgm.group_id = tg.id
+                WHERE tgm.patient_id = $1
+                  AND tg.tenant_id = $2
+                  AND tgm.left_at IS NULL
+                  AND tg.deleted_at IS NULL
+                ORDER BY tg.name ASC;
+            `, [patientId, tenantId]);
+
+            res.status(200).json({
+                success: true,
+                data: result.rows,
+            });
+        } catch (error: any) {
+            logger.error({ tenantId, patientId, err: error.message }, 'Erro ao listar grupos do paciente');
+            throw new AppError('Erro ao listar grupos do paciente', 500);
+        }
+    }
+
     /** POST /psychotherapy/groups/:groupId/members */
     async addGroupMember(req: Request, res: Response): Promise<void> {
         const tenantId = (req as any).tenantId as string;
