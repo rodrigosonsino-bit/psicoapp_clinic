@@ -416,6 +416,22 @@ async function connectWithRetry(pool: Pool, retries = 5, delay = 2000): Promise<
 
 async function bootstrap() {
     try {
+        // Testar a conexão com o banco e rodar migrações do Mercado Pago
+        await dbPool.query('SELECT NOW()');
+        logger.info('✅ Conexão com o banco de dados estabelecida.');
+        
+        await dbPool.query(`
+            CREATE TABLE IF NOT EXISTS mp_events (
+                event_id VARCHAR PRIMARY KEY,
+                type VARCHAR,
+                processed_at TIMESTAMP DEFAULT NOW()
+            );
+        `);
+        await dbPool.query(`
+            ALTER TABLE tenants ADD COLUMN IF NOT EXISTS mp_subscription_id VARCHAR;
+        `);
+        logger.info('✅ Migrações do Mercado Pago concluídas.');
+        
         // Garantir que a conexão com o banco esteja estabelecida antes de prosseguir
         logger.info('🔌 Conectando ao banco de dados...');
         await connectWithRetry(dbPool);
