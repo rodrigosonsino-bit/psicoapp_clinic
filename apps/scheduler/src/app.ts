@@ -21,7 +21,7 @@ import { createAIRoutes } from './presentation/routes/aiRoutes';
 import { BullMQMessageScheduler } from './infrastructure/queue/BullMQMessageScheduler';
 
 import helmet from 'helmet';
-import { StripeService } from './infrastructure/stripe/StripeService';
+import { MercadoPagoService } from './infrastructure/payment/MercadoPagoService';
 import { BillingController } from './presentation/controllers/BillingController';
 import { createBillingRoutes } from './presentation/routes/billingRoutes';
 import { globalLimiter, webhookLimiter } from './presentation/middlewares/rateLimitMiddleware';
@@ -46,11 +46,11 @@ export function createApp(
     }
     app.use(cors({ origin: origins || '*' }));
     
-    // Configurar Stripe webhook com express.raw ANTES do express.json
-    const stripeService = new StripeService(dbPool);
-    const billingController = new BillingController(dbPool, stripeService);
-    
-    app.post('/api/billing/webhook', webhookLimiter, express.raw({ type: 'application/json' }), billingController.handleWebhook);
+    // Webhook MP: precisa de express.json parseado (não raw), pois MP não usa verificação de body-hash
+    const mpService = new MercadoPagoService(dbPool);
+    const billingController = new BillingController(dbPool, mpService);
+
+    app.post('/api/billing/webhook', webhookLimiter, express.json(), billingController.handleWebhook);
     
     app.use('/api', globalLimiter);
     app.use(express.json({ limit: '10mb' }));

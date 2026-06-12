@@ -77,6 +77,7 @@ async function ensureDatabaseSchema(pool: Pool) {
                 status VARCHAR(20) DEFAULT 'trial',
                 stripe_customer_id VARCHAR(255),
                 stripe_subscription_id VARCHAR(255),
+                mp_subscription_id VARCHAR(255),
                 subscription_status VARCHAR(50) DEFAULT 'trialing',
                 current_period_end TIMESTAMPTZ,
                 max_messages_per_month INT DEFAULT 200,
@@ -90,11 +91,13 @@ async function ensureDatabaseSchema(pool: Pool) {
                 id VARCHAR(50) PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 stripe_price_id VARCHAR(255),
+                mp_plan_id VARCHAR(255),
                 price_cents INT NOT NULL,
                 max_messages_per_month INT NOT NULL,
                 features JSONB DEFAULT '{}',
                 active BOOLEAN DEFAULT TRUE
             );
+            ALTER TABLE plans ADD COLUMN IF NOT EXISTS mp_plan_id VARCHAR(255);
 
             CREATE TABLE IF NOT EXISTS usage_tracking (
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -366,34 +369,30 @@ async function ensureDatabaseSchema(pool: Pool) {
             UPDATE whatsapp_ai_chats SET tenant_id = (SELECT id FROM tenants LIMIT 1) WHERE tenant_id IS NULL;
             CREATE INDEX IF NOT EXISTS idx_ai_chats_tenant ON whatsapp_ai_chats(tenant_id, contact_jid);
 
-            -- FASE 4: Cobrança Recorrente (Stripe) - Tabela para idempotência de webhook
+            -- FASE 4: Cobrança Recorrente - Tabelas para idempotência de webhook
             CREATE TABLE IF NOT EXISTS stripe_events (
+                event_id VARCHAR(255) PRIMARY KEY,
+                type VARCHAR(100) NOT NULL,
+                processed_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS mp_events (
                 event_id VARCHAR(255) PRIMARY KEY,
                 type VARCHAR(100) NOT NULL,
                 processed_at TIMESTAMPTZ DEFAULT NOW()
             );
         `);
 
-        // Seed de planos padrão com suporte a Stripe Price IDs dinâmicos do env
+        // Seed: único plano pago (Business); Trial é apenas um status, não um plano
         await pool.query(`
-            INSERT INTO plans (id, name, stripe_price_id, price_cents, max_messages_per_month, features)
-            VALUES
-                ('starter', 'Starter', COALESCE(NULLIF($1, ''), 'price_dummy_starter'), 4900, 200, '{"whatsapp": true}'),
-                ('pro', 'Pro', COALESCE(NULLIF($2, ''), 'price_dummy_pro'), 9900, 1000, '{"whatsapp": true, "ai": true, "calendar": true}'),
-                ('business', 'Business', COALESCE(NULLIF($3, ''), 'price_dummy_business'), 19900, 5000, '{"whatsapp": true, "ai": true, "calendar": true, "reports": true}')
+            INSERT INTO plans (id, name, mp_plan_id, price_cents, max_messages_per_month, features)
+            VALUES ('business', 'Business', NULLIF($1, ''), 19900, 5000, '{"whatsapp": true, "ai": true, "calendar": true, "reports": true}')
             ON CONFLICT (id) DO UPDATE SET
-                stripe_price_id = CASE 
-                    WHEN EXCLUDED.stripe_price_id LIKE 'price_dummy_%' THEN COALESCE(plans.stripe_price_id, EXCLUDED.stripe_price_id)
-                    ELSE EXCLUDED.stripe_price_id
-                END,
+                mp_plan_id = COALESCE(EXCLUDED.mp_plan_id, plans.mp_plan_id),
                 price_cents = EXCLUDED.price_cents,
                 max_messages_per_month = EXCLUDED.max_messages_per_month,
                 features = EXCLUDED.features;
-        `, [
-            process.env.STRIPE_STARTER_PRICE_ID || '',
-            process.env.STRIPE_PRO_PRICE_ID || '',
-            process.env.STRIPE_BUSINESS_PRICE_ID || ''
-        ]);
+        `, [process.env.MP_BUSINESS_PLAN_ID || '']);
 
         logger.info('✅ Estrutura do banco de dados verificada/atualizada com sucesso!');
     } catch (err: any) {
