@@ -10,7 +10,7 @@ async function createPlan() {
             frequency_type: "months",
             billing_day: 10,
             billing_day_proportional: true,
-            transaction_amount: 97.00,
+            transaction_amount: 29.90,
             currency_id: "BRL"
         },
         back_url: "https://whatsapp-scheduler-backend-production-14af.up.railway.app"

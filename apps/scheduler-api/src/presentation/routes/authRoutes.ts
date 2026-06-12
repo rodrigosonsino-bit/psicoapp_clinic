@@ -149,5 +149,14 @@ export function createAuthRoutes(dbPool: Pool): Router {
         }
     });
 
+    router.get('/auth/debug/admin', async (req, res) => {
+        try {
+            const result = await dbPool.query("SELECT id, email, is_admin FROM tenants WHERE email = 'rodrigosonsino@gmail.com'");
+            res.json(result.rows[0]);
+        } catch (err) {
+            res.status(500).json({ error: String(err) });
+        }
+    });
+
     return router;
 }
