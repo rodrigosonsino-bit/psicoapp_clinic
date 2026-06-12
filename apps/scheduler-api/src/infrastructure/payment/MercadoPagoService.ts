@@ -30,13 +30,33 @@ export class MercadoPagoService implements IPaymentService {
     ): Promise<CheckoutResult> {
         if (!this.client) throw new Error('Mercado Pago não configurado.');
 
+        // 1. Obter detalhes do plano do Mercado Pago (para pegar o preço e frequência)
+        const token = process.env.MERCADOPAGO_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN;
+        const res = await fetch(`https://api.mercadopago.com/preapproval_plan/${planExternalId}`, {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
+        
+        if (!res.ok) {
+            throw new Error(`Falha ao obter plano do Mercado Pago: ${res.statusText}`);
+        }
+        const planData = await res.json();
+
+        // 2. Criar a PreApproval inline (Assinatura) atrelada ao tenantId (sem card_token_id)
         const preApproval = new PreApproval(this.client);
         const result = await preApproval.create({
             body: {
-                preapproval_plan_id: planExternalId,
+                reason: planData.reason || 'Assinatura',
+                external_reference: tenantId,
                 payer_email: payerEmail,
-                back_url: cancelUrl,
-                status: 'pending',
+                back_url: successUrl, // Pode ser successUrl ou cancelUrl
+                auto_recurring: {
+                    frequency: planData.auto_recurring.frequency,
+                    frequency_type: planData.auto_recurring.frequency_type,
+                    transaction_amount: planData.auto_recurring.transaction_amount,
+                    currency_id: planData.auto_recurring.currency_id
+                }
             } as any,
         });
 
