@@ -40,10 +40,11 @@ export function createApp(
     
     app.use(helmet({ contentSecurityPolicy: false }));
     
-    const origins = process.env.ALLOWED_ORIGINS?.split(',');
-    if (process.env.NODE_ENV === 'production' && !origins) {
+    const rawOrigins = process.env.ALLOWED_ORIGINS;
+    if (process.env.NODE_ENV === 'production' && !rawOrigins) {
         throw new Error('ALLOWED_ORIGINS obrigatório em produção');
     }
+    const origins = rawOrigins === '*' ? '*' : rawOrigins?.split(',');
     app.use(cors({ origin: origins || '*' }));
     
     // Webhook MP: precisa de express.json parseado (não raw), pois MP não usa verificação de body-hash
