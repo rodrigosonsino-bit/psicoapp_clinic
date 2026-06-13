@@ -47,6 +47,7 @@ export interface ScheduledMessage {
     id: string;
     content: string;
     recipientId: string;
+    recipientName?: string | null;
     sendAt: string;
     status: 'pending' | 'sent' | 'failed';
     createdAt: string;

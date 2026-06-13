@@ -13,7 +13,8 @@ export class ScheduledMessage {
         public status: MessageStatus = 'pending',
         public readonly platform: MessagePlatform = 'whatsapp',
         public readonly createdAt: Date = new Date(),
-        metadataInput: any = null
+        metadataInput: any = null,
+        public readonly recipientName: string | null = null
     ) {
         if (typeof metadataInput === 'string') {
             try {

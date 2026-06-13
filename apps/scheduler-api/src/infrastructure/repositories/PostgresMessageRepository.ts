@@ -86,22 +86,22 @@ export class PostgresMessageRepository implements IMessageRepository {
     }
 
     async findAll(userId: string, limit: number = 20, offset: number = 0, filters?: MessageFilters): Promise<ScheduledMessage[]> {
-        const conditions: string[] = ['user_id = $1'];
+        const conditions: string[] = ['sm.user_id = $1'];
         const values: any[] = [userId];
         let idx = 2;
 
         if (filters?.startDate) {
-            conditions.push(`send_at >= $${idx++}`);
+            conditions.push(`sm.send_at >= $${idx++}`);
             values.push(filters.startDate);
         }
 
         if (filters?.endDate) {
-            conditions.push(`send_at <= $${idx++}`);
+            conditions.push(`sm.send_at <= $${idx++}`);
             values.push(filters.endDate);
         }
 
         if (filters?.recipientId) {
-            conditions.push(`recipient_id LIKE $${idx++}`);
+            conditions.push(`sm.recipient_id LIKE $${idx++}`);
             values.push(`%${filters.recipientId}%`);
         }
 
@@ -110,18 +110,21 @@ export class PostgresMessageRepository implements IMessageRepository {
         values.push(limit, offset);
 
         const orderBy = (filters?.startDate || filters?.endDate)
-            ? 'send_at ASC, created_at DESC'
-            : 'created_at DESC';
+            ? 'sm.send_at ASC, sm.created_at DESC'
+            : 'sm.created_at DESC';
 
         const query = `
-            SELECT * FROM scheduled_messages 
+            SELECT sm.*, wc.name AS recipient_name
+            FROM scheduled_messages sm
+            LEFT JOIN whatsapp_contacts wc
+              ON wc.id = sm.recipient_id OR wc.id = sm.recipient_id || '@s.whatsapp.net'
             WHERE ${conditions.join(' AND ')}
             ORDER BY ${orderBy}
             LIMIT $${limitIdx} OFFSET $${offsetIdx};
         `;
         const result = await this.dbPool.query(query, values);
         return result.rows.map(row => new ScheduledMessage(
-            row.id, row.user_id, row.content, row.recipient_id, new Date(row.send_at), row.status, row.platform, new Date(row.created_at), row.metadata
+            row.id, row.user_id, row.content, row.recipient_id, new Date(row.send_at), row.status, row.platform, new Date(row.created_at), row.metadata, row.recipient_name ?? null
         ));
     }
 

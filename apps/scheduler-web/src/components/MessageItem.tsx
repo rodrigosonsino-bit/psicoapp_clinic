@@ -25,7 +25,9 @@ export const MessageItem = memo(({ item, onEdit, onResend, onDelete }: MessageIt
       <View style={styles.cardHeader}>
         <View style={styles.headerLeft}>
           <Text style={styles.platformIcon}>{item.platform === 'telegram' ? '🔹' : '💬'}</Text>
-          <Text style={styles.cardRecipient}>Para: {item.recipientId}</Text>
+          <Text style={styles.cardRecipient}>
+            Para: {item.recipientName ?? item.recipientId}
+          </Text>
           <View style={[
             styles.inlineBadge, 
             item.status === 'sent' ? styles.badgeSent :
