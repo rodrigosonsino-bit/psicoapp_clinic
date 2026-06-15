@@ -1244,6 +1244,24 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.lg,
   },
+  authCard: {
+    padding: spacing.xl,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+    width: '100%',
+    marginHorizontal: spacing.md,
+  },
+  authTitle: {
+    textAlign: 'center',
+  },
+  authSubtitle: {
+    textAlign: 'center',
+  },
 
   inputGroup: {
     marginBottom: spacing.md,
