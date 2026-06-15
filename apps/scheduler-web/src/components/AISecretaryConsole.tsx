@@ -1,16 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Alert, StyleSheet } from 'react-native';
 import { askAISecretary } from '../services/api';
-import { useAISettings } from '../hooks/useAISettings';
 
 interface AISecretaryConsoleProps {
-  isAuthenticated: boolean;
+  aiSettings: { enabled: boolean; toggleEnabled: () => Promise<void> };
   onOpenSettings: () => void;
   onPrefillRequest: (data: any) => void;
 }
 
-export function AISecretaryConsole({ isAuthenticated, onOpenSettings, onPrefillRequest }: AISecretaryConsoleProps) {
-  const aiSettings = useAISettings(isAuthenticated);
+export function AISecretaryConsole({ aiSettings, onOpenSettings, onPrefillRequest }: AISecretaryConsoleProps) {
 
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);

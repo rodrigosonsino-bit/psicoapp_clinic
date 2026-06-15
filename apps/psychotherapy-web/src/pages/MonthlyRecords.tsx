@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format, addMonths, subMonths } from 'date-fns';
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle, Clock, MessageCircle, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle, Clock, MessageCircle, Download, Search } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { MonthlyRecord, Patient, MonthResponse, PaginatedResponse } from '../types/api';
 
@@ -9,6 +9,9 @@ import { formatCurrency } from '../utils/formatters';
 import { useToast } from '../context/ToastContext';
 import { SkeletonTable } from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
+
+const normalizeString = (str: string) => 
+  str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 export default function MonthlyRecords() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -21,6 +24,7 @@ export default function MonthlyRecords() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [reminderText, setReminderText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const monthStr = format(currentDate, 'yyyy-MM');
   const displayMonth = format(currentDate, 'MM/yyyy');
@@ -256,8 +260,9 @@ export default function MonthlyRecords() {
   };
 
   const filteredRecords = records.filter(r => {
-    if (statusFilter === 'all') return true;
-    return r.paymentStatus === statusFilter;
+    const matchesStatus = statusFilter === 'all' || r.paymentStatus === statusFilter;
+    const matchesSearch = !searchQuery || normalizeString(r.patientNameSnapshot).includes(normalizeString(searchQuery));
+    return matchesStatus && matchesSearch;
   });
 
   const totalExpected = filteredRecords.reduce((acc, r) => acc + getExpectedAmount(r), 0);
@@ -302,7 +307,19 @@ export default function MonthlyRecords() {
         </div>
       </div>
 
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-between items-center mb-4 gap-4">
+        <div style={{ position: 'relative', width: '300px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Buscar por nome..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ paddingLeft: '2.25rem', height: '32px', fontSize: '0.875rem' }}
+          />
+        </div>
+
         <div className="flex items-center gap-2">
           <span className="text-small text-muted font-medium">Filtrar:</span>
           <select 

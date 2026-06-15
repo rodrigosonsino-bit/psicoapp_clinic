@@ -526,63 +526,67 @@ function FixedExpenseModal({ fixedExpense, onClose, onSave }: FixedExpenseModalP
             />
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Valor (R$) *</label>
-            <input 
-              type="number" 
-              step="0.01" 
-              min="0.01" 
-              required 
-              value={formData.amount} 
-              onChange={e => setFormData({ ...formData, amount: e.target.value })} 
-              className="form-control" 
-              placeholder="Ex: 2000.00" 
-              disabled={submitting}
-            />
+          <div className="flex gap-4" style={{ flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ minWidth: '180px' }}>
+              <label className="form-label">Valor (R$) *</label>
+              <input 
+                type="number" 
+                step="0.01" 
+                min="0.01" 
+                required 
+                value={formData.amount} 
+                onChange={e => setFormData({ ...formData, amount: e.target.value })} 
+                className="form-control" 
+                placeholder="Ex: 2000.00" 
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="form-group" style={{ minWidth: '180px' }}>
+              <label className="form-label">Dia do Vencimento (1 a 28) *</label>
+              <select
+                required
+                value={formData.dayOfMonth}
+                onChange={e => setFormData({ ...formData, dayOfMonth: e.target.value })}
+                className="form-control"
+                disabled={submitting}
+              >
+                {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
+                  <option key={day} value={day}>Todo dia {day}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Dia do Vencimento (1 a 28) *</label>
-            <select
-              required
-              value={formData.dayOfMonth}
-              onChange={e => setFormData({ ...formData, dayOfMonth: e.target.value })}
-              className="form-control"
-              disabled={submitting}
-            >
-              {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
-                <option key={day} value={day}>Todo dia {day}</option>
-              ))}
-            </select>
-          </div>
+          <div className="flex gap-4" style={{ flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ minWidth: '180px' }}>
+              <label className="form-label">Categoria *</label>
+              <select 
+                required 
+                value={formData.category} 
+                onChange={e => setFormData({ ...formData, category: e.target.value })} 
+                className="form-control"
+                disabled={submitting}
+              >
+                <option value="rent">Aluguel / Imóvel</option>
+                <option value="taxes">Impostos / Taxas</option>
+                <option value="software">Software / Apps</option>
+                <option value="marketing">Marketing</option>
+                <option value="other">Outros</option>
+              </select>
+            </div>
 
-          <div className="form-group">
-            <label className="form-label">Categoria *</label>
-            <select 
-              required 
-              value={formData.category} 
-              onChange={e => setFormData({ ...formData, category: e.target.value })} 
-              className="form-control"
-              disabled={submitting}
-            >
-              <option value="rent">Aluguel / Imóvel</option>
-              <option value="taxes">Impostos / Taxas</option>
-              <option value="software">Software / Apps</option>
-              <option value="marketing">Marketing</option>
-              <option value="other">Outros</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Mês de Início (Primeira cobrança) *</label>
-            <input 
-              type="date" 
-              required 
-              value={formData.startDate} 
-              onChange={e => setFormData({ ...formData, startDate: e.target.value })} 
-              className="form-control" 
-              disabled={submitting}
-            />
+            <div className="form-group" style={{ minWidth: '180px' }}>
+              <label className="form-label">Mês de Início (Primeira cobrança) *</label>
+              <input 
+                type="date" 
+                required 
+                value={formData.startDate} 
+                onChange={e => setFormData({ ...formData, startDate: e.target.value })} 
+                className="form-control" 
+                disabled={submitting}
+              />
+            </div>
           </div>
 
           <div className="form-group">

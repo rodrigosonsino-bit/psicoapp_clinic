@@ -5,18 +5,18 @@ WORKDIR /monorepo
 # Copy workspace manifests for layer caching
 COPY package*.json ./
 COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
-COPY apps/psychotherapy/package.json ./apps/psychotherapy/
+COPY apps/psychotherapy-api/package.json ./apps/psychotherapy-api/
 
 # Install all deps (including devDeps needed for tsc)
 RUN npm ci --ignore-scripts
 
 # Copy source
 COPY packages/whatsapp-core/ ./packages/whatsapp-core/
-COPY apps/psychotherapy/ ./apps/psychotherapy/
+COPY apps/psychotherapy-api/ ./apps/psychotherapy-api/
 
 # Build core first, then app
 RUN npm run build --workspace=packages/whatsapp-core
-RUN npm run build --workspace=apps/psychotherapy
+RUN npm run build --workspace=apps/psychotherapy-api
 
 # --- Production Stage ---
 FROM node:20-alpine
@@ -28,19 +28,19 @@ RUN apk add --no-cache postgresql-client
 # Copy workspace manifests
 COPY package*.json ./
 COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
-COPY apps/psychotherapy/package.json ./apps/psychotherapy/
+COPY apps/psychotherapy-api/package.json ./apps/psychotherapy-api/
 
 # Install only production dependencies (workspace symlinks are created here)
 RUN npm ci --omit=dev --ignore-scripts
 
 # Copy compiled output and runtime assets
 COPY --from=builder /monorepo/packages/whatsapp-core/dist ./packages/whatsapp-core/dist
-COPY --from=builder /monorepo/apps/psychotherapy/dist ./apps/psychotherapy/dist
-COPY apps/psychotherapy/migrations ./apps/psychotherapy/migrations
-COPY apps/psychotherapy/entrypoint.sh ./apps/psychotherapy/entrypoint.sh
-RUN chmod +x ./apps/psychotherapy/entrypoint.sh
-RUN mkdir -p ./apps/psychotherapy/public
+COPY --from=builder /monorepo/apps/psychotherapy-api/dist ./apps/psychotherapy-api/dist
+COPY apps/psychotherapy-api/migrations ./apps/psychotherapy-api/migrations
+COPY apps/psychotherapy-api/entrypoint.sh ./apps/psychotherapy-api/entrypoint.sh
+RUN chmod +x ./apps/psychotherapy-api/entrypoint.sh
+RUN mkdir -p ./apps/psychotherapy-api/public
 
-WORKDIR /monorepo/apps/psychotherapy
+WORKDIR /monorepo/apps/psychotherapy-api
 EXPOSE 3000
 ENTRYPOINT ["./entrypoint.sh"]

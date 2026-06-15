@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const srcDir = path.join(__dirname, '..', '..', '..', 'whatsapp-scheduler-app', 'dist');
+const srcDir = path.join(__dirname, '..', 'scheduler-web', 'dist');
 const destDir = path.join(__dirname, 'public');
 
 function deleteFolderRecursive(directoryPath) {

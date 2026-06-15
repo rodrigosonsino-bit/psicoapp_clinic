@@ -775,113 +775,122 @@ Quintas-feiras - às 8h, às 9h, às 13h, às 14h`;
                 });
             }
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: parts
-                    }],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: "OBJECT",
-                            properties: {
-                                replyText: {
-                                    type: "STRING",
-                                    description: "Texto acolhedor e profissional a ser enviado de volta para o cliente no WhatsApp. Use pt-BR."
-                                },
-                                intent: {
-                                    type: "STRING",
-                                    description: "Intenção identificada do contato, como greeting, scheduling, canceling, human_handoff, general_chat, etc."
-                                },
-                                conversationStage: {
-                                    type: "STRING",
-                                    description: "Fase atual da conversa, como greeting, identifying_modality, check_slots, confirmation_pending, done."
-                                },
-                                summaryUpdate: {
-                                    type: "STRING",
-                                    description: "Resumo do que foi conversado ou acordado nesta interação para atualizar a memória persistente."
-                                },
-                                preferences: {
-                                    type: "OBJECT",
-                                    properties: {
-                                        location: {
-                                            type: "STRING",
-                                            description: "Local/modalidade de preferência do paciente: 'online', 'presencial', ou nulo.",
-                                            enum: ["online", "presencial"]
-                                        },
-                                        patientName: {
-                                            type: "STRING",
-                                            description: "Nome completo ou preferencial do paciente, caso informado."
-                                        },
-                                        city: {
-                                            type: "STRING",
-                                            description: "Cidade do paciente, caso informado."
-                                        },
-                                        sessionType: {
-                                            type: "STRING",
-                                            description: "Tipo de sessão: 'psicoterapia' ou 'pastoral', caso informado.",
-                                            enum: ["psicoterapia", "pastoral"]
-                                        },
-                                        referral: {
-                                            type: "STRING",
-                                            description: "Como conheceu ou indicação, caso informado."
-                                        }
-                                    }
-                                },
-                                action: {
-                                    type: "OBJECT",
-                                    properties: {
-                                        type: {
-                                            type: "STRING",
-                                            description: "Ação de agendamento a ser executada no sistema.",
-                                            enum: ["none", "propose_slots", "create_event", "cancel_event", "notify_owner", "disable_ai"]
-                                        },
-                                        params: {
-                                            type: "OBJECT",
-                                            properties: {
-                                                patientName: {
-                                                    type: "STRING",
-                                                    description: "Nome do paciente para o evento no calendário."
-                                                },
-                                                date: {
-                                                    type: "STRING",
-                                                    description: "Data do agendamento em formato AAAA-MM-DD."
-                                                },
-                                                time: {
-                                                    type: "STRING",
-                                                    description: "Hora do agendamento em formato HH:MM."
-                                                },
-                                                cancellationInfo: {
-                                                    type: "STRING",
-                                                    description: "Informações de cancelamento (ex: data e hora do evento cancelado)."
-                                                },
-                                                reason: {
-                                                    type: "STRING",
-                                                    description: "Motivo da notificação ao dono ou cancelamento."
-                                                }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: parts
+                        }],
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "OBJECT",
+                                properties: {
+                                    replyText: {
+                                        type: "STRING",
+                                        description: "Texto acolhedor e profissional a ser enviado de volta para o cliente no WhatsApp. Use pt-BR."
+                                    },
+                                    intent: {
+                                        type: "STRING",
+                                        description: "Intenção identificada do contato, como greeting, scheduling, canceling, human_handoff, general_chat, etc."
+                                    },
+                                    conversationStage: {
+                                        type: "STRING",
+                                        description: "Fase atual da conversa, como greeting, identifying_modality, check_slots, confirmation_pending, done."
+                                    },
+                                    summaryUpdate: {
+                                        type: "STRING",
+                                        description: "Resumo do que foi conversado ou acordado nesta interação para atualizar a memória persistente."
+                                    },
+                                    preferences: {
+                                        type: "OBJECT",
+                                        properties: {
+                                            location: {
+                                                type: "STRING",
+                                                description: "Local/modalidade de preferência do paciente: 'online', 'presencial', ou nulo.",
+                                                enum: ["online", "presencial"]
+                                            },
+                                            patientName: {
+                                                type: "STRING",
+                                                description: "Nome completo ou preferencial do paciente, caso informado."
+                                            },
+                                            city: {
+                                                type: "STRING",
+                                                description: "Cidade do paciente, caso informado."
+                                            },
+                                            sessionType: {
+                                                type: "STRING",
+                                                description: "Tipo de sessão: 'psicoterapia' ou 'pastoral', caso informado.",
+                                                enum: ["psicoterapia", "pastoral"]
+                                            },
+                                            referral: {
+                                                type: "STRING",
+                                                description: "Como conheceu ou indicação, caso informado."
                                             }
-                                        },
-                                        requiresConfirmation: {
-                                            type: "BOOLEAN",
-                                            description: "Se a ação requer que o paciente ou o Rodrigo confirme explicitamente antes de executar no calendário."
                                         }
                                     },
-                                    required: ["type", "params", "requiresConfirmation"]
+                                    action: {
+                                        type: "OBJECT",
+                                        properties: {
+                                            type: {
+                                                type: "STRING",
+                                                description: "Ação de agendamento a ser executada no sistema.",
+                                                enum: ["none", "propose_slots", "create_event", "cancel_event", "notify_owner", "disable_ai"]
+                                            },
+                                            params: {
+                                                type: "OBJECT",
+                                                properties: {
+                                                    patientName: {
+                                                        type: "STRING",
+                                                        description: "Nome do paciente para o evento no calendário."
+                                                    },
+                                                    date: {
+                                                        type: "STRING",
+                                                        description: "Data do agendamento em formato AAAA-MM-DD."
+                                                    },
+                                                    time: {
+                                                        type: "STRING",
+                                                        description: "Hora do agendamento em formato HH:MM."
+                                                    },
+                                                    cancellationInfo: {
+                                                        type: "STRING",
+                                                        description: "Informações de cancelamento (ex: data e hora do evento cancelado)."
+                                                    },
+                                                    reason: {
+                                                        type: "STRING",
+                                                        description: "Motivo da notificação ao dono ou cancelamento."
+                                                    }
+                                                }
+                                            },
+                                            requiresConfirmation: {
+                                                type: "BOOLEAN",
+                                                description: "Se a ação requer que o paciente ou o Rodrigo confirme explicitamente antes de executar no calendário."
+                                            }
+                                        },
+                                        required: ["type", "params", "requiresConfirmation"]
+                                    },
+                                    requiresHuman: {
+                                        type: "BOOLEAN",
+                                        description: "Defina como true se a IA não puder resolver o problema ou se o usuário pediu especificamente para falar com o terapeuta humano, ou se for necessário desativar a IA."
+                                    }
                                 },
-                                requiresHuman: {
-                                    type: "BOOLEAN",
-                                    description: "Defina como true se a IA não puder resolver o problema ou se o usuário pediu especificamente para falar com o terapeuta humano, ou se for necessário desativar a IA."
-                                }
-                            },
-                            required: ["replyText", "intent", "conversationStage", "summaryUpdate", "preferences", "action", "requiresHuman"]
+                                required: ["replyText", "intent", "conversationStage", "summaryUpdate", "preferences", "action", "requiresHuman"]
+                            }
                         }
-                    }
-                })
-            });
+                    }),
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
 
             if (!response.ok) {
                 const errText = await response.text();

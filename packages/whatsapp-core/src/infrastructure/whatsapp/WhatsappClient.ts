@@ -315,7 +315,8 @@ export class WhatsappClient {
                         if (this.aiSentMessagesJid.has(from)) {
                             logger.debug(`⏭️ Ignorando evento fromMe para ${from} pois foi um envio automático da IA.`);
                         } else {
-                            logger.info(`👤 Enviou mensagem para ${from}. Desativando IA para este contato (cooldown 60 min).`);
+                            const reenableMinutes = parseInt(process.env.SARAH_AUTO_REENABLE_MINUTES || '15', 10);
+                            logger.info(`👤 Enviou mensagem para ${from}. Desativando IA para este contato (cooldown ${reenableMinutes} min).`);
                             await this.disableAIForContact(from);
                         }
                     }
@@ -468,28 +469,36 @@ export class WhatsappClient {
                                             logger.warn({ presErr }, 'Erro ao enviar presence update composing');
                                         }
 
-                                        const replyText = await this.onIncomingMessage!({
-                                            tenantId: this.tenantId,
-                                            from,
-                                            name: finalBuffer.name,
-                                            text: concatenatedText,
-                                            isAudio: finalBuffer.isAudio,
-                                            isImage: finalBuffer.isImage,
-                                            isDocument: finalBuffer.isDocument,
-                                            mediaData: finalBuffer.mediaData,
-                                        });
+                                        try {
+                                            const replyText = await this.onIncomingMessage!({
+                                                tenantId: this.tenantId,
+                                                from,
+                                                name: finalBuffer.name,
+                                                text: concatenatedText,
+                                                isAudio: finalBuffer.isAudio,
+                                                isImage: finalBuffer.isImage,
+                                                isDocument: finalBuffer.isDocument,
+                                                mediaData: finalBuffer.mediaData,
+                                            });
 
-                                        if (replyText) {
-                                            let finalReply = replyText;
-                                            if (finalReply.includes('[FIM_ATENDIMENTO]')) {
-                                                finalReply = finalReply.replace('[FIM_ATENDIMENTO]', '').trim();
-                                                logger.info(`🚫 Tag [FIM_ATENDIMENTO] detectada. Desativando IA para ${finalBuffer.name} (${from}).`);
-                                                await this.disableAIForContact(from);
-                                                await this.notifyHumanHandoff(finalBuffer.name, from, 'O paciente encerrou o fluxo automatizado ou solicitou ajuda.');
+                                            if (replyText) {
+                                                let finalReply = replyText;
+                                                if (finalReply.includes('[FIM_ATENDIMENTO]')) {
+                                                    finalReply = finalReply.replace('[FIM_ATENDIMENTO]', '').trim();
+                                                    logger.info(`🚫 Tag [FIM_ATENDIMENTO] detectada. Desativando IA para ${finalBuffer.name} (${from}).`);
+                                                    await this.disableAIForContact(from);
+                                                    await this.notifyHumanHandoff(finalBuffer.name, from, 'O paciente encerrou o fluxo automatizado ou solicitou ajuda.');
+                                                }
+
+                                                logger.info(`🤖 Enviando auto-resposta via WhatsApp para ${finalBuffer.name}: "${finalReply}"`);
+                                                await this.sendMessage(from, finalReply);
                                             }
-
-                                            logger.info(`🤖 Enviando auto-resposta via WhatsApp para ${finalBuffer.name}: "${finalReply}"`);
-                                            await this.sendMessage(from, finalReply);
+                                        } finally {
+                                            try {
+                                                await this.sock.sendPresenceUpdate('paused', from);
+                                            } catch (presErr) {
+                                                logger.warn({ presErr }, 'Erro ao limpar presence update (paused)');
+                                            }
                                         }
                                     } catch (processErr) {
                                         logger.error({ processErr }, 'Erro ao processar mensagens acumuladas no timer de debounce.');

@@ -1,0 +1,13 @@
+# Ignore all dependencies and build folders in monorepo
+node_modules/
+**/node_modules/
+.expo/
+**/dist/
+**/build/
+**/desktop/
+coverage/
+planilha_real*.csv
+import_report_*.json
+.vercel
+.vercel/
+*.log

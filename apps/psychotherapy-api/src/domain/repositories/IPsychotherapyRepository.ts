@@ -155,6 +155,7 @@ export interface SaveClinicalNoteDTO {
 export interface DashboardAnalytics {
     currentMonth: {
         revenueCents: number; // Received (paid receipts)
+        sessionRevenueCents: number; // Individual sessions only (excludes group payments)
         expensesCents: number; // Total expenses
         netIncomeCents: number; // Revenue - Expenses
         pendingCents: number; // Unpaid monthly records

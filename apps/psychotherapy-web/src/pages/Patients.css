@@ -28,10 +28,11 @@
   background-color: rgba(15, 17, 26, 0.8);
   backdrop-filter: blur(4px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 1000;
-  padding: 1rem;
+  padding: 2rem 1rem;
+  overflow-y: auto;
 }
 
 .modal-content {
@@ -42,6 +43,8 @@
   width: 100%;
   max-width: 500px;
   box-shadow: var(--shadow-lg);
+  margin-top: 10vh;
+  margin-bottom: 2rem;
 }
 
 /* Search bar */

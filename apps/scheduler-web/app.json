@@ -2,6 +2,7 @@
   "expo": {
     "name": "WhatsApp Scheduler",
     "slug": "whatsapp-scheduler-app",
+    "scheme": "whatsappscheduler",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

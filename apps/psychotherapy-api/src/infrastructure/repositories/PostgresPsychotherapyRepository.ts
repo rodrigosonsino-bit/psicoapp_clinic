@@ -617,6 +617,22 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         pagination?: PaginationOptions
     ): Promise<PaginatedResult<PsychotherapyExpense>> {
         const validTenantId = this.validateTenantId(tenantId);
+
+        // Auto-instantiate fixed expenses for current month and any months in start-end range
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        await this.checkAndInstantiateFixedExpenses(validTenantId, currentMonth);
+        
+        if (start && end) {
+            let tempDate = new Date(start);
+            tempDate.setUTCDate(1);
+            while (tempDate <= end) {
+                const mStr = `${tempDate.getUTCFullYear()}-${String(tempDate.getUTCMonth() + 1).padStart(2, '0')}`;
+                await this.checkAndInstantiateFixedExpenses(validTenantId, mStr);
+                tempDate.setUTCMonth(tempDate.getUTCMonth() + 1);
+            }
+        }
+
         let query = 'SELECT *, COUNT(*) OVER() AS total_count FROM psychotherapy_expenses WHERE tenant_id = $1';
         const params: any[] = [validTenantId];
         
@@ -742,6 +758,42 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return result.rows.length > 0;
     }
 
+    private async checkAndInstantiateFixedExpenses(tenantId: string, monthStr: string): Promise<void> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const fixedExpenses = await this.listFixedExpenses(validTenantId);
+        
+        for (const fe of fixedExpenses) {
+            if (!fe.active) continue;
+            
+            const startMonth = fe.startDate.substring(0, 7); // YYYY-MM
+            if (monthStr < startMonth) continue;
+            
+            if (fe.endDate) {
+                const endMonth = fe.endDate.substring(0, 7); // YYYY-MM
+                if (monthStr > endMonth) continue;
+            }
+            
+            const exists = await this.expenseExistsForMonth(validTenantId, fe.id, monthStr);
+            if (!exists) {
+                const [yearStr, mStr] = monthStr.split('-');
+                const year = parseInt(yearStr, 10);
+                const monthIdx = parseInt(mStr, 10) - 1;
+                const day = Math.min(fe.dayOfMonth, 28);
+                const date = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0));
+                
+                await this.saveExpense({
+                    tenantId: validTenantId,
+                    date,
+                    amountCents: fe.amountCents,
+                    description: fe.description,
+                    category: (fe.category || 'other') as any,
+                    fixedExpenseId: fe.id,
+                    referenceMonth: monthStr
+                });
+            }
+        }
+    }
+
     async getDashboardAnalytics(tenantId: string, currentMonthStr: string): Promise<DashboardAnalytics> {
         const validTenantId = this.validateTenantId(tenantId);
 
@@ -753,6 +805,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         // If currentMonth is 2026-06, range starts 2026-01-01 and ends before 2026-07-01
         const startDate = new Date(Date.UTC(currentYearNum, currentMonthNum - 6, 1));
         const endDate = new Date(Date.UTC(currentYearNum, currentMonthNum, 1));
+
+        // Auto-instantiate fixed expenses for the 6 months trend
+        let tempDate = new Date(startDate);
+        while (tempDate < endDate) {
+            const mStr = `${tempDate.getUTCFullYear()}-${String(tempDate.getUTCMonth() + 1).padStart(2, '0')}`;
+            await this.checkAndInstantiateFixedExpenses(validTenantId, mStr);
+            tempDate.setUTCMonth(tempDate.getUTCMonth() + 1);
+        }
 
         // Query 1: Trend of revenue and expenses for the 6 months (includes the current month)
         // Revenue sourced from monthly_records so payments marked in Faturamento Mensal
@@ -795,8 +855,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             SELECT
                 COALESCE(r.month, e.month) as month,
                 COALESCE(r.total, 0) as revenue,
+                COALESCE(mr.total, 0) as session_revenue,
                 COALESCE(e.total, 0) as expenses
             FROM combined_revenue r
+            LEFT JOIN monthly_records_revenue mr ON r.month = mr.month
             FULL OUTER JOIN expenses_by_month e ON r.month = e.month
         `, [validTenantId, startDate, endDate, startMonthStr, endMonthStr]);
 
@@ -817,10 +879,11 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const pendingCents = parseInt(pendingResult.rows[0].pending, 10);
 
         // Map trend results to a lookup map
-        const dbTrendMap = new Map<string, { revenue: number; expenses: number }>();
+        const dbTrendMap = new Map<string, { revenue: number; sessionRevenue: number; expenses: number }>();
         for (const row of trendResult.rows) {
             dbTrendMap.set(row.month, {
                 revenue: parseInt(row.revenue, 10),
+                sessionRevenue: parseInt(row.session_revenue, 10),
                 expenses: parseInt(row.expenses, 10)
             });
         }
@@ -836,7 +899,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         }
 
         const sixMonthsTrend = monthsList.map(m => {
-            const data = dbTrendMap.get(m) || { revenue: 0, expenses: 0 };
+            const data = dbTrendMap.get(m) || { revenue: 0, sessionRevenue: 0, expenses: 0 };
             return {
                 month: m,
                 revenueCents: data.revenue,
@@ -845,13 +908,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         });
 
         // Current month values from trend
-        const currentMonthData = dbTrendMap.get(currentMonthStr) || { revenue: 0, expenses: 0 };
+        const currentMonthData = dbTrendMap.get(currentMonthStr) || { revenue: 0, sessionRevenue: 0, expenses: 0 };
         const revenueCents = currentMonthData.revenue;
+        const sessionRevenueCents = currentMonthData.sessionRevenue;
         const expensesCents = currentMonthData.expenses;
 
         return {
             currentMonth: {
                 revenueCents,
+                sessionRevenueCents,
                 expensesCents,
                 netIncomeCents: revenueCents - expensesCents,
                 pendingCents

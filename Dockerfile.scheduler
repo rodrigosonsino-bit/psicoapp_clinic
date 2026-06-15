@@ -1,6 +1,7 @@
 # --- Build Stage ---
 FROM node:20-alpine AS builder
 WORKDIR /monorepo
+ENV NODE_ENV=development
 
 # Copy workspace manifests for layer caching
 COPY package*.json ./
@@ -8,7 +9,7 @@ COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
 COPY apps/scheduler-api/package.json ./apps/scheduler-api/
 
 # Install all deps (including devDeps needed for tsc)
-RUN npm install --ignore-scripts --legacy-peer-deps
+RUN npm ci --ignore-scripts
 
 # Copy source
 COPY packages/whatsapp-core/ ./packages/whatsapp-core/
@@ -28,7 +29,7 @@ COPY packages/whatsapp-core/package.json ./packages/whatsapp-core/
 COPY apps/scheduler-api/package.json ./apps/scheduler-api/
 
 # Install only production dependencies (workspace symlinks are created here)
-RUN npm install --omit=dev --ignore-scripts --legacy-peer-deps
+RUN npm ci --omit=dev --ignore-scripts
 
 # Copy compiled output
 COPY --from=builder /monorepo/packages/whatsapp-core/dist ./packages/whatsapp-core/dist

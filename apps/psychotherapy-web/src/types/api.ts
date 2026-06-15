@@ -130,6 +130,7 @@ export interface TenantProfile {
 export interface DashboardAnalytics {
   currentMonth: {
     revenueCents: number;
+    sessionRevenueCents: number;
     expensesCents: number;
     netIncomeCents: number;
     pendingCents: number;

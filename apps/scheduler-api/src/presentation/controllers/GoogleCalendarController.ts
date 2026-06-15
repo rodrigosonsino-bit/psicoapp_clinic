@@ -14,7 +14,9 @@ export class GoogleCalendarController {
     async getAuthUrl(req: Request, res: Response): Promise<void> {
         try {
             const userId = (req as any).userId;
-            const authUrl = this.googleClient.getAuthUrl(userId);
+            const platform = req.query.platform as string | undefined;
+            const redirectUri = req.query.redirect_uri as string | undefined;
+            const authUrl = this.googleClient.getAuthUrl(userId, platform, redirectUri);
             res.json({ url: authUrl });
         } catch (error: any) {
             logger.error({ error }, 'Erro ao gerar URL de autenticação do Google');
@@ -28,7 +30,13 @@ export class GoogleCalendarController {
             const isMock = req.query.mock === 'true';
             const stateUserId = req.query.state as string;
 
-            await this.googleClient.handleCallback(code, isMock, stateUserId);
+            const { redirectUri } = await this.googleClient.handleCallback(code, isMock, stateUserId);
+
+            if (redirectUri) {
+                const separator = redirectUri.includes('?') ? '&' : '?';
+                res.redirect(`${redirectUri}${separator}success=true`);
+                return;
+            }
 
             // Redirecionar de volta para o frontend (Expo Web ou app mobile se soubermos, ou uma página simples de sucesso)
             res.send(`

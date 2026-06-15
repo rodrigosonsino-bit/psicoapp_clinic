@@ -77,7 +77,7 @@ export async function usePostgresAuthState(
             const data: { [id: string]: SignalDataTypeMap[T] } = {};
             await Promise.all(
                 ids.map(async (id) => {
-                    const value = await readData(`${type}-${id}`);
+                    const value = await readData(`${String(type)}-${id}`);
                     data[id] = value;
                 })
             );

@@ -366,6 +366,7 @@ describe('E2E - API Integration Tests', () => {
             const mockAnalytics = {
                 currentMonth: {
                     revenueCents: 100000,
+                    sessionRevenueCents: 80000,
                     expensesCents: 50000,
                     netIncomeCents: 50000,
                     pendingCents: 20000

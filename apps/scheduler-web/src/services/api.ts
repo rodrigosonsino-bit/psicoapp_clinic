@@ -141,8 +141,10 @@ export interface GoogleCalendarItem {
     backgroundColor?: string;
 }
 
-export const getGoogleAuthUrl = async () => {
-    const response = await api.get<{ url: string }>('/google/auth-url');
+export const getGoogleAuthUrl = async (platform?: string, redirectUri?: string) => {
+    const response = await api.get<{ url: string }>('/google/auth-url', {
+        params: { platform, redirect_uri: redirectUri }
+    });
     return response.data;
 };
 

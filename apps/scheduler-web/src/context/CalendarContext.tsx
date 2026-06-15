@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { Alert, Platform, Linking } from 'react-native';
+import { Alert, Platform } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useAuth } from './AuthContext';
 import { 
   getGoogleCalendarStatus, disconnectGoogleCalendar, syncGoogleCalendar, 
@@ -65,42 +67,74 @@ export function CalendarProvider({ children }: { children: React.ReactNode }) {
 
   const connectCalendar = useCallback(async (onSuccess: () => void) => {
     try {
-      const { url } = await getGoogleAuthUrl();
       if (Platform.OS === 'web') {
+        const { url } = await getGoogleAuthUrl();
         window.open(url, '_blank');
-      } else {
-        Linking.openURL(url);
-      }
-      
-      // Monitor connection changes safely
-      let checks = 0;
-      if (calendarIntervalRef.current) {
-        clearInterval(calendarIntervalRef.current);
-      }
-      
-      calendarIntervalRef.current = setInterval(async () => {
-        checks++;
-        try {
-          const status = await getGoogleCalendarStatus();
-          if (status.connected) {
-            setCalendarStatus(status);
-            Alert.alert('Sucesso', 'Google Calendar integrado com sucesso!');
-            onSuccess();
+        
+        // Monitor connection changes safely
+        let checks = 0;
+        if (calendarIntervalRef.current) {
+          clearInterval(calendarIntervalRef.current);
+        }
+        
+        calendarIntervalRef.current = setInterval(async () => {
+          checks++;
+          try {
+            const status = await getGoogleCalendarStatus();
+            if (status.connected) {
+              setCalendarStatus(status);
+              Alert.alert('Sucesso', 'Google Calendar integrado com sucesso!');
+              onSuccess();
+              if (calendarIntervalRef.current) {
+                clearInterval(calendarIntervalRef.current);
+                calendarIntervalRef.current = null;
+              }
+            }
+          } catch (e) {
+            console.log('Error checking calendar status during handshake:', e);
+          }
+          if (checks > 12) {
             if (calendarIntervalRef.current) {
               clearInterval(calendarIntervalRef.current);
               calendarIntervalRef.current = null;
             }
           }
-        } catch (e) {
-          console.log('Error checking calendar status during handshake:', e);
-        }
-        if (checks > 12) {
-          if (calendarIntervalRef.current) {
-            clearInterval(calendarIntervalRef.current);
-            calendarIntervalRef.current = null;
+        }, 5000);
+      } else {
+        const redirectUri = Linking.createURL('google-callback');
+        const { url } = await getGoogleAuthUrl(Platform.OS, redirectUri);
+        
+        const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+        
+        if (result.type === 'success') {
+          const status = await getGoogleCalendarStatus();
+          if (status.connected) {
+            setCalendarStatus(status);
+            Alert.alert('Sucesso', 'Google Calendar integrado com sucesso!');
+            onSuccess();
+          } else {
+            // Fallback check loop in case DB is slightly delayed
+            let checks = 0;
+            const checkInterval = setInterval(async () => {
+              checks++;
+              try {
+                const retryStatus = await getGoogleCalendarStatus();
+                if (retryStatus.connected) {
+                  setCalendarStatus(retryStatus);
+                  Alert.alert('Sucesso', 'Google Calendar integrado com sucesso!');
+                  onSuccess();
+                  clearInterval(checkInterval);
+                }
+              } catch (e) {
+                console.log('Error checking status on redirect fallback:', e);
+              }
+              if (checks >= 5) {
+                clearInterval(checkInterval);
+              }
+            }, 2000);
           }
         }
-      }, 5000);
+      }
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível iniciar conexão com Google Calendar.');
     }

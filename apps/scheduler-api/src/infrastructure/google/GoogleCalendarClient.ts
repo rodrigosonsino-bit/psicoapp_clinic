@@ -60,8 +60,12 @@ export class GoogleCalendarClient {
         return secret;
     }
 
-    public getAuthUrl(userId: string): string {
-        const stateToken = jwt.sign({ tenantId: userId }, this.getOAuthStateSecret(), { expiresIn: '15m' });
+    public getAuthUrl(userId: string, platform?: string, redirectUri?: string): string {
+        const stateToken = jwt.sign(
+            { tenantId: userId, platform, redirectUri }, 
+            this.getOAuthStateSecret(), 
+            { expiresIn: '15m' }
+        );
 
         // Se as credenciais do Google não estiverem configuradas no .env, podemos rodar um fluxo mock
         if (process.env.GOOGLE_CLIENT_ID === 'MOCK_CLIENT_ID' || !process.env.GOOGLE_CLIENT_ID) {
@@ -80,23 +84,35 @@ export class GoogleCalendarClient {
         });
     }
 
-    public async handleCallback(code: string, isMock: boolean = false, stateToken?: string): Promise<GoogleCalendarConfig> {
+    public async handleCallback(
+        code: string, 
+        isMock: boolean = false, 
+        stateToken?: string
+    ): Promise<GoogleCalendarConfig & { platform?: string; redirectUri?: string }> {
         let accessToken = 'mock_access_token';
         let refreshToken = 'mock_refresh_token';
         let expiryDate = Date.now() + 3600 * 1000;
         let email = 'rodrigo@example.com';
         let userId: string;
+        let platform: string | undefined;
+        let redirectUri: string | undefined;
 
         if (!stateToken) {
             throw new Error('Parâmetro state ausente na resposta do Google OAuth.');
         }
 
         try {
-            const decoded = jwt.verify(stateToken, this.getOAuthStateSecret()) as { tenantId?: string };
+            const decoded = jwt.verify(stateToken, this.getOAuthStateSecret()) as { 
+                tenantId?: string; 
+                platform?: string; 
+                redirectUri?: string; 
+            };
             if (!decoded.tenantId) {
                 throw new Error('tenantId ausente no state.');
             }
             userId = decoded.tenantId;
+            platform = decoded.platform;
+            redirectUri = decoded.redirectUri;
         } catch (err) {
             logger.error({ err }, 'Falha na verificação de assinatura do JWT State do Google OAuth.');
             throw new Error('Google OAuth State inválido ou expirado.');
@@ -129,7 +145,11 @@ export class GoogleCalendarClient {
         };
 
         await this.saveConfig(config);
-        return config;
+        return {
+            ...config,
+            platform,
+            redirectUri
+        };
     }
 
     public async getActiveConfigs(): Promise<GoogleCalendarConfig[]> {

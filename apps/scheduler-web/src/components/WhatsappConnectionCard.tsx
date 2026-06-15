@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, TextInput, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, TextInput, Image, StyleSheet, Alert } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useWhatsapp } from '../context/WhatsappContext';
 
 export function WhatsappConnectionCard() {
@@ -17,6 +18,13 @@ export function WhatsappConnectionCard() {
     disconnectWhatsapp,
     generatePairingCode
   } = useWhatsapp();
+
+  const handleCopyCode = async () => {
+    if (pairingCode) {
+      await Clipboard.setStringAsync(pairingCode);
+      Alert.alert('Sucesso', 'Código de pareamento copiado para a área de transferência!');
+    }
+  };
 
   return (
     <View style={styles.calendarCard}>
@@ -122,11 +130,18 @@ export function WhatsappConnectionCard() {
                     Insira este código nas configurações de Aparelhos Conectados do seu WhatsApp:
                   </Text>
                   
-                  <View style={styles.pairingCodeBox}>
+                  <TouchableOpacity 
+                    style={[styles.pairingCodeBox, { alignItems: 'center' }]} 
+                    onPress={handleCopyCode}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.pairingCodeText}>
                       {pairingCode}
                     </Text>
-                  </View>
+                    <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: 'bold', marginTop: 6, letterSpacing: 0.5 }}>
+                      📋 Tocar para copiar código
+                    </Text>
+                  </TouchableOpacity>
                   
                   <View style={styles.instructionsBox}>
                     <Text style={styles.instructionsHeader}>👉 Como conectar no celular:</Text>

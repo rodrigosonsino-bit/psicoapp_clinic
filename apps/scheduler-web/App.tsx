@@ -941,8 +941,8 @@ export function MainDashboard() {
       )}
           </>
         }
-        ListFooterComponent={() => (
-          <>
+        ListFooterComponent={
+          <View>
             {loadingMore && <ActivityIndicator size="small" color="#25D366" style={{ marginVertical: 20 }} />}
 
             {/* Cards de configuração — abaixo das mensagens */}
@@ -954,7 +954,7 @@ export function MainDashboard() {
             />
 
             <AISecretaryConsole
-              isAuthenticated={isAuthenticated}
+              aiSettings={aiSettings}
               onOpenSettings={() => setShowAiSettingsModal(true)}
               onPrefillRequest={(data) => {
                 setAiPrefillData(data);
@@ -966,8 +966,8 @@ export function MainDashboard() {
               isAuthenticated={isAuthenticated}
               getWeeklyReportCsvUrl={getWeeklyReportCsvUrl}
             />
-          </>
-        )}
+          </View>
+        }
         ListEmptyComponent={
           !loading && !apiError ? <Text style={styles.emptyText}>Nenhuma mensagem agendada no momento.</Text> : null
         }

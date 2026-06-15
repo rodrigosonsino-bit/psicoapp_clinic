@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
-import { TrendingUp, TrendingDown, DollarSign, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, AlertCircle, User } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { DashboardAnalytics, Appointment, Patient, PaginatedResponse } from '../types/api';
 import { formatCurrency, translateAppointmentStatus } from '../utils/formatters';
@@ -84,6 +84,7 @@ export default function Dashboard() {
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
+          <SkeletonCard />
         </div>
 
         <div className="chart-section mt-4">
@@ -127,6 +128,16 @@ export default function Dashboard() {
           <div className="stat-details">
             <h3>Receitas (Pagas)</h3>
             <p className="stat-value text-success">{formatCurrency(cm.revenueCents)}</p>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.06)', color: 'var(--status-success)' }}>
+            <User size={28} />
+          </div>
+          <div className="stat-details">
+            <h3>Sessões Individuais</h3>
+            <p className="stat-value text-success">{formatCurrency(cm.sessionRevenueCents)}</p>
           </div>
         </div>
 
