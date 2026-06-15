@@ -10,14 +10,13 @@ export function WhatsappConnectionCard() {
     whatsappLoading,
     pairingCode,
     pairingLoading,
-    usePairingCode,
-    pairingPhone,
-    setUsePairingCode,
-    setPairingPhone,
     connectWhatsapp,
     disconnectWhatsapp,
     generatePairingCode
   } = useWhatsapp();
+
+  const [usePairingCode, setUsePairingCode] = React.useState(false);
+  const [pairingPhone, setPairingPhone] = React.useState('');
 
   const handleCopyCode = async () => {
     if (pairingCode) {
@@ -135,7 +134,7 @@ export function WhatsappConnectionCard() {
                     onPress={handleCopyCode}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.pairingCodeText}>
+                    <Text selectable={true} style={styles.pairingCodeText}>
                       {pairingCode}
                     </Text>
                     <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: 'bold', marginTop: 6, letterSpacing: 0.5 }}>

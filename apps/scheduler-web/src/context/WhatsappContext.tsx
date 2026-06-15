@@ -14,10 +14,6 @@ interface WhatsappContextType {
   whatsappLoading: boolean;
   pairingCode: string | null;
   pairingLoading: boolean;
-  usePairingCode: boolean;
-  pairingPhone: string;
-  setUsePairingCode: React.Dispatch<React.SetStateAction<boolean>>;
-  setPairingPhone: React.Dispatch<React.SetStateAction<string>>;
   setWhatsappStatus: React.Dispatch<React.SetStateAction<WhatsappConnectionStatus>>;
   setWhatsappQr: React.Dispatch<React.SetStateAction<string | null>>;
   fetchWhatsappStatus: () => Promise<void>;
@@ -35,8 +31,6 @@ export function WhatsappProvider({ children }: { children: React.ReactNode }) {
   const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
   
-  const [usePairingCode, setUsePairingCode] = useState(false);
-  const [pairingPhone, setPairingPhone] = useState('');
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [pairingLoading, setPairingLoading] = useState(false);
 
@@ -117,8 +111,6 @@ export function WhatsappProvider({ children }: { children: React.ReactNode }) {
       setWhatsappStatus({ connected: false, status: 'disconnected', hasQr: false });
       setWhatsappQr(null);
       setPairingCode(null);
-      setPairingPhone('');
-      setUsePairingCode(false);
     }
 
     return () => {
@@ -200,10 +192,6 @@ export function WhatsappProvider({ children }: { children: React.ReactNode }) {
         whatsappLoading,
         pairingCode,
         pairingLoading,
-        usePairingCode,
-        pairingPhone,
-        setUsePairingCode,
-        setPairingPhone,
         setWhatsappStatus,
         setWhatsappQr,
         fetchWhatsappStatus,
