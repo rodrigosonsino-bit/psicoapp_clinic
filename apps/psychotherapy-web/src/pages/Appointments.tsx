@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { Appointment, AppointmentStatus, Patient, PaginatedResponse } from '../types/api';
 import { useToast } from '../context/ToastContext';
@@ -47,6 +47,7 @@ export default function Appointments() {
   const [viewType, setViewType] = useState<'all' | 'day' | 'week' | 'month'>('week');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [prefilledDate, setPrefilledDate] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const toast = useToast();
   const PAGE_SIZE = 20;
 
@@ -206,6 +207,19 @@ export default function Appointments() {
     navigator.clipboard.writeText(url).then(() => toast.success('Link copiado! Envie para o paciente.'));
   };
 
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    try {
+      await fetchApi('/api/google/sync', { method: 'POST' });
+      toast.success('Google Calendar sincronizado!');
+      await loadAppointments();
+    } catch {
+      toast.error('Falha ao sincronizar. Tente novamente.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSlotClick = (date: Date) => {
     setEditAppointment(null);
     setPrefilledDate(date.toISOString().slice(0, 16));
@@ -265,9 +279,15 @@ export default function Appointments() {
     <div className="appointments-page animate-fade-in">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-h1">Agendamentos</h1>
-        <button className="btn btn-primary" onClick={() => { setEditAppointment(null); setPrefilledDate(null); setShowModal(true); }}>
-          <Plus size={18} /> Novo Agendamento
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn btn-secondary" onClick={handleSyncNow} disabled={syncing} title="Sincronizar com Google Calendar">
+            <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+            {syncing ? 'Sincronizando...' : 'Sincronizar'}
+          </button>
+          <button className="btn btn-primary" onClick={() => { setEditAppointment(null); setPrefilledDate(null); setShowModal(true); }}>
+            <Plus size={18} /> Novo Agendamento
+          </button>
+        </div>
       </div>
 
       {/* Filtro e Seletor de Visualização */}

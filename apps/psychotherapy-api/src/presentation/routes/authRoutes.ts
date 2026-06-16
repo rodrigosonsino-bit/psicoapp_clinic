@@ -4,9 +4,10 @@ import { container } from '../../container';
 import { AuthController } from '../controllers/AuthController';
 import { TotpController } from '../controllers/TotpController';
 import { GoogleAuthController } from '../controllers/GoogleAuthController';
+import { SyncGoogleCalendarEventsUseCase } from '../../application/useCases/SyncGoogleCalendarEventsUseCase';
 import { validateBody } from '../middlewares/validationMiddleware';
 import { asyncHandler } from '../middlewares/asyncHandler';
-import { authMiddleware } from '../middlewares/authMiddleware';
+import { authMiddleware, AuthenticatedRequest } from '../middlewares/authMiddleware';
 
 const registerSchema = z.object({
     name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
@@ -48,6 +49,16 @@ export function createAuthRoutes(): Router {
     router.get('/google/callback', asyncHandler((req, res) => googleAuthController.callback(req, res)));
     router.get('/google/status', authMiddleware, asyncHandler((req, res) => googleAuthController.status(req, res)));
     router.delete('/google/disconnect', authMiddleware, asyncHandler((req, res) => googleAuthController.disconnect(req, res)));
+
+    router.post('/google/sync', authMiddleware, asyncHandler(async (req, res) => {
+        const tenantId = (req as AuthenticatedRequest).tenantId;
+        if (!tenantId) {
+            return res.status(401).json({ error: 'Tenant não identificado' });
+        }
+        const syncUseCase = container.resolve(SyncGoogleCalendarEventsUseCase);
+        await syncUseCase.executeForTenant(tenantId);
+        return res.json({ ok: true });
+    }));
 
     return router;
 }

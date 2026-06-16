@@ -70,6 +70,13 @@ export class SyncGoogleCalendarEventsUseCase {
         }
     }
 
+    async executeForTenant(tenantId: string): Promise<void> {
+        const configs = await this.repository.listAllGoogleOAuthTokens();
+        const config = configs.find(c => c.tenantId === tenantId);
+        if (!config) return;
+        await this.syncTenantEvents(config);
+    }
+
     private async syncTenantEvents(config: GoogleOAuthTokens): Promise<void> {
         const auth = await this.googleCalendar.getAuthenticatedClient(config.tenantId);
         if (!auth) return;
