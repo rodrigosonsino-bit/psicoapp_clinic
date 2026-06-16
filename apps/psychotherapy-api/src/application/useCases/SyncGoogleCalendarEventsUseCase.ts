@@ -5,6 +5,7 @@ import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalenda
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { AppointmentStatus, RecurrenceType } from '../../domain/models/PsychotherapyAppointment';
 import { logger } from '../../infrastructure/logger';
+import { PASTORAL_SENTINEL_EMAIL, PASTORAL_SUMMARY_PREFIX, PASTORAL_TITLE_REGEX } from '../../domain/constants/pastoral';
 
 @injectable()
 export class SyncGoogleCalendarEventsUseCase {
@@ -12,6 +13,44 @@ export class SyncGoogleCalendarEventsUseCase {
         @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository,
         @inject('GoogleCalendarService') private readonly googleCalendar: GoogleCalendarService
     ) {}
+
+    private isPastoralEvent(summary: string): boolean {
+        return PASTORAL_TITLE_REGEX.test(summary.trim());
+    }
+
+    private extractPastoralTitle(summary: string): string {
+        const cleaned = summary.trim().replace(PASTORAL_TITLE_REGEX, '').trim();
+        return cleaned || 'Compromisso Pastoral';
+    }
+
+    private async findOrCreatePastoralPatient(
+        config: GoogleOAuthTokens,
+        patients: PsychotherapyPatient[]
+    ): Promise<PsychotherapyPatient> {
+        let patient = patients.find(p => p.email === PASTORAL_SENTINEL_EMAIL);
+        if (!patient) {
+            patient = await this.repository.savePatient({
+                tenantId: config.tenantId,
+                name: 'Atendimento Pastoral',
+                status: 'inactive',
+                paymentType: null,
+                defaultSessionPriceCents: null,
+                phone: null,
+                email: PASTORAL_SENTINEL_EMAIL,
+                reminderChannel: 'none'
+            });
+            patients.push(patient);
+            logger.info({ tenantId: config.tenantId, patientId: patient.id }, '⛪ Paciente virtual "Atendimento Pastoral" criado');
+        }
+        return patient;
+    }
+
+    private resolveNotes(patient: PsychotherapyPatient, event: any): string | null {
+        if (patient.email === PASTORAL_SENTINEL_EMAIL) {
+            return `${PASTORAL_SUMMARY_PREFIX}${this.extractPastoralTitle(event.summary ?? '')}`;
+        }
+        return event.description ?? null;
+    }
 
     async execute(): Promise<void> {
         logger.info('🔄 Iniciando ciclo de sincronização de eventos do Google Calendar para o app...');
@@ -115,7 +154,9 @@ export class SyncGoogleCalendarEventsUseCase {
         event: any,
         patients: PsychotherapyPatient[]
     ): Promise<void> {
-        const patient = await this.findOrCreatePatient(config, event, patients);
+        const patient = this.isPastoralEvent(event.summary ?? '')
+            ? await this.findOrCreatePastoralPatient(config, patients)
+            : await this.findOrCreatePatient(config, event, patients);
         const start = new Date(event.start.dateTime);
         const end = new Date(event.end.dateTime);
         const durationMinutes = Math.max(10, Math.round((end.getTime() - start.getTime()) / 60_000));
@@ -138,7 +179,7 @@ export class SyncGoogleCalendarEventsUseCase {
             const unlinked = nearby.data.find(a => !a.googleEventId);
             if (unlinked) {
                 await this.repository.updateAppointmentGoogleEvent(unlinked.id, config.tenantId, event.id, event.htmlLink ?? '');
-                await this.updateExistingAppointment(config, unlinked, { start, durationMinutes, targetStatus, event });
+                await this.updateExistingAppointment(config, unlinked, patient, { start, durationMinutes, targetStatus, event });
                 logger.info({ tenantId: config.tenantId, appointmentId: unlinked.id, eventId: event.id }, '🔗 Agendamento avulso vinculado ao evento do Google Calendar');
                 return;
             }
@@ -149,7 +190,7 @@ export class SyncGoogleCalendarEventsUseCase {
                 const sameSlot = nearby.data[0];
                 logger.info({ tenantId: config.tenantId, appointmentId: sameSlot.id, existingGcalId: sameSlot.googleEventId, newGcalId: event.id }, '🔗 Agendamento existente no mesmo horário — vinculando novo eventId (evita duplicata)');
                 await this.repository.updateAppointmentGoogleEvent(sameSlot.id, config.tenantId, event.id, event.htmlLink ?? '');
-                await this.updateExistingAppointment(config, sameSlot, { start, durationMinutes, targetStatus, event });
+                await this.updateExistingAppointment(config, sameSlot, patient, { start, durationMinutes, targetStatus, event });
                 return;
             }
 
@@ -159,12 +200,12 @@ export class SyncGoogleCalendarEventsUseCase {
                 scheduledAt: start,
                 durationMinutes,
                 status: targetStatus,
-                notes: event.description ?? null
+                notes: this.resolveNotes(patient, event)
             });
             await this.repository.updateAppointmentGoogleEvent(appt.id, config.tenantId, event.id, event.htmlLink ?? '');
             logger.info({ tenantId: config.tenantId, appointmentId: appt.id, eventId: event.id }, '✅ Novo agendamento importado do Google Calendar');
         } else {
-            await this.updateExistingAppointment(config, existingAppt, { start, durationMinutes, targetStatus, event });
+            await this.updateExistingAppointment(config, existingAppt, patient, { start, durationMinutes, targetStatus, event });
         }
     }
 
@@ -236,6 +277,10 @@ export class SyncGoogleCalendarEventsUseCase {
                 const targetStatus = this.resolveStatus(event.status ?? 'tentative');
 
                 if (!existing) {
+                    const patient = this.isPastoralEvent(event.summary ?? '')
+                        ? await this.findOrCreatePastoralPatient(config, patients)
+                        : await this.findOrCreatePatient(config, event, patients);
+
                     // Verificar se já existe um filho da série nessa data sem googleEventId
                     // (criado pelo app antes do pull-sync vincular)
                     const unlinkedSibling = seriesMembers.find(m =>
@@ -245,14 +290,13 @@ export class SyncGoogleCalendarEventsUseCase {
 
                     if (unlinkedSibling) {
                         await this.repository.updateAppointmentGoogleEvent(unlinkedSibling.id, config.tenantId, event.id, event.htmlLink ?? '');
-                        await this.updateExistingAppointment(config, unlinkedSibling, { start, durationMinutes, targetStatus, event });
+                        await this.updateExistingAppointment(config, unlinkedSibling, patient, { start, durationMinutes, targetStatus, event });
                         logger.info({ tenantId: config.tenantId, appointmentId: unlinkedSibling.id, eventId: event.id }, '🔗 Filho de série vinculado ao evento do Google Calendar');
                         continue;
                     }
 
                     // Busca ampla: qualquer agendamento do paciente no mesmo horário,
                     // mesmo fora da série (orphan criado pelo app ou ID base vs. ocorrência)
-                    const patient = await this.findOrCreatePatient(config, event, patients);
                     const wStart = new Date(start.getTime() - 120_000);
                     const wEnd   = new Date(start.getTime() + 120_000);
                     const nearby = await this.repository.listAppointments(config.tenantId, {
@@ -266,7 +310,7 @@ export class SyncGoogleCalendarEventsUseCase {
                     );
                     if (anyExisting) {
                         await this.repository.updateAppointmentGoogleEvent(anyExisting.id, config.tenantId, event.id, event.htmlLink ?? '');
-                        await this.updateExistingAppointment(config, anyExisting, { start, durationMinutes, targetStatus, event });
+                        await this.updateExistingAppointment(config, anyExisting, patient, { start, durationMinutes, targetStatus, event });
                         existingMap.set(event.id, anyExisting);
                         logger.info({ tenantId: config.tenantId, appointmentId: anyExisting.id, eventId: event.id }, '🔗 Agendamento orphan no mesmo horário vinculado (evita duplicata em série)');
                         continue;
@@ -280,7 +324,7 @@ export class SyncGoogleCalendarEventsUseCase {
                         scheduledAt: start,
                         durationMinutes,
                         status: targetStatus,
-                        notes: event.description ?? null,
+                        notes: this.resolveNotes(patient, event),
                         recurrence: isRoot && inferredRecurrence ? inferredRecurrence : 'none',
                         recurrenceEndDate: isRoot && inferredRecurrence ? lastOccurrenceDate : null,
                         parentId: isRoot ? null : rootId
@@ -301,6 +345,11 @@ export class SyncGoogleCalendarEventsUseCase {
                         recurrence: isRoot ? inferredRecurrence : 'child'
                     }, '✅ Ocorrência recorrente importada do Google Calendar');
                 } else {
+                    const patient = patients.find(p => p.id === existing.patientId) ??
+                        (this.isPastoralEvent(event.summary ?? '')
+                            ? await this.findOrCreatePastoralPatient(config, patients)
+                            : await this.findOrCreatePatient(config, event, patients));
+
                     // Garantir que parentId está correto para ocorrências já existentes sem vínculo
                     if (!existing.parentId && rootId && existing.id !== rootId) {
                         await this.repository.saveAppointment({
@@ -317,7 +366,7 @@ export class SyncGoogleCalendarEventsUseCase {
                         });
                     }
 
-                    await this.updateExistingAppointment(config, existing, { start, durationMinutes, targetStatus, event });
+                    await this.updateExistingAppointment(config, existing, patient, { start, durationMinutes, targetStatus, event });
                 }
             } catch (eventErr) {
                 logger.error({ err: eventErr, eventId: event.id, tenantId: config.tenantId }, 'Erro ao sincronizar ocorrência de série do Google Calendar');
@@ -329,11 +378,13 @@ export class SyncGoogleCalendarEventsUseCase {
     private async updateExistingAppointment(
         config: GoogleOAuthTokens,
         existingAppt: any,
+        patient: PsychotherapyPatient,
         { start, durationMinutes, targetStatus, event }: { start: Date; durationMinutes: number; targetStatus: AppointmentStatus; event: any }
     ): Promise<void> {
+        const notesValue = this.resolveNotes(patient, event);
         const timeChanged = existingAppt.scheduledAt.getTime() !== start.getTime();
         const durationChanged = existingAppt.durationMinutes !== durationMinutes;
-        const notesChanged = existingAppt.notes !== (event.description ?? null);
+        const notesChanged = existingAppt.notes !== notesValue;
 
         if (timeChanged || durationChanged || notesChanged) {
             await this.repository.saveAppointment({
@@ -343,7 +394,7 @@ export class SyncGoogleCalendarEventsUseCase {
                 scheduledAt: start,
                 durationMinutes,
                 status: existingAppt.status,
-                notes: event.description ?? null,
+                notes: notesValue,
                 recurrence: existingAppt.recurrence,
                 recurrenceEndDate: existingAppt.recurrenceEndDate,
                 parentId: existingAppt.parentId
@@ -352,8 +403,18 @@ export class SyncGoogleCalendarEventsUseCase {
         }
 
         if (existingAppt.status !== targetStatus) {
-            await this.repository.updateAppointmentStatus(config.tenantId, existingAppt.id, targetStatus);
-            logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id, newStatus: targetStatus }, '🔄 Status do agendamento atualizado a partir do Google Calendar');
+            const isTerminalLocalStatus = ['attended', 'no_show', 'justified_absence', 'unjustified_absence'].includes(existingAppt.status);
+            
+            // Só sobrescrevemos o status local se:
+            // 1. O evento foi cancelado no Google Calendar
+            // 2. O status local atual ainda é apenas de agendamento ('scheduled' ou 'confirmed')
+            // Se o psicólogo já marcou presença/falta no app, o sync do GCal não deve reverter isso
+            if (targetStatus === 'canceled' || !isTerminalLocalStatus) {
+                await this.repository.updateAppointmentStatus(config.tenantId, existingAppt.id, targetStatus);
+                logger.info({ tenantId: config.tenantId, appointmentId: existingAppt.id, oldStatus: existingAppt.status, newStatus: targetStatus }, '🔄 Status do agendamento atualizado a partir do Google Calendar');
+            } else {
+                logger.debug({ tenantId: config.tenantId, appointmentId: existingAppt.id, localStatus: existingAppt.status }, '⏭️ Status local mantido (não sobrescrito pelo GCal)');
+            }
         }
     }
 

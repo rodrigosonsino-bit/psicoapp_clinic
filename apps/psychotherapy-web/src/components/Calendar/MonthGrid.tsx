@@ -27,8 +27,12 @@ export default function MonthGrid({ currentDate, appointments, patients, onDayCl
   const days = eachDayOfInterval({ start: startDate, end: endDate });
   const weekDaysHeaders = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
-  const getPatientFirstName = (id: string) => {
-    const name = patients.find(p => p.id === id)?.name ?? 'Paciente';
+  const getPatientFirstName = (a: Appointment) => {
+    if (a.notes?.startsWith('[PASTORAL_SUMMARY]:')) {
+      const summary = a.notes.replace('[PASTORAL_SUMMARY]:', '').split('\n')[0].trim();
+      return summary.split(' ')[0];
+    }
+    const name = patients.find(p => p.id === a.patientId)?.name ?? 'Paciente';
     return name.split(' ')[0];
   };
 
@@ -67,7 +71,7 @@ export default function MonthGrid({ currentDate, appointments, patients, onDayCl
                     opacity: (a.status === 'canceled' || a.status === 'no_show') ? 0.6 : 1
                   }}
                 >
-                  <span style={{ fontWeight: 600 }}>{format(new Date(a.scheduledAt), 'HH:mm')}</span> {getPatientFirstName(a.patientId)}
+                  <span style={{ fontWeight: 600 }}>{format(new Date(a.scheduledAt), 'HH:mm')}</span> {getPatientFirstName(a)}
                 </div>
               ))}
               

@@ -24,6 +24,7 @@ export default function AppointmentChip({ appointment, patientName, onStatusUpda
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
+  const isPastoral = appointment.notes?.startsWith('[PASTORAL_SUMMARY]:') ?? false;
   const isShort = appointment.durationMinutes < 40;
   const isPast = new Date(appointment.scheduledAt) < new Date();
   const tPx = topPx(appointment.scheduledAt);
@@ -61,7 +62,7 @@ export default function AppointmentChip({ appointment, patientName, onStatusUpda
   return (
     <>
       <div
-        className={`appointment-chip ${isShort ? 'is-short' : ''}`}
+        className={`appointment-chip ${isShort ? 'is-short' : ''} ${isPastoral ? 'is-pastoral' : ''}`}
         style={{
           top: tPx,
           height: hPx,
@@ -107,16 +108,18 @@ export default function AppointmentChip({ appointment, patientName, onStatusUpda
                 {appointment.status === 'attended' && <Check size={14} style={{ marginLeft: 'auto', color: 'var(--brand-primary, #6d5dfc)' }} />}
               </button>
 
-              <button 
-                className={`popover-btn ${appointment.status === 'no_show' ? 'active' : ''}`} 
-                onClick={(e) => handleAction(e, () => onStatusUpdate(appointment.id, 'no_show'))}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <UserX size={14} style={{ color: '#f59e0b' }} />
-                  <span>Paciente faltou (cobrar)</span>
-                </div>
-                {appointment.status === 'no_show' && <Check size={14} style={{ marginLeft: 'auto', color: 'var(--brand-primary, #6d5dfc)' }} />}
-              </button>
+              {!isPastoral && (
+                <button 
+                  className={`popover-btn ${appointment.status === 'no_show' ? 'active' : ''}`} 
+                  onClick={(e) => handleAction(e, () => onStatusUpdate(appointment.id, 'no_show'))}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <UserX size={14} style={{ color: '#f59e0b' }} />
+                    <span>Paciente faltou (cobrar)</span>
+                  </div>
+                  {appointment.status === 'no_show' && <Check size={14} style={{ marginLeft: 'auto', color: 'var(--brand-primary, #6d5dfc)' }} />}
+                </button>
+              )}
 
               <button 
                 className={`popover-btn ${appointment.status === 'canceled' ? 'active' : ''}`} 

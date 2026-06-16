@@ -97,8 +97,11 @@ export default function Appointments() {
         params.set('start', start.toISOString());
         params.set('end', end.toISOString());
       }
+      params.set('_t', Date.now().toString());
 
-      const res = await fetchApi<PaginatedResponse<Appointment>>(`/api/psychotherapy/appointments?${params}`);
+      const res = await fetchApi<PaginatedResponse<Appointment>>(`/api/psychotherapy/appointments?${params}`, {
+        cache: 'no-store'
+      });
       setAppointments(res.data);
       setTotal(res.meta.total);
     } catch (err) {
@@ -114,6 +117,9 @@ export default function Appointments() {
   useEffect(() => { loadAppointments(page, filterPatientId, viewType, currentDate); }, [page, filterPatientId, viewType, currentDate, loadAppointments]);
 
   const handleStatusUpdate = async (id: string, status: AppointmentStatus) => {
+    // Optimistic UI update
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    
     try {
       await fetchApi(`/api/psychotherapy/appointments/${id}/status`, {
         method: 'PATCH',
@@ -123,6 +129,8 @@ export default function Appointments() {
       loadAppointments(page, filterPatientId, viewType, currentDate);
     } catch (err) {
       toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao atualizar status.');
+      // Revert optimistic update by reloading
+      loadAppointments(page, filterPatientId, viewType, currentDate);
     }
   };
 
@@ -598,6 +606,15 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
 
   const initialRecInfo = getInitialRecurrenceInfo();
 
+  const [isPastoral, setIsPastoral] = useState(
+    appointment?.notes?.startsWith('[PASTORAL_SUMMARY]:') ?? false
+  );
+  const [pastoralTitle, setPastoralTitle] = useState(
+    appointment?.notes?.startsWith('[PASTORAL_SUMMARY]:')
+      ? appointment.notes.replace('[PASTORAL_SUMMARY]:', '').split('\n')[0].trim()
+      : ''
+  );
+
   const [formData, setFormData] = useState({
     id: appointment?.id,
     patientId: appointment?.patientId || (patients[0]?.id ?? ''),
@@ -608,7 +625,11 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
     status: appointment?.status ?? 'scheduled',
     recurrence: initialRecInfo.recurrence,
     recurrenceEndDate: initialRecInfo.recurrenceEndDate,
-    notes: appointment?.notes ?? ''
+    notes: appointment?.notes
+      ? (appointment.notes.startsWith('[PASTORAL_SUMMARY]:')
+        ? appointment.notes.split('\n').slice(1).join('\n').trim()
+        : appointment.notes)
+      : ''
   });
 
   const handlePatientChange = (patientId: string) => {
@@ -640,11 +661,15 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
     e.preventDefault();
     try {
       setSubmitting(true);
+      const notesValue = isPastoral
+        ? `[PASTORAL_SUMMARY]: ${pastoralTitle}\n${formData.notes}`.trim()
+        : formData.notes;
+
       const body: Record<string, unknown> = {
         ...formData,
         scheduledAt: new Date(formData.scheduledAt).toISOString(),
         recurrenceEndDate: formData.recurrenceEndDate || null,
-        notes: formData.notes || null
+        notes: notesValue || null
       };
       await fetchApi('/api/psychotherapy/appointments', { method: 'POST', body: JSON.stringify(body) });
       toast.success(appointment ? 'Agendamento atualizado.' : 'Agendamento criado.');
@@ -662,13 +687,49 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
       <div className="modal-content animate-fade-in" style={{ maxWidth: '560px' }}>
         <h2 className="text-h2 mb-4">{appointment ? 'Editar Agendamento' : 'Novo Agendamento'}</h2>
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Paciente *</label>
-            <select required className="form-control" value={formData.patientId}
-              onChange={e => handlePatientChange(e.target.value)} disabled={submitting}>
-              {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+              <input
+                type="checkbox"
+                checked={isPastoral}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setIsPastoral(checked);
+                  if (checked && !pastoralTitle) {
+                    setPastoralTitle('Compromisso Pastoral');
+                  }
+                  if (!checked && formData.patientId === appointment?.patientId) {
+                    setFormData(prev => ({ ...prev, patientId: patients[0]?.id ?? '' }));
+                  }
+                }}
+                disabled={submitting}
+              />
+              Compromisso Pastoral (Não cobrado)
+            </label>
           </div>
+
+          {isPastoral ? (
+            <div className="form-group animate-fade-in">
+              <label className="form-label">Assunto do Compromisso Pastoral *</label>
+              <input
+                required
+                type="text"
+                className="form-control"
+                placeholder="Ex: Reunião do Conselho, Visita, etc."
+                value={pastoralTitle}
+                onChange={e => setPastoralTitle(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+          ) : (
+            <div className="form-group">
+              <label className="form-label">Paciente *</label>
+              <select required className="form-control" value={formData.patientId}
+                onChange={e => handlePatientChange(e.target.value)} disabled={submitting}>
+                {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
 
           <div className="flex gap-4">
             <div className="form-group w-full">

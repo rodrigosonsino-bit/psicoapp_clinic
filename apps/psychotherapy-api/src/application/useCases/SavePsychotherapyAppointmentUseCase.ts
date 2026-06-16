@@ -4,6 +4,7 @@ import { IPsychotherapyRepository, SaveAppointmentDTO } from '../../domain/repos
 import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalendarService';
 import { AppError } from '../../domain/errors/AppError';
 import { logger } from '../../infrastructure/logger';
+import { PASTORAL_SENTINEL_EMAIL, PASTORAL_SUMMARY_PREFIX } from '../../domain/constants/pastoral';
 
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:3000';
 
@@ -15,6 +16,11 @@ export class SavePsychotherapyAppointmentUseCase {
     ) {}
 
     async execute(data: SaveAppointmentDTO & { mode?: 'single' | 'future' | 'all' }): Promise<PsychotherapyAppointment> {
+        if (data.notes?.startsWith(PASTORAL_SUMMARY_PREFIX)) {
+            const virtualPatient = await this.findOrCreatePastoralPatient(data.tenantId);
+            data.patientId = virtualPatient.id;
+        }
+
         if (data.scheduledAt <= new Date(Date.now() - 60_000) && !data.id) {
             throw new AppError('Não é possível agendar sessões no passado', 400);
         }
@@ -150,12 +156,33 @@ export class SavePsychotherapyAppointmentUseCase {
         if (!patient) return;
 
         const confirmUrl = `${APP_BASE_URL}/confirm/${appointment.confirmToken}`;
+        const isPastoral = patient.email === PASTORAL_SENTINEL_EMAIL;
         await this.googleCalendar.syncAppointment(
             tenantId,
             appointment,
             patient.name,
             patient.phone,
-            confirmUrl
+            confirmUrl,
+            isPastoral
         );
+    }
+
+    private async findOrCreatePastoralPatient(tenantId: string): Promise<any> {
+        const patients = await this.repository.listPatients(tenantId);
+        let patient = patients.find(p => p.email === PASTORAL_SENTINEL_EMAIL);
+        if (!patient) {
+            patient = await this.repository.savePatient({
+                tenantId,
+                name: 'Atendimento Pastoral',
+                status: 'inactive',
+                paymentType: null,
+                defaultSessionPriceCents: null,
+                phone: null,
+                email: PASTORAL_SENTINEL_EMAIL,
+                reminderChannel: 'none'
+            });
+            logger.info({ tenantId, patientId: patient.id }, '⛪ Paciente virtual "Atendimento Pastoral" criado (via SaveUsecase)');
+        }
+        return patient;
     }
 }

@@ -18,6 +18,7 @@ import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
 import { TenantProfile } from '../../domain/models/TenantProfile';
 import { PsychotherapyReceipt } from '../../domain/models/PsychotherapyReceipt';
+import { PASTORAL_SENTINEL_EMAIL } from '../../domain/constants/pastoral';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
 import { PsychotherapyFixedExpense } from '../../domain/models/PsychotherapyFixedExpense';
@@ -122,8 +123,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const validTenantId = this.validateTenantId(tenantId);
         if (pagination) {
             const offset = (pagination.page - 1) * pagination.limit;
-            const params: unknown[] = [validTenantId];
-            let whereClause = 'WHERE tenant_id = $1';
+            const params: unknown[] = [validTenantId, PASTORAL_SENTINEL_EMAIL];
+            let whereClause = 'WHERE tenant_id = $1 AND (email IS NULL OR email != $2)';
 
             if (pagination.search) {
                 params.push(`%${pagination.search}%`);

@@ -41,7 +41,12 @@ export default function WeekGrid({ days, appointments, patients, onSlotClick, on
     onSlotClick(date);
   };
 
-  const getPatientName = (id: string) => patients.find(p => p.id === id)?.name ?? id.slice(0, 8);
+  const getPatientName = (appt: Appointment) => {
+    if (appt.notes?.startsWith('[PASTORAL_SUMMARY]:')) {
+      return appt.notes.replace('[PASTORAL_SUMMARY]:', '').split('\n')[0].trim();
+    }
+    return patients.find(p => p.id === appt.patientId)?.name ?? appt.patientId.slice(0, 8);
+  };
 
   return (
     <div className="calendar-grid-scroll" ref={gridRef}>
@@ -91,7 +96,7 @@ export default function WeekGrid({ days, appointments, patients, onSlotClick, on
                 <AppointmentChip
                   key={appt.id}
                   appointment={appt}
-                  patientName={getPatientName(appt.patientId)}
+                  patientName={getPatientName(appt)}
                   onStatusUpdate={onStatusUpdate}
                   onEdit={onEdit}
                   onDelete={onDelete}

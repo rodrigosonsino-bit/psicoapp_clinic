@@ -1,6 +1,7 @@
 import { injectable, inject } from 'tsyringe';
 import { IPsychotherapyRepository } from '../../domain/repositories/IPsychotherapyRepository';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
+import { PASTORAL_SENTINEL_EMAIL } from '../../domain/constants/pastoral';
 
 const EXPECTED_SESSIONS_BY_STATUS = {
     weekly: 4,
@@ -21,7 +22,7 @@ export class GeneratePsychotherapyMonthUseCase {
         const patients = await this.repository.listPatients(tenantId);
 
         // Skip inactive patients — they don't generate monthly records.
-        const activePatients = patients.filter(p => p.status !== 'inactive');
+        const activePatients = patients.filter(p => p.status !== 'inactive' && p.email !== PASTORAL_SENTINEL_EMAIL);
 
         if (activePatients.length === 0) return [];
 

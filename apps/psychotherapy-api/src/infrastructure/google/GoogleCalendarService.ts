@@ -3,6 +3,7 @@ import { injectable, inject } from 'tsyringe';
 import { IPsychotherapyRepository } from '../../domain/repositories/IPsychotherapyRepository';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { logger } from '../logger';
+import { PASTORAL_SUMMARY_PREFIX } from '../../domain/constants/pastoral';
 
 // Usa o OAuth2Client embutido no googleapis para evitar conflito de versões com google-auth-library
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,7 +136,8 @@ export class GoogleCalendarService {
         appointment: PsychotherapyAppointment,
         patientName: string,
         patientPhone: string | null,
-        confirmUrl: string
+        confirmUrl: string,
+        isPastoral = false
     ): Promise<void> {
         const auth = await this.getAuthenticatedClient(tenantId);
         if (!auth) {
@@ -156,16 +158,31 @@ export class GoogleCalendarService {
             return;
         }
 
+        let summary = patientName;
+        let description = [
+            `Paciente: ${patientName}`,
+            patientPhone ? `WhatsApp: ${patientPhone}` : null,
+            appointment.notes ? `Obs: ${appointment.notes}` : null,
+            '',
+            `🔗 Link de confirmação do paciente:`,
+            confirmUrl,
+        ].filter(Boolean).join('\n');
+
+        if (isPastoral) {
+            const notes = appointment.notes ?? '';
+            if (notes.startsWith(PASTORAL_SUMMARY_PREFIX)) {
+                summary = notes.slice(PASTORAL_SUMMARY_PREFIX.length).split('\n')[0].trim();
+                const lines = notes.slice(PASTORAL_SUMMARY_PREFIX.length).split('\n');
+                description = lines.slice(1).join('\n').trim();
+            } else {
+                summary = notes.split('\n')[0].trim() || 'Compromisso Pastoral';
+                description = notes.split('\n').slice(1).join('\n').trim();
+            }
+        }
+
         const eventBody: calendar_v3.Schema$Event = {
-            summary: patientName,
-            description: [
-                `Paciente: ${patientName}`,
-                patientPhone ? `WhatsApp: ${patientPhone}` : null,
-                appointment.notes ? `Obs: ${appointment.notes}` : null,
-                '',
-                `🔗 Link de confirmação do paciente:`,
-                confirmUrl,
-            ].filter(Boolean).join('\n'),
+            summary,
+            description,
             start: { dateTime: start.toISOString(), timeZone: TIMEZONE },
             end: { dateTime: end.toISOString(), timeZone: TIMEZONE },
             status: this.mapStatus(appointment.status),
