@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
 import { fetchApi } from '../services/api';
-import type { AvailabilitySlot } from '../types/api';
+import type { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../types/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonTable } from '../components/Skeleton';
@@ -24,7 +24,15 @@ export default function Availability() {
   const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
-  const [formData, setFormData] = useState({ dayOfWeek: 1, startTime: '09:00', durationMinutes: 50, notes: '' });
+  const [formData, setFormData] = useState({
+    dayOfWeek: 1,
+    startTime: '09:00',
+    durationMinutes: 50,
+    notes: '',
+    recurrenceType: 'weekly' as AvailabilityRecurrenceType,
+    startDate: '',
+    modality: 'presencial' as AvailabilityModality,
+  });
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
 
@@ -48,7 +56,15 @@ export default function Availability() {
       await fetchApi('/api/psychotherapy/availability', { method: 'POST', body: JSON.stringify(formData) });
       toast.success('Horário adicionado!');
       setShowForm(false);
-      setFormData({ dayOfWeek: 1, startTime: '09:00', durationMinutes: 50, notes: '' });
+      setFormData({
+        dayOfWeek: 1,
+        startTime: '09:00',
+        durationMinutes: 50,
+        notes: '',
+        recurrenceType: 'weekly',
+        startDate: '',
+        modality: 'presencial',
+      });
       load();
     } catch (err) {
       toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao salvar horário.');
@@ -59,7 +75,16 @@ export default function Availability() {
     try {
       await fetchApi('/api/psychotherapy/availability', {
         method: 'POST',
-        body: JSON.stringify({ id: slot.id, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, durationMinutes: slot.durationMinutes, isActive: !slot.isActive })
+        body: JSON.stringify({
+          id: slot.id,
+          dayOfWeek: slot.dayOfWeek,
+          startTime: slot.startTime,
+          durationMinutes: slot.durationMinutes,
+          isActive: !slot.isActive,
+          recurrenceType: slot.recurrenceType,
+          startDate: slot.startDate,
+          modality: slot.modality
+        })
       });
       toast.success(slot.isActive ? 'Horário desativado.' : 'Horário ativado.');
       load();
@@ -76,11 +101,22 @@ export default function Availability() {
     finally { setConfirmDelete({ open: false, id: null }); }
   };
 
-  // Agrupa por dia da semana
+  // Agrupa slots recorrentes por dia da semana
+  const recurringSlots = slots.filter(s => s.recurrenceType !== 'once');
   const byDay = DAY_NAMES.map((name, dow) => ({
     name, dow,
-    slots: slots.filter(s => s.dayOfWeek === dow)
+    slots: recurringSlots.filter(s => s.dayOfWeek === dow)
   })).filter(d => d.slots.length > 0);
+
+  // Ordena os slots avulsos (once) por data
+  const onceSlots = slots.filter(s => s.recurrenceType === 'once')
+    .sort((a, b) => {
+      const dateA = a.startDate ?? '';
+      const dateB = b.startDate ?? '';
+      const compareDate = dateA.localeCompare(dateB);
+      if (compareDate !== 0) return compareDate;
+      return a.startTime.localeCompare(b.startTime);
+    });
 
   return (
     <div className="availability-page animate-fade-in">
@@ -100,14 +136,67 @@ export default function Availability() {
         <div className="card mb-4" style={{ padding: '1.5rem', maxWidth: 480 }}>
           <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 600 }}>Novo Horário Disponível</h3>
           <form onSubmit={handleSubmit}>
-            <div className="flex gap-3 mb-3">
-              <div className="form-group w-full">
-                <label className="form-label">Dia da Semana</label>
-                <select className="form-control" value={formData.dayOfWeek}
-                  onChange={e => setFormData({ ...formData, dayOfWeek: Number(e.target.value) })} disabled={submitting}>
-                  {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
-                </select>
+            {/* Tipo de Recorrência */}
+            <div className="form-group mb-3">
+              <label className="form-label">Tipo</label>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.25rem' }}>
+                {(['weekly', 'biweekly', 'once'] as const).map(type => (
+                  <label key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input
+                      type="radio"
+                      name="recurrenceType"
+                      value={type}
+                      checked={formData.recurrenceType === type}
+                      onChange={() => setFormData(f => ({ ...f, recurrenceType: type, startDate: '' }))}
+                      disabled={submitting}
+                    />
+                    {type === 'weekly' ? 'Semanal' : type === 'biweekly' ? 'Quinzenal' : 'Avulso'}
+                  </label>
+                ))}
               </div>
+            </div>
+
+            {/* Modalidade */}
+            <div className="form-group mb-3">
+              <label className="form-label">Modalidade</label>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.25rem' }}>
+                {(['presencial', 'online', 'both'] as const).map(m => (
+                  <label key={m} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <input
+                      type="radio"
+                      name="modality"
+                      value={m}
+                      checked={formData.modality === m}
+                      onChange={() => setFormData(f => ({ ...f, modality: m }))}
+                      disabled={submitting}
+                    />
+                    {m === 'presencial' ? 'Presencial' : m === 'online' ? 'Online' : 'Ambos'}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mb-3">
+              {/* Dia da semana — só para semanal/quinzenal */}
+              {formData.recurrenceType !== 'once' && (
+                <div className="form-group w-full">
+                  <label className="form-label">Dia da Semana</label>
+                  <select className="form-control" value={formData.dayOfWeek}
+                    onChange={e => setFormData({ ...formData, dayOfWeek: Number(e.target.value) })} disabled={submitting}>
+                    {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Data específica — para avulso */}
+              {formData.recurrenceType === 'once' && (
+                <div className="form-group w-full">
+                  <label className="form-label">Data</label>
+                  <input type="date" required className="form-control" value={formData.startDate}
+                    onChange={e => setFormData({ ...formData, startDate: e.target.value })} disabled={submitting} />
+                </div>
+              )}
+
               <div className="form-group w-full">
                 <label className="form-label">Horário</label>
                 <select className="form-control" value={formData.startTime}
@@ -121,6 +210,19 @@ export default function Availability() {
                   onChange={e => setFormData({ ...formData, durationMinutes: Number(e.target.value) })} disabled={submitting} />
               </div>
             </div>
+
+            {/* Data de início (âncora) — para quinzenal */}
+            {formData.recurrenceType === 'biweekly' && (
+              <div className="form-group mb-3">
+                <label className="form-label">Data da primeira ocorrência</label>
+                <input type="date" required className="form-control" value={formData.startDate}
+                  onChange={e => setFormData({ ...formData, startDate: e.target.value })} disabled={submitting} />
+                <small style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', display: 'block', marginTop: '0.25rem' }}>
+                  O sistema vai calcular as semanas alternadas a partir dessa data.
+                </small>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)} disabled={submitting}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>
@@ -145,33 +247,109 @@ export default function Availability() {
           </button>
         </div>
       ) : (
-        <div className="availability-grid">
-          {byDay.map(({ name, slots: daySlots }) => (
-            <div key={name} className="card availability-day-card">
-              <h3 className="availability-day-title">{name}</h3>
-              <div className="availability-slots">
-                {daySlots.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(slot => (
-                  <div key={slot.id} className={`availability-slot-row ${!slot.isActive ? 'inactive' : ''}`}>
-                    <div className="slot-time">
-                      <strong>{slot.startTime}</strong>
-                      <span>{slot.durationMinutes} min</span>
-                    </div>
-                    <div className="slot-actions">
-                      <button className="btn-icon" title={slot.isActive ? 'Desativar' : 'Ativar'} onClick={() => toggleActive(slot)}>
-                        {slot.isActive
-                          ? <ToggleRight size={20} style={{ color: 'var(--status-success)' }} />
-                          : <ToggleLeft size={20} style={{ color: 'var(--text-muted)' }} />}
-                      </button>
-                      <button className="btn-icon text-danger" title="Remover" onClick={() => setConfirmDelete({ open: true, id: slot.id })}>
-                        <Trash2 size={15} />
-                      </button>
+        <>
+          {byDay.length > 0 && (
+            <div className="mb-5">
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Horários Recorrentes</h2>
+              <div className="availability-grid">
+                {byDay.map(({ name, slots: daySlots }) => (
+                  <div key={name} className="card availability-day-card">
+                    <h3 className="availability-day-title">{name}</h3>
+                    <div className="availability-slots">
+                      {daySlots.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(slot => (
+                        <div key={slot.id} className={`availability-slot-row ${!slot.isActive ? 'inactive' : ''}`} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="slot-time">
+                              <strong>{slot.startTime}</strong>
+                              <span>{slot.durationMinutes} min</span>
+                            </div>
+                            <div className="slot-actions">
+                              <button className="btn-icon" title={slot.isActive ? 'Desativar' : 'Ativar'} onClick={() => toggleActive(slot)}>
+                                {slot.isActive
+                                  ? <ToggleRight size={20} style={{ color: 'var(--status-success)' }} />
+                                  : <ToggleLeft size={20} style={{ color: 'var(--text-muted)' }} />}
+                              </button>
+                              <button className="btn-icon text-danger" title="Remover" onClick={() => setConfirmDelete({ open: true, id: slot.id })}>
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          {/* Badges de Recorrência/Modalidade */}
+                          <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                            <span className={`badge badge-sm ${
+                              slot.recurrenceType === 'biweekly' ? 'badge-warning' : 'badge-success'
+                            }`}>
+                              {slot.recurrenceType === 'biweekly' ? 'Quinzenal' : 'Semanal'}
+                            </span>
+                            <span className="badge badge-sm badge-secondary">
+                              {slot.modality === 'presencial' ? '🏢 Presencial' :
+                               slot.modality === 'online' ? '💻 Online' : '🏢💻 Ambos'}
+                            </span>
+                            {slot.startDate && slot.recurrenceType === 'biweekly' && (
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                desde {new Date(slot.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          ))}
-        </div>
+          )}
+
+          {onceSlots.length > 0 && (
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Datas Avulsas</h2>
+              <div className="availability-grid">
+                <div className="card availability-day-card" style={{ gridColumn: '1 / -1' }}>
+                  <div className="availability-slots" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                    {onceSlots.map(slot => {
+                      const d = slot.startDate ? new Date(slot.startDate + 'T12:00:00') : null;
+                      return (
+                        <div key={slot.id} className={`availability-slot-row ${!slot.isActive ? 'inactive' : ''}`} style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0.75rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="slot-time">
+                              <strong style={{ fontSize: '1.1rem' }}>{slot.startTime}</strong>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                                📅 {d ? d.toLocaleDateString('pt-BR') : ''} ({d ? DAY_NAMES[d.getDay()] : ''})
+                              </span>
+                              <span>{slot.durationMinutes} min</span>
+                            </div>
+                            <div className="slot-actions">
+                              <button className="btn-icon" title={slot.isActive ? 'Desativar' : 'Ativar'} onClick={() => toggleActive(slot)}>
+                                {slot.isActive
+                                  ? <ToggleRight size={20} style={{ color: 'var(--status-success)' }} />
+                                  : <ToggleLeft size={20} style={{ color: 'var(--text-muted)' }} />}
+                              </button>
+                              <button className="btn-icon text-danger" title="Remover" onClick={() => setConfirmDelete({ open: true, id: slot.id })}>
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          {/* Badges de Recorrência/Modalidade */}
+                          <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+                            <span className="badge badge-sm badge-info">
+                              Avulso
+                            </span>
+                            <span className="badge badge-sm badge-secondary">
+                              {slot.modality === 'presencial' ? '🏢 Presencial' :
+                               slot.modality === 'online' ? '💻 Online' : '🏢💻 Ambos'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <ConfirmDialog isOpen={confirmDelete.open} title="Remover horário"

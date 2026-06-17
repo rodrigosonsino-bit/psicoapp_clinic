@@ -104,7 +104,10 @@ export default function BookAppointment() {
           <h2>Sessão agendada!</h2>
           <p className="book-datetime">{formatFull(selectedSlot.datetime)}</p>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            Duração: {selectedSlot.durationMinutes} minutos
+            Duração: {selectedSlot.durationMinutes} minutos · Modalidade: {
+              selectedSlot.modality === 'presencial' ? '🏢 Presencial' :
+              selectedSlot.modality === 'online' ? '💻 Online' : '🏢💻 Presencial ou Online'
+            }
           </p>
           <p style={{ color: 'var(--text-secondary)', marginTop: '1rem', fontSize: '0.9rem' }}>
             Seu terapeuta receberá a confirmação automaticamente.
@@ -189,7 +192,12 @@ export default function BookAppointment() {
                           className={`book-time-btn ${selectedSlot?.datetime === slot.datetime ? 'selected' : ''}`}
                           onClick={() => setSelectedSlot(selectedSlot?.datetime === slot.datetime ? null : slot)}
                         >
-                          {new Date(slot.datetime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          <span className="book-time-value">
+                            {new Date(slot.datetime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="book-time-modality-icon" style={{ marginLeft: '4px', fontSize: '0.75rem', opacity: 0.8 }}>
+                            {slot.modality === 'presencial' ? ' 🏢' : slot.modality === 'online' ? ' 💻' : ' 🏢💻'}
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -205,7 +213,10 @@ export default function BookAppointment() {
                   <CheckCircle size={18} style={{ color: 'var(--status-success)' }} />
                   <div>
                     <strong>{formatFull(selectedSlot.datetime)}</strong>
-                    <span> · {selectedSlot.durationMinutes} min</span>
+                    <span> · {selectedSlot.durationMinutes} min · {
+                      selectedSlot.modality === 'presencial' ? '🏢 Presencial' :
+                      selectedSlot.modality === 'online' ? '💻 Online' : '🏢💻 Presencial/Online'
+                    }</span>
                   </div>
                 </div>
                 <button className="book-confirm-btn" onClick={handleBook} disabled={booking}>

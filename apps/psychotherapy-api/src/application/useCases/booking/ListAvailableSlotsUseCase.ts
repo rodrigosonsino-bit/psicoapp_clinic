@@ -11,6 +11,7 @@ export interface AvailableSlot {
     durationMinutes: number;
     dayOfWeek: number;
     startTime: string;      // "HH:MM"
+    modality: string;
 }
 
 export interface BookingPageInfo {
@@ -23,6 +24,48 @@ export interface BookingPageInfo {
 @injectable()
 export class ListAvailableSlotsUseCase {
     constructor(@inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository) {}
+
+    private toDateStr(d: Date): string {
+        if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
+            return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        }
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    private getWeeksDiff(dateStr1: string, dateStr2: string): number {
+        const [y1, m1, d1] = dateStr1.split('-').map(Number);
+        const [y2, m2, d2] = dateStr2.split('-').map(Number);
+        const utc1 = Date.UTC(y1, m1 - 1, d1);
+        const utc2 = Date.UTC(y2, m2 - 1, d2);
+        return Math.round((utc1 - utc2) / (7 * 24 * 60 * 60 * 1000));
+    }
+
+    private isSlotAvailableOnDate(slot: any, candidateDate: Date): boolean {
+        if (!slot.isActive) return false;
+        if (candidateDate.getDay() !== slot.dayOfWeek) return false;
+
+        switch (slot.recurrenceType) {
+            case 'once':
+                if (!slot.startDate) return false;
+                return this.toDateStr(candidateDate) === this.toDateStr(slot.startDate);
+
+            case 'weekly':
+                if (slot.startDate) {
+                    if (this.toDateStr(candidateDate) < this.toDateStr(slot.startDate)) return false;
+                }
+                return true;
+
+            case 'biweekly': {
+                if (!slot.startDate) return false;
+                const candStr = this.toDateStr(candidateDate);
+                const startStr = this.toDateStr(slot.startDate);
+                const diff = this.getWeeksDiff(candStr, startStr);
+                return diff >= 0 && diff % 2 === 0;
+            }
+            default:
+                return true;
+        }
+    }
 
     async execute(token: string): Promise<BookingPageInfo> {
         const link = await this.repository.findBookingLinkByToken(token);
@@ -72,7 +115,7 @@ export class ListAvailableSlotsUseCase {
             const dow = cursor.getDay(); // 0=Dom…6=Sáb (JS local)
 
             for (const slot of activeSlots) {
-                if (slot.dayOfWeek !== dow) continue;
+                if (!this.isSlotAvailableOnDate(slot, cursor)) continue;
 
                 const [hh, mm] = slot.startTime.split(':').map(Number);
                 const dt = new Date(cursor);
@@ -87,7 +130,8 @@ export class ListAvailableSlotsUseCase {
                         datetime: dt.toISOString(),
                         durationMinutes: slot.durationMinutes,
                         dayOfWeek: slot.dayOfWeek,
-                        startTime: slot.startTime
+                        startTime: slot.startTime,
+                        modality: slot.modality
                     });
                 }
             }

@@ -174,6 +174,9 @@ export interface Appointment {
   updatedAt: string;
 }
 
+export type AvailabilityRecurrenceType = 'weekly' | 'biweekly' | 'once';
+export type AvailabilityModality = 'presencial' | 'online' | 'both';
+
 export interface AvailabilitySlot {
   id: string;
   tenantId: string;
@@ -184,6 +187,9 @@ export interface AvailabilitySlot {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  recurrenceType: AvailabilityRecurrenceType;
+  startDate: string | null;
+  modality: AvailabilityModality;
 }
 
 export interface BookingLinkResult {
@@ -197,6 +203,7 @@ export interface AvailableSlot {
   durationMinutes: number;
   dayOfWeek: number;
   startTime: string;
+  modality: AvailabilityModality;
 }
 
 export interface BookingPageInfo {

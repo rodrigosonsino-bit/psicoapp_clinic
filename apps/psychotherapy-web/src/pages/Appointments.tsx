@@ -22,7 +22,7 @@ const STATUS_BADGE: Record<AppointmentStatus, string> = {
   confirmed: 'success',
   attended: 'success',
   canceled: 'danger',
-  no_show: 'warning',
+  no_show: 'danger',
 };
 
 function formatDateTime(iso: string) {
@@ -416,7 +416,7 @@ export default function Appointments() {
                             <button
                               className="btn-icon"
                               title="Paciente faltou (cobrar)"
-                              style={{ color: '#f59e0b' }}
+                              style={{ color: 'var(--status-danger)' }}
                               onClick={() => handleStatusUpdate(a.id, 'no_show')}
                             >
                               <UserX size={16} />

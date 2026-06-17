@@ -7,7 +7,7 @@ import { PsychotherapyFixedExpense } from '../models/PsychotherapyFixedExpense';
 import { TenantProfile } from '../models/TenantProfile';
 import { AppointmentStatus, PsychotherapyAppointment, RecurrenceType } from '../models/PsychotherapyAppointment';
 import { ClinicalNote } from '../models/ClinicalNote';
-import { AvailabilitySlot } from '../models/AvailabilitySlot';
+import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../models/AvailabilitySlot';
 import { BookingLink } from '../models/BookingLink';
 
 export interface SavePatientDTO {
@@ -248,6 +248,9 @@ export interface SaveAvailabilitySlotDTO {
     durationMinutes?: number;
     isActive?: boolean;
     notes?: string | null;
+    recurrenceType?: AvailabilityRecurrenceType;
+    startDate?: Date | null;
+    modality?: AvailabilityModality;
 }
 
 export interface GoogleOAuthTokens {

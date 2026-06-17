@@ -25,7 +25,7 @@ import { PsychotherapyFixedExpense } from '../../domain/models/PsychotherapyFixe
 import { DashboardAnalytics, SaveExpenseDTO, SaveSessionDTO, SaveClinicalNoteDTO, SaveFixedExpenseDTO } from '../../domain/repositories/IPsychotherapyRepository';
 import { AppointmentStatus, PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
-import { AvailabilitySlot } from '../../domain/models/AvailabilitySlot';
+import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1415,12 +1415,17 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const tenantId = this.validateTenantId(data.tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_availability_slots
-                (id, tenant_id, day_of_week, start_time, duration_minutes, is_active, notes)
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (tenant_id, day_of_week, start_time) DO UPDATE SET
+                (id, tenant_id, day_of_week, start_time, duration_minutes, is_active, notes, recurrence_type, start_date, modality)
+            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (id) DO UPDATE SET
+                day_of_week      = EXCLUDED.day_of_week,
+                start_time       = EXCLUDED.start_time,
                 duration_minutes = EXCLUDED.duration_minutes,
                 is_active        = EXCLUDED.is_active,
                 notes            = EXCLUDED.notes,
+                recurrence_type  = EXCLUDED.recurrence_type,
+                start_date       = EXCLUDED.start_date,
+                modality         = EXCLUDED.modality,
                 updated_at       = NOW()
             RETURNING *;
         `, [
@@ -1430,7 +1435,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.startTime,
             data.durationMinutes ?? 50,
             data.isActive ?? true,
-            data.notes ?? null
+            data.notes ?? null,
+            data.recurrenceType ?? 'weekly',
+            data.startDate ?? null,
+            data.modality ?? 'presencial'
         ]);
         return this.mapAvailabilitySlot(result.rows[0]);
     }
@@ -1665,7 +1673,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.id, row.tenant_id, row.day_of_week,
             typeof row.start_time === 'string' ? row.start_time.slice(0, 5) : String(row.start_time),
             row.duration_minutes, row.is_active, row.notes,
-            new Date(row.created_at), new Date(row.updated_at)
+            new Date(row.created_at), new Date(row.updated_at),
+            (row.recurrence_type ?? 'weekly') as AvailabilityRecurrenceType,
+            row.start_date ? new Date(row.start_date) : null,
+            (row.modality ?? 'presencial') as AvailabilityModality
         );
     }
 

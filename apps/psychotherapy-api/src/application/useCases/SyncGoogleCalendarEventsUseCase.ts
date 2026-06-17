@@ -410,7 +410,7 @@ export class SyncGoogleCalendarEventsUseCase {
         }
 
         if (existingAppt.status !== targetStatus) {
-            const isTerminalLocalStatus = ['attended', 'no_show', 'justified_absence', 'unjustified_absence'].includes(existingAppt.status);
+            const isTerminalLocalStatus = existingAppt.status !== 'scheduled' && existingAppt.status !== 'confirmed';
             
             // Só sobrescrevemos o status local se:
             // 1. O evento foi cancelado no Google Calendar

@@ -261,7 +261,17 @@ export function createPsychotherapyRoutes(): Router {
         startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM inválido'),
         durationMinutes: z.number().int().min(10).max(240).optional().default(50),
         isActive: z.boolean().optional().default(true),
-        notes: z.string().nullable().optional()
+        notes: z.string().nullable().optional(),
+        recurrenceType: z.enum(['weekly', 'biweekly', 'once']).optional().default('weekly'),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD inválido').nullable().optional(),
+        modality: z.enum(['presencial', 'online', 'both']).optional().default('presencial')
+    }).superRefine((data, ctx) => {
+        if (data.recurrenceType === 'once' && !data.startDate) {
+            ctx.addIssue({ code: 'custom', path: ['startDate'], message: 'Data obrigatória para slot avulso' });
+        }
+        if (data.recurrenceType === 'biweekly' && !data.startDate) {
+            ctx.addIssue({ code: 'custom', path: ['startDate'], message: 'Data de início obrigatória para slot quinzenal' });
+        }
     });
     router.get('/psychotherapy/availability', asyncHandler((req, res) => bookingController.listAvailability(req, res)));
     router.post('/psychotherapy/availability', validateBody(availabilitySlotSchema), asyncHandler((req, res) => bookingController.saveAvailability(req, res)));

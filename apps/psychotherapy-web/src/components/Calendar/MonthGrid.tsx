@@ -13,7 +13,7 @@ const STATUS_COLOR: Record<string, string> = {
   confirmed: '#10b981',
   attended: '#059669',
   canceled: 'var(--status-danger)',
-  no_show: 'var(--status-warning)',
+  no_show: 'var(--status-danger)',
 };
 
 export default function MonthGrid({ currentDate, appointments, patients, onDayClick }: Props) {

@@ -17,7 +17,7 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   confirmed: '#10b981',
   attended: '#059669',
   canceled: 'var(--status-danger)',
-  no_show: 'var(--status-warning)',
+  no_show: 'var(--status-danger)',
 };
 
 export default function AppointmentChip({ appointment, patientName, onStatusUpdate, onEdit, onDelete }: Props) {
@@ -114,7 +114,7 @@ export default function AppointmentChip({ appointment, patientName, onStatusUpda
                   onClick={(e) => handleAction(e, () => onStatusUpdate(appointment.id, 'no_show'))}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <UserX size={14} style={{ color: '#f59e0b' }} />
+                    <UserX size={14} style={{ color: 'var(--status-danger)' }} />
                     <span>Paciente faltou (cobrar)</span>
                   </div>
                   {appointment.status === 'no_show' && <Check size={14} style={{ marginLeft: 'auto', color: 'var(--brand-primary, #6d5dfc)' }} />}

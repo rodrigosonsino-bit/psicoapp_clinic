@@ -113,6 +113,9 @@ export interface AvailabilitySlotRow {
     notes: string | null;
     created_at: Date;
     updated_at: Date;
+    recurrence_type: string;
+    start_date: Date | null;
+    modality: string;
 }
 
 // Linha da tabela: psychotherapy_booking_links
