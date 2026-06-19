@@ -27,7 +27,9 @@ import { MessageSchedulerModal } from './src/components/MessageSchedulerModal';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { WhatsappProvider, useWhatsapp } from './src/context/WhatsappContext';
 import { CalendarProvider, useCalendar } from './src/context/CalendarContext';
+import { TelegramProvider } from './src/context/TelegramContext';
 import { WhatsappConnectionCard } from './src/components/WhatsappConnectionCard';
+import { TelegramConnectionCard } from './src/components/TelegramConnectionCard';
 import { CalendarIntegrationCard } from './src/components/CalendarIntegrationCard';
 import { AISecretaryConsole } from './src/components/AISecretaryConsole';
 import { colors, spacing, radius, fontSize } from './src/theme/tokens';
@@ -945,8 +947,15 @@ export function MainDashboard() {
           <View>
             {loadingMore && <ActivityIndicator size="small" color="#25D366" style={{ marginVertical: 20 }} />}
 
-            {/* Cards de configuração — abaixo das mensagens */}
-            <WhatsappConnectionCard />
+            {/* Cards de configuração — lado a lado */}
+            <View style={{ flexDirection: 'row', marginHorizontal: 16, gap: 12, alignItems: 'flex-start', marginBottom: 4 }}>
+              <View style={{ flex: 1 }}>
+                <WhatsappConnectionCard />
+              </View>
+              <View style={{ flex: 1 }}>
+                <TelegramConnectionCard />
+              </View>
+            </View>
 
             <CalendarIntegrationCard
               onOpenCalendarPicker={handleOpenCalendarPicker}
@@ -2764,9 +2773,11 @@ export default function App() {
   return (
     <AuthProvider>
       <WhatsappProvider>
-        <CalendarProvider>
-          <MainDashboard />
-        </CalendarProvider>
+        <TelegramProvider>
+          <CalendarProvider>
+            <MainDashboard />
+          </CalendarProvider>
+        </TelegramProvider>
       </WhatsappProvider>
     </AuthProvider>
   );

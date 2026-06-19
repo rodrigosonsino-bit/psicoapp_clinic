@@ -380,3 +380,15 @@ export const getWhatsappPairingCode = async (phoneNumber: string): Promise<{ suc
     return response.data;
 };
 
+// --- TELEGRAM BOT STATUS ---
+
+export interface TelegramStatus {
+    connected: boolean;
+    botUsername: string | null;
+}
+
+export const getTelegramStatus = async (): Promise<TelegramStatus> => {
+    const response = await api.get<TelegramStatus>('/telegram/status');
+    return response.data;
+};
+

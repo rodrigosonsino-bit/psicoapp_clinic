@@ -4,6 +4,7 @@ import { logger } from '../logger/logger';
 export class TelegramClient {
     private bot: Telegraf | null = null;
     private isReady: boolean = false;
+    private botUsername: string | null = null;
 
     constructor(private readonly token: string) {
         if (token) {
@@ -15,6 +16,10 @@ export class TelegramClient {
         return this.isReady;
     }
 
+    public getBotUsername(): string | null {
+        return this.botUsername;
+    }
+
     async initialize() {
         if (!this.bot) {
             logger.warn('Token do Telegram não fornecido. O Bot do Telegram não será inicializado.');
@@ -23,11 +28,12 @@ export class TelegramClient {
 
         try {
             // Telegraf uses webhook or polling. For this app, polling is easier for local dev.
-            this.bot.launch(); 
+            this.bot.launch();
             this.isReady = true;
             logger.info('✅ Conexão com Telegram (Telegraf) ATIVA.');
-            
+
             const botInfo = await this.bot.telegram.getMe();
+            this.botUsername = botInfo.username ?? null;
             logger.info(`🤖 Bot do Telegram iniciado como @${botInfo.username}`);
 
             this.bot.on('message', (ctx) => {

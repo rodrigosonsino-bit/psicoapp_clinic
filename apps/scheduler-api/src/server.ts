@@ -512,6 +512,7 @@ async function bootstrap() {
             logger.info('Sinal de desligamento recebido. Encerrando serviços (Graceful Shutdown) ...');
             await messageWorker.close();
             await sessionManager.closeAll();
+            await telegramClient.stop();
             await redisConnection.quit();
             await dbPool.end();
             logger.info('Desligamento concluído limpidamente.');

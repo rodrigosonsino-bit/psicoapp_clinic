@@ -8,6 +8,7 @@ import { createMessageRoutes } from './presentation/routes/messageRoutes';
 import { createHealthRoutes } from './presentation/routes/healthRoutes';
 import { createAuthRoutes } from './presentation/routes/authRoutes';
 import { createWhatsappRoutes } from './presentation/routes/whatsappRoutes';
+import { createTelegramRoutes } from './presentation/routes/telegramRoutes';
 import { WhatsappSessionManager } from './infrastructure/whatsapp/WhatsappSessionManager';
 import { GoogleCalendarClient } from './infrastructure/google/GoogleCalendarClient';
 import { GoogleContactsClient } from './infrastructure/google/GoogleContactsClient';
@@ -72,6 +73,7 @@ export function createApp(
 
     app.use('/api', createMessageRoutes(dbPool, redisConnection, telegramClient));
     app.use('/api', createWhatsappRoutes(sessionManager, dbPool));
+    app.use('/api', createTelegramRoutes(telegramClient));
 
     // Gemini AI Secretary Integration
     const aiController = new AISecretaryController(geminiClient);
