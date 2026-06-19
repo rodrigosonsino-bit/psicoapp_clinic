@@ -69,7 +69,8 @@ export class GoogleCalendarClient {
 
         // Se as credenciais do Google não estiverem configuradas no .env, podemos rodar um fluxo mock
         if (process.env.GOOGLE_CLIENT_ID === 'MOCK_CLIENT_ID' || !process.env.GOOGLE_CLIENT_ID) {
-            return `http://localhost:3000/api/google/callback?mock=true&state=${encodeURIComponent(stateToken)}`;
+            const redirectUriEnv = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/google/callback';
+            return `${redirectUriEnv}?mock=true&state=${encodeURIComponent(stateToken)}`;
         }
 
         return this.oauth2Client.generateAuthUrl({

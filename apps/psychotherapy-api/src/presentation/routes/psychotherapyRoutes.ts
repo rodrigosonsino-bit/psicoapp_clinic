@@ -155,6 +155,15 @@ export function createPsychotherapyRoutes(): Router {
     router.get('/book/:token', validateParams(bookingTokenSchema), asyncHandler((req, res) => bookingController.getBookingPage(req, res)));
     router.post('/book/:token', validateParams(bookingTokenSchema), validateBody(bookSlotSchema), asyncHandler((req, res) => bookingController.bookSlot(req, res)));
 
+    // Self-booking público — novo paciente preenche nome + celular
+    const selfBookSlotSchema = z.object({
+        name: z.string().min(2, 'Nome obrigatório (mínimo 2 caracteres)'),
+        phone: z.string().min(8, 'Celular obrigatório'),
+        scheduledAt: z.string().datetime('Data/hora inválida')
+    });
+    router.get('/book-public/:token', validateParams(bookingTokenSchema), asyncHandler((req, res) => bookingController.getPublicBookingPage(req, res)));
+    router.post('/book-public/:token', validateParams(bookingTokenSchema), validateBody(selfBookSlotSchema), asyncHandler((req, res) => bookingController.selfBookSlot(req, res)));
+
     // MercadoPago Webhook
     const { MercadoPagoWebhookController } = require('../controllers/MercadoPagoWebhookController');
     const mpWebhookController: InstanceType<typeof MercadoPagoWebhookController> = container.resolve(MercadoPagoWebhookController);
@@ -273,6 +282,9 @@ export function createPsychotherapyRoutes(): Router {
             ctx.addIssue({ code: 'custom', path: ['startDate'], message: 'Data de início obrigatória para slot quinzenal' });
         }
     });
+    // Token público do terapeuta (autenticado)
+    router.get('/psychotherapy/public-booking-token', authMiddleware, asyncHandler((req, res) => bookingController.getPublicBookingToken(req, res)));
+
     router.get('/psychotherapy/availability', asyncHandler((req, res) => bookingController.listAvailability(req, res)));
     router.post('/psychotherapy/availability', validateBody(availabilitySlotSchema), asyncHandler((req, res) => bookingController.saveAvailability(req, res)));
     router.delete('/psychotherapy/availability/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => bookingController.deleteAvailability(req, res)));

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Trash2, Clock, ToggleLeft, ToggleRight, Pencil, Link2 } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../types/api';
 import { useToast } from '../context/ToastContext';
@@ -10,9 +10,9 @@ import './Availability.css';
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-// Gera opções de hora: 06:00 até 22:00 em blocos de 30 min
-const TIME_OPTIONS = Array.from({ length: 33 }, (_, i) => {
-  const totalMins = 6 * 60 + i * 30;
+// Gera opções de hora: 06:00 até 22:00 em blocos de 5 min
+const TIME_OPTIONS = Array.from({ length: 193 }, (_, i) => {
+  const totalMins = 6 * 60 + i * 5;
   const h = String(Math.floor(totalMins / 60)).padStart(2, '0');
   const m = String(totalMins % 60).padStart(2, '0');
   return `${h}:${m}`;
@@ -23,6 +23,7 @@ export default function Availability() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingSlot, setEditingSlot] = useState<AvailabilitySlot | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [formData, setFormData] = useState({
     dayOfWeek: 1,
@@ -34,6 +35,7 @@ export default function Availability() {
     modality: 'presencial' as AvailabilityModality,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [copyingLink, setCopyingLink] = useState(false);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -49,22 +51,48 @@ export default function Availability() {
 
   useEffect(() => { load(); }, [load]);
 
+  const copyPublicLink = async () => {
+    try {
+      setCopyingLink(true);
+      const res = await fetchApi<{ data: { url: string } }>('/api/psychotherapy/public-booking-token');
+      await navigator.clipboard.writeText(res.data.url);
+      toast.success('Link público de agendamento copiado!');
+    } catch {
+      toast.error('Falha ao gerar link.');
+    } finally {
+      setCopyingLink(false);
+    }
+  };
+
+  const resetForm = () => {
+    setShowForm(false);
+    setEditingSlot(null);
+    setFormData({ dayOfWeek: 1, startTime: '09:00', durationMinutes: 50, notes: '', recurrenceType: 'weekly', startDate: '', modality: 'presencial' });
+  };
+
+  const openEdit = (slot: AvailabilitySlot) => {
+    setEditingSlot(slot);
+    setFormData({
+      dayOfWeek: slot.dayOfWeek,
+      startTime: slot.startTime,
+      durationMinutes: slot.durationMinutes,
+      notes: slot.notes ?? '',
+      recurrenceType: slot.recurrenceType,
+      startDate: slot.startDate ? slot.startDate.slice(0, 10) : '',
+      modality: slot.modality,
+    });
+    setShowForm(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await fetchApi('/api/psychotherapy/availability', { method: 'POST', body: JSON.stringify(formData) });
-      toast.success('Horário adicionado!');
-      setShowForm(false);
-      setFormData({
-        dayOfWeek: 1,
-        startTime: '09:00',
-        durationMinutes: 50,
-        notes: '',
-        recurrenceType: 'weekly',
-        startDate: '',
-        modality: 'presencial',
-      });
+      const base = { ...formData, startDate: formData.startDate || null };
+      const payload = editingSlot ? { ...base, id: editingSlot.id } : base;
+      await fetchApi('/api/psychotherapy/availability', { method: 'POST', body: JSON.stringify(payload) });
+      toast.success(editingSlot ? 'Horário atualizado!' : 'Horário adicionado!');
+      resetForm();
       load();
     } catch (err) {
       toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao salvar horário.');
@@ -127,14 +155,19 @@ export default function Availability() {
             Defina os horários que você disponibiliza para agendamento pelos pacientes
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          <Plus size={18} /> Adicionar Horário
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button className="btn btn-secondary" onClick={copyPublicLink} disabled={copyingLink} title="Gera um link público para qualquer pessoa agendar sem precisar ser paciente cadastrado">
+            <Link2 size={18} /> {copyingLink ? 'Gerando...' : 'Link público'}
+          </button>
+          <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(true); }}>
+            <Plus size={18} /> Adicionar Horário
+          </button>
+        </div>
       </div>
 
       {showForm && (
         <div className="card mb-4" style={{ padding: '1.5rem', maxWidth: 480 }}>
-          <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 600 }}>Novo Horário Disponível</h3>
+          <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 600 }}>{editingSlot ? 'Editar Horário' : 'Novo Horário Disponível'}</h3>
           <form onSubmit={handleSubmit}>
             {/* Tipo de Recorrência */}
             <div className="form-group mb-3">
@@ -224,9 +257,9 @@ export default function Availability() {
             )}
 
             <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)} disabled={submitting}>Cancelar</button>
+              <button type="button" className="btn btn-secondary" onClick={resetForm} disabled={submitting}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? 'Salvando...' : 'Adicionar'}
+                {submitting ? 'Salvando...' : editingSlot ? 'Salvar alterações' : 'Adicionar'}
               </button>
             </div>
           </form>
@@ -264,6 +297,9 @@ export default function Availability() {
                               <span>{slot.durationMinutes} min</span>
                             </div>
                             <div className="slot-actions">
+                              <button className="btn-icon" title="Editar" onClick={() => openEdit(slot)}>
+                                <Pencil size={15} />
+                              </button>
                               <button className="btn-icon" title={slot.isActive ? 'Desativar' : 'Ativar'} onClick={() => toggleActive(slot)}>
                                 {slot.isActive
                                   ? <ToggleRight size={20} style={{ color: 'var(--status-success)' }} />
@@ -274,7 +310,7 @@ export default function Availability() {
                               </button>
                             </div>
                           </div>
-                          
+
                           {/* Badges de Recorrência/Modalidade */}
                           <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
                             <span className={`badge badge-sm ${
@@ -320,6 +356,9 @@ export default function Availability() {
                               <span>{slot.durationMinutes} min</span>
                             </div>
                             <div className="slot-actions">
+                              <button className="btn-icon" title="Editar" onClick={() => openEdit(slot)}>
+                                <Pencil size={15} />
+                              </button>
                               <button className="btn-icon" title={slot.isActive ? 'Desativar' : 'Ativar'} onClick={() => toggleActive(slot)}>
                                 {slot.isActive
                                   ? <ToggleRight size={20} style={{ color: 'var(--status-success)' }} />
@@ -330,7 +369,7 @@ export default function Availability() {
                               </button>
                             </div>
                           </div>
-                          
+
                           {/* Badges de Recorrência/Modalidade */}
                           <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
                             <span className="badge badge-sm badge-info">

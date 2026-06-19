@@ -237,6 +237,11 @@ export interface IPsychotherapyRepository {
     findBookingLinkByToken(token: string): Promise<BookingLink | null>;
     deactivateBookingLink(tenantId: string, patientId: string): Promise<void>;
 
+    // Public booking token (sem paciente prévio)
+    getOrCreatePublicBookingToken(tenantId: string): Promise<string>;
+    findPublicBookingToken(token: string): Promise<string | null>;
+    findPatientByPhone(tenantId: string, phone: string): Promise<PsychotherapyPatient | null>;
+
     listSeriesAppointments(tenantId: string, rootId: string): Promise<PsychotherapyAppointment[]>;
 }
 

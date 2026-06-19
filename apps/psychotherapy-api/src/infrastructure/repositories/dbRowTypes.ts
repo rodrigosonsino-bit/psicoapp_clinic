@@ -130,6 +130,16 @@ export interface BookingLinkRow {
     updated_at: Date;
 }
 
+// Linha da tabela: psychotherapy_public_booking_tokens
+export interface PublicBookingTokenRow {
+    id: string;
+    token: string;
+    tenant_id: string;
+    is_active: boolean;
+    created_at: Date;
+    updated_at: Date;
+}
+
 // Linha da tabela: psychotherapy_clinical_notes
 export interface ClinicalNoteRow {
     id: string;

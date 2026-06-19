@@ -4,6 +4,9 @@ import { ManageAvailabilityUseCase } from '../../application/useCases/booking/Ma
 import { GenerateBookingLinkUseCase } from '../../application/useCases/booking/GenerateBookingLinkUseCase';
 import { ListAvailableSlotsUseCase } from '../../application/useCases/booking/ListAvailableSlotsUseCase';
 import { BookAppointmentUseCase } from '../../application/useCases/booking/BookAppointmentUseCase';
+import { GetPublicBookingTokenUseCase } from '../../application/useCases/booking/GetPublicBookingTokenUseCase';
+import { ListPublicAvailableSlotsUseCase } from '../../application/useCases/booking/ListPublicAvailableSlotsUseCase';
+import { SelfBookAppointmentUseCase } from '../../application/useCases/booking/SelfBookAppointmentUseCase';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { AppError } from '../../domain/errors/AppError';
 
@@ -13,7 +16,10 @@ export class BookingController {
         private readonly availabilityUseCase: ManageAvailabilityUseCase,
         private readonly generateLinkUseCase: GenerateBookingLinkUseCase,
         private readonly listSlotsUseCase: ListAvailableSlotsUseCase,
-        private readonly bookUseCase: BookAppointmentUseCase
+        private readonly bookUseCase: BookAppointmentUseCase,
+        private readonly getPublicTokenUseCase: GetPublicBookingTokenUseCase,
+        private readonly listPublicSlotsUseCase: ListPublicAvailableSlotsUseCase,
+        private readonly selfBookUseCase: SelfBookAppointmentUseCase
     ) {}
 
     // ── Availability (autenticado) ─────────────────────────────────────────────
@@ -36,7 +42,7 @@ export class BookingController {
         return res.status(204).send();
     }
 
-    // ── Booking links (autenticado) ────────────────────────────────────────────
+    // ── Booking links por paciente (autenticado) ───────────────────────────────
 
     async generateLink(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);
@@ -53,7 +59,15 @@ export class BookingController {
         return res.status(204).send();
     }
 
-    // ── Booking page (público) ────────────────────────────────────────────────
+    // ── Token público do terapeuta (autenticado) ──────────────────────────────
+
+    async getPublicBookingToken(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const result = await this.getPublicTokenUseCase.execute(tenantId);
+        return res.json({ data: result });
+    }
+
+    // ── Booking page por paciente (público) ───────────────────────────────────
 
     async getBookingPage(req: Request, res: Response): Promise<Response> {
         const { token } = req.params;
@@ -65,6 +79,21 @@ export class BookingController {
         const { token } = req.params;
         const { scheduledAt } = req.body;
         const appointment = await this.bookUseCase.execute(token, scheduledAt);
+        return res.status(201).json({ data: appointment });
+    }
+
+    // ── Self-booking público (novo paciente) ──────────────────────────────────
+
+    async getPublicBookingPage(req: Request, res: Response): Promise<Response> {
+        const { token } = req.params;
+        const info = await this.listPublicSlotsUseCase.execute(token);
+        return res.json({ data: info });
+    }
+
+    async selfBookSlot(req: Request, res: Response): Promise<Response> {
+        const { token } = req.params;
+        const { name, phone, scheduledAt } = req.body;
+        const appointment = await this.selfBookUseCase.execute(token, name, phone, scheduledAt);
         return res.status(201).json({ data: appointment });
     }
 

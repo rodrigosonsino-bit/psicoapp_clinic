@@ -1505,6 +1505,39 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         `, [validTenantId, patientId]);
     }
 
+    // ── Public booking tokens ─────────────────────────────────────────────────
+
+    async getOrCreatePublicBookingToken(tenantId: string): Promise<string> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            INSERT INTO psychotherapy_public_booking_tokens (tenant_id)
+            VALUES ($1)
+            ON CONFLICT (tenant_id) DO UPDATE SET
+                is_active  = TRUE,
+                updated_at = NOW()
+            RETURNING token::text
+        `, [validTenantId]);
+        return result.rows[0].token;
+    }
+
+    async findPublicBookingToken(token: string): Promise<string | null> {
+        const result = await this.dbPool.query(`
+            SELECT tenant_id FROM psychotherapy_public_booking_tokens
+            WHERE token = $1::uuid AND is_active = TRUE
+        `, [token]);
+        return result.rows[0]?.tenant_id ?? null;
+    }
+
+    async findPatientByPhone(tenantId: string, phone: string): Promise<PsychotherapyPatient | null> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT * FROM psychotherapy_patients
+            WHERE tenant_id = $1 AND phone = $2
+            LIMIT 1
+        `, [validTenantId, phone]);
+        return result.rows[0] ? this.mapPatient(result.rows[0]) : null;
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private validateTenantId(tenantId: string): string {

@@ -12,6 +12,7 @@ import Appointments from './pages/Appointments';
 import ConfirmAppointment from './pages/ConfirmAppointment';
 import Availability from './pages/Availability';
 import BookAppointment from './pages/BookAppointment';
+import SelfBookAppointment from './pages/SelfBookAppointment';
 import Groups from './pages/Groups';
 import Fiscal from './pages/Fiscal';
 import PatientProfile from './pages/PatientProfile';
@@ -28,6 +29,7 @@ function App() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/confirm/:token" element={<ConfirmAppointment />} />
         <Route path="/book/:token" element={<BookAppointment />} />
+        <Route path="/self-book/:token" element={<SelfBookAppointment />} />
         
         {/* Protected Routes inside Layout */}
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
