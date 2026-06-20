@@ -51,7 +51,7 @@ export class TelegramClient {
                 if (code === 409) {
                     logger.error('Telegram 409 Conflict: instância concorrente detectada. Parando polling.');
                     this.isReady = false;
-                    this.bot?.stop('CONFLICT').catch(() => {});
+                    this.bot?.stop('CONFLICT');
                 } else {
                     logger.error({ err }, 'Erro no loop de polling do Telegram.');
                 }
