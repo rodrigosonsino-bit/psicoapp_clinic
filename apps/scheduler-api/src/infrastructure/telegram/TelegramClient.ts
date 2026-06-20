@@ -43,8 +43,20 @@ export class TelegramClient {
                 }
             });
 
-            // Launch polling only after verifying credentials. Errors in the polling loop
-            // are caught here so a 409 Conflict from a competing instance doesn't crash the server.
+            // Handle polling-loop errors (e.g. 409 Conflict when another instance is still running).
+            // bot.catch() is the right place — bot.launch().catch() only fires when launch() rejects,
+            // but individual getUpdates errors are routed here by Telegraf internally.
+            this.bot.catch((err: any) => {
+                const code = err?.response?.error_code ?? err?.code;
+                if (code === 409) {
+                    logger.error('Telegram 409 Conflict: instância concorrente detectada. Parando polling.');
+                    this.isReady = false;
+                    this.bot?.stop('CONFLICT').catch(() => {});
+                } else {
+                    logger.error({ err }, 'Erro no loop de polling do Telegram.');
+                }
+            });
+
             this.bot.launch().catch((err: any) => {
                 logger.error({ err }, 'Polling do Telegram encerrado com erro.');
                 this.isReady = false;
