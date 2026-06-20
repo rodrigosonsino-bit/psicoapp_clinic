@@ -508,8 +508,8 @@ async function bootstrap() {
         });
 
         // Graceful Shutdown
-        process.on('SIGINT', async () => {
-            logger.info('Sinal de desligamento recebido. Encerrando serviços (Graceful Shutdown) ...');
+        const shutdown = async (signal: string) => {
+            logger.info(`Sinal ${signal} recebido. Encerrando serviços (Graceful Shutdown) ...`);
             await messageWorker.close();
             await sessionManager.closeAll();
             await telegramClient.stop();
@@ -517,7 +517,9 @@ async function bootstrap() {
             await dbPool.end();
             logger.info('Desligamento concluído limpidamente.');
             process.exit(0);
-        });
+        };
+        process.on('SIGINT', () => shutdown('SIGINT'));
+        process.on('SIGTERM', () => shutdown('SIGTERM'));
 
     } catch (err) {
         logger.fatal({ err }, 'Falha fatal durante a inicialização (bootstrap) do servidor');

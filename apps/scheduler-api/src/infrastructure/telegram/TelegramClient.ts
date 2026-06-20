@@ -27,11 +27,6 @@ export class TelegramClient {
         }
 
         try {
-            // Telegraf uses webhook or polling. For this app, polling is easier for local dev.
-            this.bot.launch();
-            this.isReady = true;
-            logger.info('✅ Conexão com Telegram (Telegraf) ATIVA.');
-
             const botInfo = await this.bot.telegram.getMe();
             this.botUsername = botInfo.username ?? null;
             logger.info(`🤖 Bot do Telegram iniciado como @${botInfo.username}`);
@@ -40,13 +35,23 @@ export class TelegramClient {
                 const chat = ctx.chat;
                 const from = ctx.from;
                 const text = (ctx.message as any).text;
-                
+
                 if (chat.type === 'group' || chat.type === 'supergroup') {
                     logger.info(`📩 Telegram: Mensagem no grupo "${chat.title}" (ID: ${chat.id}) de ${from.first_name}: ${text}`);
                 } else if (chat.type === 'private') {
                     logger.info(`📩 Telegram: Mensagem privada de ${from.first_name} (ID: ${chat.id}): ${text}`);
                 }
             });
+
+            // Launch polling only after verifying credentials. Errors in the polling loop
+            // are caught here so a 409 Conflict from a competing instance doesn't crash the server.
+            this.bot.launch().catch((err: any) => {
+                logger.error({ err }, 'Polling do Telegram encerrado com erro.');
+                this.isReady = false;
+            });
+
+            this.isReady = true;
+            logger.info('✅ Conexão com Telegram (Telegraf) ATIVA.');
 
         } catch (error) {
             logger.error({ err: error }, 'Falha ao inicializar o Bot do Telegram.');
