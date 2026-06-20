@@ -1,10 +1,14 @@
 import { Telegraf } from 'telegraf';
 import { logger } from '../logger/logger';
 
+const MAX_LAUNCH_ATTEMPTS = 4;
+const RETRY_DELAYS_MS = [5000, 15000, 30000];
+
 export class TelegramClient {
     private bot: Telegraf | null = null;
     private isReady: boolean = false;
     private botUsername: string | null = null;
+    private launchAttempts = 0;
 
     constructor(private readonly token: string) {
         if (token) {
@@ -49,26 +53,41 @@ export class TelegramClient {
             this.bot.catch((err: any) => {
                 const code = err?.response?.error_code ?? err?.code;
                 if (code === 409) {
-                    logger.error('Telegram 409 Conflict: instância concorrente detectada. Parando polling.');
                     this.isReady = false;
                     this.bot?.stop('CONFLICT');
+                    this.scheduleRelaunch();
                 } else {
                     logger.error({ err }, 'Erro no loop de polling do Telegram.');
                 }
             });
 
-            this.bot.launch().catch((err: any) => {
-                logger.error({ err }, 'Polling do Telegram encerrado com erro.');
-                this.isReady = false;
-            });
-
-            this.isReady = true;
-            logger.info('✅ Conexão com Telegram (Telegraf) ATIVA.');
+            this.launchPolling();
 
         } catch (error) {
             logger.error({ err: error }, 'Falha ao inicializar o Bot do Telegram.');
             this.isReady = false;
         }
+    }
+
+    private launchPolling() {
+        if (!this.bot) return;
+        this.bot.launch().catch((err: any) => {
+            logger.error({ err }, 'Polling do Telegram encerrado com erro.');
+            this.isReady = false;
+        });
+        this.isReady = true;
+        logger.info('✅ Conexão com Telegram (Telegraf) ATIVA.');
+    }
+
+    private scheduleRelaunch() {
+        if (this.launchAttempts >= MAX_LAUNCH_ATTEMPTS) {
+            logger.error('Telegram 409 Conflict persistente: desistindo após múltiplas tentativas.');
+            return;
+        }
+        const delay = RETRY_DELAYS_MS[this.launchAttempts] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+        this.launchAttempts += 1;
+        logger.error(`Telegram 409 Conflict: instância concorrente detectada. Tentando de novo em ${delay}ms (tentativa ${this.launchAttempts}/${MAX_LAUNCH_ATTEMPTS}).`);
+        setTimeout(() => this.launchPolling(), delay);
     }
 
     async sendMessage(chatId: string | number, text: string) {
