@@ -20,7 +20,7 @@
     "@react-native-community/datetimepicker": "8.4.4",
     "axios": "^1.14.0",
     "expo": "~54.0.33",
-    "expo-clipboard": "^56.0.4",
+    "expo-clipboard": "~8.0.8",
     "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.12",
     "expo-status-bar": "~3.0.9",

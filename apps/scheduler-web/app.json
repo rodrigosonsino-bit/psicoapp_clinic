@@ -19,7 +19,6 @@
     },
     "android": {
       "package": "com.rodrigo.whatsappscheduler",
-      "minSdkVersion": 26,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#075E54"
