@@ -1,4 +1,4 @@
-import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage, Browsers } from '@whiskeysockets/baileys';
 import * as qrcodeTerminal from 'qrcode-terminal';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
@@ -108,7 +108,7 @@ export class WhatsappClient {
                 version,
                 auth: state,
                 logger: pino({ level: 'silent' }) as any,
-                browser: ['Ubuntu', 'Chrome', '121.0.6167.85'],
+                browser: Browsers.ubuntu('Chrome'),
                 connectTimeoutMs: 90000,
                 defaultQueryTimeoutMs: 60000,
                 keepAliveIntervalMs: 10000,
