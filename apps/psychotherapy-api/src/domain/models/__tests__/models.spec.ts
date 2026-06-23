@@ -51,7 +51,8 @@ describe('Models', () => {
                 document: 'CPF/CNPJ',
                 professionalId: 'Professional ID',
                 address: 'Address',
-                twoFactorEnabled: false
+                twoFactorEnabled: false,
+                bookingPage: null
             });
         });
     });

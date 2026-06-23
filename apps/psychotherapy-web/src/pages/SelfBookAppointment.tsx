@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Clock, CheckCircle, XCircle, Loader, ChevronLeft, ChevronRight, User, Phone, ShieldCheck } from 'lucide-react';
-import type { AvailableSlot } from '../types/api';
+import type { AvailableSlot, BookingPageSettings } from '../types/api';
 import './BookAppointment.css';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -12,6 +12,7 @@ const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Se
 interface PublicBookingPageInfo {
   tenantName: string;
   availableSlots: AvailableSlot[];
+  bookingPage?: BookingPageSettings | null;
 }
 
 function formatFull(iso: string) {
@@ -55,16 +56,23 @@ function Brand() {
   );
 }
 
-function TherapistHero({ name, subtitle }: { name: string; subtitle: string }) {
+function TherapistHero({ name, role, subtitle }: { name: string; role: string; subtitle: string }) {
   return (
     <div className="book-hero">
       <div className="book-avatar">{initials(name)}</div>
       <p className="book-hero-title">Agende sua sessão com</p>
       <h1 className="book-therapist-name">{name || 'Seu terapeuta'}</h1>
-      <span className="book-role-badge"><ShieldCheck size={13} /> Psicoterapeuta</span>
+      <span className="book-role-badge"><ShieldCheck size={13} /> {role}</span>
       <p className="book-subtitle">{subtitle}</p>
     </div>
   );
+}
+
+// Valida hex #rrggbb antes de usar como CSS (defesa adicional além do backend).
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+function accentStyle(color?: string | null): React.CSSProperties | undefined {
+  if (!color || !HEX_COLOR.test(color)) return undefined;
+  return { '--brand-primary': color, '--brand-secondary': color } as React.CSSProperties;
 }
 
 export default function SelfBookAppointment() {
@@ -145,10 +153,17 @@ export default function SelfBookAppointment() {
 
   if (!info) return null;
 
+  // ── Personalização (Fase 1) com fallbacks seguros ─────────────────────────
+  const bp = info.bookingPage ?? {};
+  const professionLabel = bp.professionLabel || 'Psicoterapeuta';
+  const displayName = bp.displayName || info.tenantName;
+  const welcome = bp.welcomeMessage || 'Informe seus dados para ver os horários disponíveis e confirmar sua sessão.';
+  const pageStyle = accentStyle(bp.accentColor);
+
   // ── Sucesso ───────────────────────────────────────────────────────────────
 
   if (step === 'booked' && selectedSlot) return (
-    <div className="book-page">
+    <div className="book-page" style={pageStyle}>
       <div className="book-card">
         <Brand />
         <div className="book-success">
@@ -160,9 +175,9 @@ export default function SelfBookAppointment() {
               {selectedSlot.durationMinutes} min · {modalityLabel(selectedSlot.modality)}
             </p>
           </div>
-          {info.tenantName && (
+          {displayName && (
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-              <strong style={{ color: 'var(--text-primary)' }}>{info.tenantName}</strong> receberá a confirmação automaticamente.
+              <strong style={{ color: 'var(--text-primary)' }}>{displayName}</strong> receberá a confirmação automaticamente.
             </p>
           )}
         </div>
@@ -174,10 +189,10 @@ export default function SelfBookAppointment() {
   // ── Etapa 1: Formulário de identificação ─────────────────────────────────
 
   if (step === 'form') return (
-    <div className="book-page">
+    <div className="book-page" style={pageStyle}>
       <div className="book-card">
         <Brand />
-        <TherapistHero name={info.tenantName} subtitle="Informe seus dados para ver os horários disponíveis e confirmar sua sessão." />
+        <TherapistHero name={displayName} role={professionLabel} subtitle={welcome} />
 
         <form onSubmit={handleFormSubmit} className="book-form">
           <div className="book-field">
@@ -235,16 +250,16 @@ export default function SelfBookAppointment() {
   const currentDates = weeks.get(currentWeekKey) ?? [];
 
   return (
-    <div className="book-page">
+    <div className="book-page" style={pageStyle}>
       <div className="book-card wide">
         <Brand />
 
         <div className="book-hero">
-          <div className="book-avatar">{initials(info.tenantName)}</div>
+          <div className="book-avatar">{initials(displayName)}</div>
           <h1 className="book-therapist-name">Escolha um horário</h1>
           <p className="book-subtitle">
             Olá, <strong style={{ color: 'var(--text-primary)' }}>{name}</strong>!{' '}
-            {info.tenantName && <>Sessão com <strong style={{ color: 'var(--text-primary)' }}>{info.tenantName}</strong>.</>}
+            {displayName && <>Sessão com <strong style={{ color: 'var(--text-primary)' }}>{displayName}</strong>.</>}
           </p>
           <button
             className="book-link-btn"

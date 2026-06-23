@@ -34,7 +34,8 @@ export class ProfileController {
             fullName: data.fullName,
             document: data.document,
             professionalId: data.professionalId,
-            address: data.address
+            address: data.address,
+            bookingPage: data.bookingPage
         });
 
         res.status(200).json(updatedProfile.toJSON());

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, User, CreditCard, Shield, MapPin, ShieldCheck, ShieldOff, Copy, CalendarDays, CheckCircle, XCircle, Smartphone, RefreshCw, Power, Loader2 } from 'lucide-react';
+import { Save, User, CreditCard, Shield, MapPin, ShieldCheck, ShieldOff, Copy, CalendarDays, CheckCircle, XCircle, Smartphone, RefreshCw, Power, Loader2, Palette } from 'lucide-react';
 import { fetchApi } from '../services/api';
-import type { TenantProfile, TotpSetupResult, GoogleCalendarStatus, WhatsappStatus } from '../types/api';
+import type { TenantProfile, TotpSetupResult, GoogleCalendarStatus, WhatsappStatus, BookingPageSettings } from '../types/api';
 import { useToast } from '../context/ToastContext';
 import Skeleton from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
@@ -107,10 +107,12 @@ export default function ProfileSettings() {
 
       <WhatsappSection />
       <GoogleCalendarSection />
-      <TwoFactorSection 
-        enabled={formData.twoFactorEnabled} 
-        onStatusChange={(status) => setFormData(prev => ({ ...prev, twoFactorEnabled: status }))} 
+      <TwoFactorSection
+        enabled={formData.twoFactorEnabled}
+        onStatusChange={(status) => setFormData(prev => ({ ...prev, twoFactorEnabled: status }))}
       />
+
+      <BookingPageSection />
 
       <div className="card profile-card mt-4">
         <form onSubmit={handleSubmit} className="profile-form">
@@ -665,6 +667,165 @@ function TwoFactorSection({ enabled, onStatusChange }: { enabled: boolean, onSta
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+// ── Página de Agendamento (personalização do link público) ────────────────────
+
+const BP_HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const BP_DEFAULT_ACCENT = '#6d5dfc';
+
+function bookingInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '🙂';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function BookingPageSection() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [tenantName, setTenantName] = useState('');
+  const [professionLabel, setProfessionLabel] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [accentColor, setAccentColor] = useState('');
+  const [welcomeMessage, setWelcomeMessage] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchApi<TenantProfile>('/api/profile');
+        setTenantName(data.name || data.fullName || '');
+        const bp = data.bookingPage ?? {};
+        setProfessionLabel(bp.professionLabel ?? '');
+        setDisplayName(bp.displayName ?? '');
+        setAccentColor(bp.accentColor ?? '');
+        setWelcomeMessage(bp.welcomeMessage ?? '');
+      } catch {
+        // silencioso: a seção apenas não pré-preenche
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    if (accentColor.trim() && !BP_HEX_COLOR.test(accentColor.trim())) {
+      toast.error('Cor inválida. Use o formato #RRGGBB.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const bookingPage: BookingPageSettings = {
+        professionLabel: professionLabel.trim() || null,
+        displayName: displayName.trim() || null,
+        accentColor: accentColor.trim() || null,
+        welcomeMessage: welcomeMessage.trim() || null,
+      };
+      await fetchApi<TenantProfile>('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ bookingPage }),
+      });
+      toast.success('Página de agendamento atualizada!');
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao salvar a página de agendamento.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Valores efetivos do preview (mesmos fallbacks da página pública).
+  const previewName = displayName.trim() || tenantName || 'Seu nome';
+  const previewRole = professionLabel.trim() || 'Psicoterapeuta';
+  const previewWelcome = welcomeMessage.trim() || 'Informe seus dados para ver os horários disponíveis e confirmar sua sessão.';
+  const previewAccent = BP_HEX_COLOR.test(accentColor.trim()) ? accentColor.trim() : BP_DEFAULT_ACCENT;
+
+  if (loading) {
+    return (
+      <div className="card profile-card mt-4">
+        <Skeleton width="220px" height="1.25rem" />
+        <Skeleton width="100%" height="6rem" className="mt-3" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="card profile-card mt-4">
+      <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem' }}>
+        <Palette size={20} style={{ color: 'var(--brand-primary)' }} />
+        <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-primary)' }}>Página de Agendamento</h2>
+      </div>
+      <p className="text-body" style={{ marginBottom: '1.25rem' }}>
+        Personalize como o seu link público de agendamento aparece para os pacientes.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+        {/* Campos */}
+        <div className="profile-form">
+          <div className="form-group">
+            <label className="form-label">Rótulo da profissão</label>
+            <input type="text" className="form-control" placeholder="Psicoterapeuta" maxLength={40}
+              value={professionLabel} onChange={e => setProfessionLabel(e.target.value)} disabled={saving} />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Nome de exibição</label>
+            <input type="text" className="form-control" placeholder={tenantName || 'Seu nome / consultório'} maxLength={60}
+              value={displayName} onChange={e => setDisplayName(e.target.value)} disabled={saving} />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Cor de destaque</label>
+            <div className="flex items-center gap-2">
+              <input type="color" value={previewAccent} onChange={e => setAccentColor(e.target.value)} disabled={saving}
+                style={{ width: '44px', height: '38px', padding: 0, border: '1px solid var(--border-color)', borderRadius: '8px', background: 'none', cursor: 'pointer' }} />
+              <input type="text" className="form-control" placeholder="#6d5dfc" maxLength={7}
+                value={accentColor} onChange={e => setAccentColor(e.target.value)} disabled={saving} style={{ maxWidth: '140px' }} />
+              {accentColor.trim() && (
+                <button type="button" className="btn btn-secondary" onClick={() => setAccentColor('')} disabled={saving}>Padrão</button>
+              )}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Mensagem de boas-vindas</label>
+            <textarea className="form-control" rows={3} maxLength={280}
+              placeholder="Ex: Atendo ansiedade e luto, abordagem TCC. Será um prazer te receber."
+              value={welcomeMessage} onChange={e => setWelcomeMessage(e.target.value)} disabled={saving}
+              style={{ resize: 'vertical', minHeight: '76px' }} />
+          </div>
+
+          <div className="flex justify-end mt-4">
+            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              <Save size={18} /> {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+
+        {/* Preview ao vivo */}
+        <div>
+          <label className="form-label">Pré-visualização</label>
+          <div style={{
+            background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '16px',
+            padding: '1.5rem 1.25rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem'
+          }}>
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.4rem', fontWeight: 700, color: '#fff', background: previewAccent, boxShadow: `0 6px 20px -6px ${previewAccent}`
+            }}>{bookingInitials(previewName)}</div>
+            <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>Agende sua sessão com</span>
+            <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{previewName}</strong>
+            <span style={{
+              fontSize: '0.72rem', fontWeight: 600, color: previewAccent,
+              border: `1px solid ${previewAccent}55`, background: `${previewAccent}1a`,
+              padding: '0.15rem 0.6rem', borderRadius: '999px'
+            }}>{previewRole}</span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{previewWelcome}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

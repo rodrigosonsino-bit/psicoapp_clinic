@@ -1,6 +1,7 @@
 import { injectable, inject } from 'tsyringe';
 import { IPsychotherapyRepository } from '../../../domain/repositories/IPsychotherapyRepository';
 import { AppError } from '../../../domain/errors/AppError';
+import { BookingPageSettings } from '../../../domain/models/TenantProfile';
 import { AvailableSlot } from './ListAvailableSlotsUseCase';
 
 const WEEKS_AHEAD = 6;
@@ -9,6 +10,7 @@ const MAX_SLOTS = 60;
 export interface PublicBookingPageInfo {
     tenantName: string;
     availableSlots: AvailableSlot[];
+    bookingPage: BookingPageSettings | null;
 }
 
 @injectable()
@@ -64,8 +66,9 @@ export class ListPublicAvailableSlotsUseCase {
 
         const activeSlots = slots.filter(s => s.isActive);
         const tenantName = profile?.name ?? profile?.fullName ?? '';
+        const bookingPage = profile?.bookingPage ?? null;
 
-        if (activeSlots.length === 0) return { tenantName, availableSlots: [] };
+        if (activeSlots.length === 0) return { tenantName, availableSlots: [], bookingPage };
 
         const now = new Date();
         const from = new Date(now);
@@ -107,6 +110,6 @@ export class ListPublicAvailableSlotsUseCase {
         }
 
         available.sort((a, b) => a.datetime.localeCompare(b.datetime));
-        return { tenantName, availableSlots: available.slice(0, MAX_SLOTS) };
+        return { tenantName, availableSlots: available.slice(0, MAX_SLOTS), bookingPage };
     }
 }

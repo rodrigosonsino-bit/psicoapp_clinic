@@ -116,6 +116,13 @@ export interface Receipt {
   updatedAt: string;
 }
 
+export interface BookingPageSettings {
+  professionLabel?: string | null;
+  displayName?: string | null;
+  accentColor?: string | null;
+  welcomeMessage?: string | null;
+}
+
 export interface TenantProfile {
   id: string;
   name: string;
@@ -125,6 +132,7 @@ export interface TenantProfile {
   professionalId: string | null;
   address: string | null;
   twoFactorEnabled?: boolean;
+  bookingPage?: BookingPageSettings | null;
 }
 
 export interface DashboardAnalytics {

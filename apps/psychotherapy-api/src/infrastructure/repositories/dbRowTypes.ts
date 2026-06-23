@@ -46,6 +46,7 @@ export interface TenantProfileRow {
     professional_id: string | null;
     address: string | null;
     totp_enabled?: boolean;
+    booking_page?: import('../../domain/models/TenantProfile').BookingPageSettings | null;
 }
 
 // Linha da tabela: psychotherapy_receipts

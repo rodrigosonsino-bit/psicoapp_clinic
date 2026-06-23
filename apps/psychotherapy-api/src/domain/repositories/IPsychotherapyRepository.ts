@@ -62,6 +62,7 @@ export interface UpdateTenantProfileDTO {
     document?: string | null;
     professionalId?: string | null;
     address?: string | null;
+    bookingPage?: import('../models/TenantProfile').BookingPageSettings | null;
 }
 
 export interface SaveReceiptDTO {

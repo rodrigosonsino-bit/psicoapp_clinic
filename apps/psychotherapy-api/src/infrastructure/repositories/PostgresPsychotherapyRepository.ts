@@ -376,7 +376,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = this.validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
@@ -393,15 +393,17 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 document = COALESCE($3, document),
                 professional_id = COALESCE($4, professional_id),
                 address = COALESCE($5, address),
+                booking_page = COALESCE($6::jsonb, booking_page),
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
             data.document !== undefined ? data.document : null,
             data.professionalId !== undefined ? data.professionalId : null,
-            data.address !== undefined ? data.address : null
+            data.address !== undefined ? data.address : null,
+            data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Tenant não encontrado');
@@ -1626,7 +1628,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.document,
             row.professional_id,
             row.address,
-            row.totp_enabled || false
+            row.totp_enabled || false,
+            row.booking_page ?? null
         );
     }
 
