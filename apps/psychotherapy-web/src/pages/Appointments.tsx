@@ -210,12 +210,14 @@ export default function Appointments() {
   const handleSyncNow = async () => {
     setSyncing(true);
     try {
+      // O sync roda em segundo plano no servidor (pode levar até ~1 min).
       await fetchApi('/api/google/sync', { method: 'POST' });
-      toast.success('Google Calendar sincronizado!');
-      await loadAppointments();
+      toast.success('Sincronização iniciada. Os agendamentos serão atualizados em instantes.');
+      // Recarrega ao longo do tempo para refletir o resultado conforme conclui.
+      setTimeout(() => loadAppointments(), 12000);
+      setTimeout(() => { loadAppointments(); setSyncing(false); }, 35000);
     } catch {
-      toast.error('Falha ao sincronizar. Tente novamente.');
-    } finally {
+      toast.error('Falha ao iniciar sincronização. Tente novamente.');
       setSyncing(false);
     }
   };

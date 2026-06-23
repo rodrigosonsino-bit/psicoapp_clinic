@@ -8,6 +8,7 @@ import { SyncGoogleCalendarEventsUseCase } from '../../application/useCases/Sync
 import { validateBody } from '../middlewares/validationMiddleware';
 import { asyncHandler } from '../middlewares/asyncHandler';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { logger } from '../../infrastructure/logger';
 
 const registerSchema = z.object({
     name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
@@ -56,8 +57,12 @@ export function createAuthRoutes(): Router {
             return res.status(401).json({ error: 'Tenant não identificado' });
         }
         const syncUseCase = container.resolve(SyncGoogleCalendarEventsUseCase);
-        await syncUseCase.executeForTenant(tenantId);
-        return res.json({ ok: true });
+        // O sync completo pode levar dezenas de segundos e estourar o timeout do
+        // gateway. Disparamos em background e respondemos imediatamente (202).
+        syncUseCase.executeForTenant(tenantId).catch(err => {
+            logger.error({ err, tenantId }, 'Falha no sync manual do Google Calendar (background)');
+        });
+        return res.status(202).json({ ok: true, message: 'Sincronização iniciada' });
     }));
 
     return router;
