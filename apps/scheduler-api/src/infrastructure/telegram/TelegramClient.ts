@@ -38,6 +38,7 @@ export class TelegramClient {
             const botInfo = await this.bot.telegram.getMe();
             this.botUsername = botInfo.username ?? null;
             logger.info(`🤖 Bot do Telegram iniciado como @${botInfo.username}`);
+            this.launchAttempts = 0;
 
             this.bot.on('message', (ctx) => {
                 const chat = ctx.chat;
@@ -73,9 +74,15 @@ export class TelegramClient {
 
             this.launchPolling();
 
-        } catch (error) {
-            logger.error({ err: error }, 'Falha ao inicializar o Bot do Telegram.');
+        } catch (error: any) {
+            const code = error?.response?.error_code ?? error?.code;
             this.isReady = false;
+            if (code === 401) {
+                logger.error({ err: error }, '🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.');
+            } else {
+                logger.error({ err: error }, 'Falha ao inicializar o Bot do Telegram. Tentando novamente com backoff.');
+            }
+            this.scheduleRelaunch(() => this.initialize());
         }
     }
 
@@ -90,11 +97,11 @@ export class TelegramClient {
         logger.info('✅ Conexão com Telegram (Telegraf) ATIVA.');
     }
 
-    private scheduleRelaunch() {
+    private scheduleRelaunch(retryFn: () => void = () => this.launchPolling()) {
         const delay = FAST_RETRY_DELAYS_MS[this.launchAttempts] ?? LONG_RETRY_DELAY_MS;
         this.launchAttempts += 1;
         logger.warn(`Telegram: tentando reconectar em ${delay}ms (tentativa ${this.launchAttempts}).`);
-        setTimeout(() => this.launchPolling(), delay);
+        setTimeout(retryFn, delay);
     }
 
     async sendMessage(chatId: string | number, text: string) {
