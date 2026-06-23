@@ -212,7 +212,7 @@ export default function Receipts() {
     doc.setTextColor(secondarySlate.r, secondarySlate.g, secondarySlate.b);
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(9);
-    doc.text(`Psicólogo(a) - CRP: ${profile.professionalId || 'Não informado'}`, 105, 211, { align: 'center' });
+    doc.text(`Psicoterapeuta - CRP: ${profile.professionalId || 'Não informado'}`, 105, 211, { align: 'center' });
 
     // Footer info
     doc.setFontSize(8);

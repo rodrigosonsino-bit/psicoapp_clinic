@@ -61,7 +61,7 @@ function TherapistHero({ name, subtitle }: { name: string; subtitle: string }) {
       <div className="book-avatar">{initials(name)}</div>
       <p className="book-hero-title">Agende sua sessão com</p>
       <h1 className="book-therapist-name">{name || 'Seu terapeuta'}</h1>
-      <span className="book-role-badge"><ShieldCheck size={13} /> Psicólogo(a)</span>
+      <span className="book-role-badge"><ShieldCheck size={13} /> Psicoterapeuta</span>
       <p className="book-subtitle">{subtitle}</p>
     </div>
   );

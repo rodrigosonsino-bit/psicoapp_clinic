@@ -66,7 +66,7 @@ export default function Fiscal() {
       doc.text(`Ano Base: ${year}`, 105, 30, { align: 'center' });
 
       doc.setFontSize(11);
-      doc.text(`Psicólogo(a): ${report.tenant.fullName || report.tenant.name}`, 20, 50);
+      doc.text(`Psicoterapeuta: ${report.tenant.fullName || report.tenant.name}`, 20, 50);
       if (report.tenant.document) doc.text(`CPF/CNPJ: ${report.tenant.document}`, 20, 58);
       if (report.tenant.professionalId) doc.text(`Registro Profissional: ${report.tenant.professionalId}`, 20, 66);
       if (report.tenant.address) doc.text(`Endereço: ${report.tenant.address}`, 20, 74);
