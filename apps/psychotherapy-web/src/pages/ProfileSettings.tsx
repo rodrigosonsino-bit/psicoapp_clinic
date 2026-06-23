@@ -212,11 +212,11 @@ function WhatsappSection() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await fetchApi<WhatsappStatus>('/api/psychotherapy/whatsapp/status');
+      const res = await fetchApi<WhatsappStatus>('/api/whatsapp/status');
       setStatus(res);
       // Se está conectando e tem QR, busca o QR code
       if (!res.connected && res.hasQr) {
-        const qrRes = await fetchApi<{ qr: string }>('/api/psychotherapy/whatsapp/qr');
+        const qrRes = await fetchApi<{ qr: string }>('/api/whatsapp/qr');
         setQr(qrRes.qr);
       } else {
         setQr(null);
@@ -241,7 +241,7 @@ function WhatsappSection() {
     try {
       setConnecting(true);
       setPairingCode(null);
-      await fetchApi('/api/psychotherapy/whatsapp/connect', { method: 'POST', body: '{}' });
+      await fetchApi('/api/whatsapp/connect', { method: 'POST', body: '{}' });
       toast.success('Inicializando conexão WhatsApp...');
       setTimeout(() => loadStatus(), 2000);
     } catch (err) {
@@ -254,7 +254,7 @@ function WhatsappSection() {
   const handleDisconnect = async () => {
     try {
       setDisconnecting(true);
-      await fetchApi('/api/psychotherapy/whatsapp/disconnect', { method: 'POST', body: '{}' });
+      await fetchApi('/api/whatsapp/disconnect', { method: 'POST', body: '{}' });
       toast.success('WhatsApp desconectado.');
       setStatus({ connected: false, status: 'disconnected', hasQr: false });
       setQr(null);
@@ -270,7 +270,7 @@ function WhatsappSection() {
     if (!pairingPhone.trim()) { toast.error('Digite o número com DDI (ex: 5511999998888)'); return; }
     try {
       setPairingLoading(true);
-      const res = await fetchApi<{ code: string }>('/api/psychotherapy/whatsapp/pairing-code', {
+      const res = await fetchApi<{ code: string }>('/api/whatsapp/pairing-code', {
         method: 'POST',
         body: JSON.stringify({ phoneNumber: pairingPhone.replace(/\D/g, '') }),
       });
