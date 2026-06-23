@@ -43,8 +43,11 @@ export class SelfBookAppointmentUseCase {
         }
 
         const slots = await this.repository.listAvailabilitySlots(tenantId);
-        const dow = scheduledAt.getDay();
-        const hhmm = `${String(scheduledAt.getHours()).padStart(2, '0')}:${String(scheduledAt.getMinutes()).padStart(2, '0')}`;
+        // Comparar com a grade de disponibilidade no fuso de negócio (BRT, -03:00),
+        // independente do fuso do servidor (UTC em produção).
+        const brtWall = new Date(scheduledAt.getTime() - 3 * 60 * 60 * 1000);
+        const dow = brtWall.getUTCDay();
+        const hhmm = `${String(brtWall.getUTCHours()).padStart(2, '0')}:${String(brtWall.getUTCMinutes()).padStart(2, '0')}`;
         const matchingSlot = slots.find(s => s.dayOfWeek === dow && s.startTime === hhmm && s.isActive);
         const durationMinutes = matchingSlot?.durationMinutes ?? 50;
 

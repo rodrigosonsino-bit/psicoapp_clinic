@@ -117,9 +117,12 @@ export class ListAvailableSlotsUseCase {
             for (const slot of activeSlots) {
                 if (!this.isSlotAvailableOnDate(slot, cursor)) continue;
 
-                const [hh, mm] = slot.startTime.split(':').map(Number);
-                const dt = new Date(cursor);
-                dt.setHours(hh, mm, 0, 0);
+                // startTime ("HH:MM") é horário de parede em America/Sao_Paulo (BRT, -03:00).
+                // Construir com offset explícito evita depender do fuso do servidor (UTC em produção).
+                const y = cursor.getFullYear();
+                const mo = String(cursor.getMonth() + 1).padStart(2, '0');
+                const da = String(cursor.getDate()).padStart(2, '0');
+                const dt = new Date(`${y}-${mo}-${da}T${slot.startTime}:00-03:00`);
 
                 // Só horários no futuro (a partir de agora + 1h de antecedência)
                 if (dt <= new Date(now.getTime() + 60 * 60 * 1000)) continue;

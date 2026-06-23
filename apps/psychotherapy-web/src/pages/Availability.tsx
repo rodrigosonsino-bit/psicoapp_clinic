@@ -324,7 +324,7 @@ export default function Availability() {
                             </span>
                             {slot.startDate && slot.recurrenceType === 'biweekly' && (
                               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                desde {new Date(slot.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                desde {new Date(slot.startDate.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR')}
                               </span>
                             )}
                           </div>
@@ -344,7 +344,7 @@ export default function Availability() {
                 <div className="card availability-day-card" style={{ gridColumn: '1 / -1' }}>
                   <div className="availability-slots" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
                     {onceSlots.map(slot => {
-                      const d = slot.startDate ? new Date(slot.startDate + 'T12:00:00') : null;
+                      const d = slot.startDate ? new Date(slot.startDate.slice(0, 10) + 'T12:00:00') : null;
                       return (
                         <div key={slot.id} className={`availability-slot-row ${!slot.isActive ? 'inactive' : ''}`} style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0.75rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
