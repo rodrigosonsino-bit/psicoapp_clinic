@@ -675,21 +675,33 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
   };
 
   const [submitting, setSubmitting] = useState(false);
+  const [retroactive, setRetroactive] = useState(false);
   const toast = useToast();
+
+  // Sessão no passado só pode ser criada (novo agendamento) como registro retroativo.
+  const isPastNew = !appointment && !!formData.scheduledAt &&
+    new Date(formData.scheduledAt).getTime() < Date.now() - 60_000;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPastNew && !retroactive) {
+      toast.error("Esse horário já passou. Marque \"Atendimento retroativo (já realizado)\" para registrar.");
+      return;
+    }
     try {
       setSubmitting(true);
       const notesValue = isPastoral
         ? `[PASTORAL_SUMMARY]: ${pastoralTitle}\n${formData.notes}`.trim()
         : formData.notes;
 
+      const retro = isPastNew && retroactive;
       const body: Record<string, unknown> = {
         ...formData,
         scheduledAt: new Date(formData.scheduledAt).toISOString(),
         recurrenceEndDate: formData.recurrenceEndDate || null,
-        notes: notesValue || null
+        notes: notesValue || null,
+        // Atendimento retroativo: libera data passada, registra como realizado e força avulsa.
+        ...(retro ? { allowPast: true, status: 'attended', recurrence: 'none', recurrenceEndDate: null } : {})
       };
       await fetchApi('/api/psychotherapy/appointments', { method: 'POST', body: JSON.stringify(body) });
       toast.success(appointment ? 'Agendamento atualizado.' : 'Agendamento criado.');
@@ -766,6 +778,33 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
             </div>
           </div>
 
+          {isPastNew && (
+            <div className="form-group" style={{
+              marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '8px',
+              border: '1px solid var(--status-warning)', background: 'rgba(245, 158, 11, 0.08)'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={retroactive}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    setRetroactive(checked);
+                    if (checked) setFormData(prev => ({ ...prev, recurrence: 'none', recurrenceEndDate: '' }));
+                  }}
+                  disabled={submitting}
+                  style={{ marginTop: '0.2rem' }}
+                />
+                <span>
+                  <strong>Atendimento retroativo (já realizado)</strong>
+                  <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Esse horário já passou. Marque para registrar uma sessão que já aconteceu — será salva como <strong>Realizada</strong>.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
+
           <div className="flex gap-4">
             <div className="form-group w-full">
               <label className="form-label">Recorrência</label>
@@ -776,7 +815,7 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
                     ? getDefaultEndDate(formData.scheduledAt)
                     : rec === 'none' ? '' : formData.recurrenceEndDate;
                   setFormData({ ...formData, recurrence: rec, recurrenceEndDate: endDate });
-                }} disabled={submitting}>
+                }} disabled={submitting || (isPastNew && retroactive)}>
                 <option value="none">Avulsa</option>
                 <option value="weekly">Semanal</option>
                 <option value="biweekly">Quinzenal</option>

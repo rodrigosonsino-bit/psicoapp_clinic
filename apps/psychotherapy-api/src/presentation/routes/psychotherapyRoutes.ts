@@ -222,7 +222,9 @@ export function createPsychotherapyRoutes(): Router {
         recurrence: z.enum(['none', 'weekly', 'biweekly']).optional().default('none'),
         recurrenceEndDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).transform(val => new Date(val)).nullable().optional(),
         notes: z.string().nullable().optional(),
-        mode: z.enum(['single', 'future', 'all']).optional()
+        mode: z.enum(['single', 'future', 'all']).optional(),
+        // Permite registrar atendimentos retroativos (sessão já realizada).
+        allowPast: z.boolean().optional()
     });
 
     const updateAppointmentStatusSchema = z.object({

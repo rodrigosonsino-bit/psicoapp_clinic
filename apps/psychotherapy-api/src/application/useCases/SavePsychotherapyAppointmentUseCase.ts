@@ -15,14 +15,20 @@ export class SavePsychotherapyAppointmentUseCase {
         @inject('GoogleCalendarService') private readonly googleCalendar: GoogleCalendarService
     ) {}
 
-    async execute(data: SaveAppointmentDTO & { mode?: 'single' | 'future' | 'all' }): Promise<PsychotherapyAppointment> {
+    async execute(data: SaveAppointmentDTO & { mode?: 'single' | 'future' | 'all'; allowPast?: boolean }): Promise<PsychotherapyAppointment> {
         if (data.notes?.startsWith(PASTORAL_SUMMARY_PREFIX)) {
             const virtualPatient = await this.findOrCreatePastoralPatient(data.tenantId);
             data.patientId = virtualPatient.id;
         }
 
-        if (data.scheduledAt <= new Date(Date.now() - 60_000) && !data.id) {
+        // Bloqueia datas passadas no fluxo normal, mas permite registro retroativo
+        // explícito (sessão de emergência já realizada) via allowPast.
+        if (data.scheduledAt <= new Date(Date.now() - 60_000) && !data.id && !data.allowPast) {
             throw new AppError('Não é possível agendar sessões no passado', 400);
+        }
+        // Agendamento retroativo só faz sentido como sessão avulsa (não recorrente).
+        if (data.allowPast && data.recurrence && data.recurrence !== 'none') {
+            throw new AppError('Atendimento retroativo não pode ser recorrente', 400);
         }
         if (data.recurrence !== 'none' && data.recurrence && !data.recurrenceEndDate) {
             throw new AppError('Data de término da recorrência é obrigatória para agendamentos recorrentes', 400);
