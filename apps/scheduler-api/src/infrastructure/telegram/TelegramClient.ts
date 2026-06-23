@@ -1,8 +1,12 @@
 import { Telegraf } from 'telegraf';
 import { logger } from '../logger/logger';
 
-const MAX_LAUNCH_ATTEMPTS = 4;
-const RETRY_DELAYS_MS = [5000, 15000, 30000];
+// Retries rápidos no início; depois de esgotados, cai para um retry longo e
+// INDEFINIDO (em vez de desistir pra sempre) — assim, se o erro era transitório
+// (rede, instabilidade do Telegram) ou o token foi corrigido e o serviço redeployado,
+// a conexão se autorrecupera sem precisar reiniciar o processo manualmente.
+const FAST_RETRY_DELAYS_MS = [5000, 15000, 30000, 60000];
+const LONG_RETRY_DELAY_MS = 5 * 60 * 1000;
 
 export class TelegramClient {
     private bot: Telegraf | null = null;
@@ -47,18 +51,24 @@ export class TelegramClient {
                 }
             });
 
-            // Handle polling-loop errors (e.g. 409 Conflict when another instance is still running).
-            // bot.catch() is the right place — bot.launch().catch() only fires when launch() rejects,
-            // but individual getUpdates errors are routed here by Telegraf internally.
+            // Handle polling-loop errors. bot.catch() is the right place — bot.launch().catch()
+            // only fires when launch() rejects, but individual getUpdates errors (409 Conflict,
+            // 401 Unauthorized, timeouts de rede, etc.) são roteados aqui pelo Telegraf.
+            // Qualquer erro aqui derruba o polling, então TODO erro precisa de retry — não só o 409.
+            // Sem isso, um 401 (token revogado/rotacionado) deixa o bot morto pra sempre até
+            // o processo reiniciar (incidente de 2026-06-23).
             this.bot.catch((err: any) => {
                 const code = err?.response?.error_code ?? err?.code;
-                if (code === 409) {
-                    this.isReady = false;
-                    this.bot?.stop('CONFLICT');
-                    this.scheduleRelaunch();
+                this.isReady = false;
+                this.bot?.stop('ERROR');
+                if (code === 401) {
+                    logger.error({ err }, '🔑 Telegram 401 Unauthorized: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente. Tentando novamente com backoff por precaução.');
+                } else if (code === 409) {
+                    logger.error('Telegram 409 Conflict: instância concorrente detectada.');
                 } else {
                     logger.error({ err }, 'Erro no loop de polling do Telegram.');
                 }
+                this.scheduleRelaunch();
             });
 
             this.launchPolling();
@@ -74,19 +84,16 @@ export class TelegramClient {
         this.bot.launch().catch((err: any) => {
             logger.error({ err }, 'Polling do Telegram encerrado com erro.');
             this.isReady = false;
+            this.scheduleRelaunch();
         });
         this.isReady = true;
         logger.info('✅ Conexão com Telegram (Telegraf) ATIVA.');
     }
 
     private scheduleRelaunch() {
-        if (this.launchAttempts >= MAX_LAUNCH_ATTEMPTS) {
-            logger.error('Telegram 409 Conflict persistente: desistindo após múltiplas tentativas.');
-            return;
-        }
-        const delay = RETRY_DELAYS_MS[this.launchAttempts] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+        const delay = FAST_RETRY_DELAYS_MS[this.launchAttempts] ?? LONG_RETRY_DELAY_MS;
         this.launchAttempts += 1;
-        logger.error(`Telegram 409 Conflict: instância concorrente detectada. Tentando de novo em ${delay}ms (tentativa ${this.launchAttempts}/${MAX_LAUNCH_ATTEMPTS}).`);
+        logger.warn(`Telegram: tentando reconectar em ${delay}ms (tentativa ${this.launchAttempts}).`);
         setTimeout(() => this.launchPolling(), delay);
     }
 

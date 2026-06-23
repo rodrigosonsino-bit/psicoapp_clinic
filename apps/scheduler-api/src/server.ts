@@ -488,19 +488,19 @@ async function bootstrap() {
 
         // 9. Cron de manutenção da Sarah: Limpeza de bloqueios expirados + Watchdog de conexão zombie para todos os tenants ativos
         const cron = require('node-cron');
-        cron.schedule('*/5 * * * *', async () => {
+        cron.schedule('*/2 * * * *', async () => {
             for (const [tenantId, client] of sessionManager.getActiveSessions().entries()) {
                 try {
                     // Limpar cooldowns de AI expirados
                     await client.cleanupExpiredAiBlocks();
-                    // Detectar e reconectar se socket estiver em estado zumbi
-                    client.checkZombieConnection();
+                    // Detectar e reconectar se socket estiver em estado zumbi (probe ativo)
+                    await client.checkZombieConnection();
                 } catch (err) {
                     logger.error({ err, tenantId }, 'Erro na manutenção da Sarah para tenant');
                 }
             }
         }, { timezone: 'America/Sao_Paulo' });
-        logger.info('🛡️ Cron de Manutenção da Sarah ATIVADO (Watchdog + Cleanup a cada 5 min para todos os tenants ativos).');
+        logger.info('🛡️ Cron de Manutenção da Sarah ATIVADO (Watchdog com probe ativo + Cleanup a cada 2 min para todos os tenants ativos).');
 
         // 9. OUVIR
         app.listen(PORT, () => {

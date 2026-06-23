@@ -722,17 +722,26 @@ export class WhatsappClient {
         this.sock = null;
     }
 
-    public checkZombieConnection(): void {
+    public async checkZombieConnection(): Promise<void> {
         if (!this.isReady) return;
-        const zombieTimeoutMin = parseInt(process.env.SARAH_ZOMBIE_TIMEOUT_MINUTES || '10', 10);
-        const silenceMs = Date.now() - this.lastMessageReceivedAt;
-        const silenceMin = Math.round(silenceMs / 60000);
-        if (silenceMs > zombieTimeoutMin * 60 * 1000) {
-            logger.warn(`🧟 [Watchdog] Socket parece ZUMBI: ${silenceMin} min sem mensagens com conexão 'open'. Forçando reconexão...`);
+
+        // Probe ativo: testa a conexão de verdade em vez de confiar apenas no silêncio de
+        // mensagens RECEBIDAS. Uma sessão majoritariamente de envio (ex: lembretes agendados)
+        // pode passar dias sem receber nada e ainda assim estar morta por dentro — o socket
+        // fica "open" mas trava na hora de transmitir. Isso causou falha real de envio sem
+        // detecção por quase 48h (ver incidente de 2026-06-23).
+        const probeTimeoutMs = parseInt(process.env.SARAH_WATCHDOG_PROBE_TIMEOUT_MS || '8000', 10);
+        try {
+            await Promise.race([
+                this.sock.sendPresenceUpdate('available'),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Watchdog probe timeout')), probeTimeoutMs))
+            ]);
+            this.lastMessageReceivedAt = Date.now();
+            logger.debug('💓 [Watchdog] Probe ativo respondeu OK. Conexão saudável.');
+        } catch (err) {
+            logger.warn({ err }, `🧟 [Watchdog] Probe ativo falhou ou expirou (${probeTimeoutMs}ms). Conexão parece zumbi. Forçando reconexão...`);
             this.isReady = false;
             try { this.sock?.ws?.close(); } catch { }
-        } else {
-            logger.debug(`💓 [Watchdog] Socket saudável. Última mensagem há ${silenceMin} min.`);
         }
     }
 
