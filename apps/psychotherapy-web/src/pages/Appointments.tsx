@@ -54,7 +54,10 @@ export default function Appointments() {
   const loadPatients = useCallback(async () => {
     try {
       const res = await fetchApi<PaginatedResponse<Patient>>('/api/psychotherapy/patients?limit=100');
-      setPatients(res.data.filter(p => p.status !== 'inactive'));
+      // Mantém TODOS os pacientes (inclusive inativos) para que o nome continue
+      // aparecendo nas sessões já realizadas por quem foi marcado como inativo.
+      // O backend já ordena os inativos por último, então os ativos vêm primeiro.
+      setPatients(res.data);
     } catch { /* silently ignore */ }
   }, []);
 
