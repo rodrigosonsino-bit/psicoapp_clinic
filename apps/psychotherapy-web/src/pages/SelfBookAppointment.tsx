@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Calendar, Clock, CheckCircle, XCircle, Loader, ChevronLeft, ChevronRight, User, Phone } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Loader, ChevronLeft, ChevronRight, User, Phone, ShieldCheck } from 'lucide-react';
 import type { AvailableSlot } from '../types/api';
 import './BookAppointment.css';
 
@@ -21,6 +21,20 @@ function formatFull(iso: string) {
   });
 }
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '🩺';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function modalityLabel(m: string) {
+  return m === 'presencial' ? '🏢 Presencial' : m === 'online' ? '💻 Online' : '🏢💻 Presencial ou Online';
+}
+function modalityIcon(m: string) {
+  return m === 'presencial' ? '🏢' : m === 'online' ? '💻' : '🏢💻';
+}
+
 function groupByDate(slots: AvailableSlot[]) {
   const map = new Map<string, AvailableSlot[]>();
   for (const s of slots) {
@@ -30,6 +44,27 @@ function groupByDate(slots: AvailableSlot[]) {
     map.get(key)!.push(s);
   }
   return map;
+}
+
+function Brand() {
+  return (
+    <div className="book-brand">
+      <span className="book-brand-dot" />
+      <span>PsicoApp</span>
+    </div>
+  );
+}
+
+function TherapistHero({ name, subtitle }: { name: string; subtitle: string }) {
+  return (
+    <div className="book-hero">
+      <div className="book-avatar">{initials(name)}</div>
+      <p className="book-hero-title">Agende sua sessão com</p>
+      <h1 className="book-therapist-name">{name || 'Seu terapeuta'}</h1>
+      <span className="book-role-badge"><ShieldCheck size={13} /> Psicólogo(a)</span>
+      <p className="book-subtitle">{subtitle}</p>
+    </div>
+  );
 }
 
 export default function SelfBookAppointment() {
@@ -93,8 +128,8 @@ export default function SelfBookAppointment() {
   if (loading) return (
     <div className="book-page">
       <div className="book-card">
-        <div className="book-logo">PsicoApp</div>
-        <div className="book-loading"><Loader size={32} className="spin" /><p>Carregando...</p></div>
+        <Brand />
+        <div className="book-loading"><Loader size={32} className="spin" /><p>Carregando horários...</p></div>
       </div>
     </div>
   );
@@ -102,7 +137,7 @@ export default function SelfBookAppointment() {
   if (pageError) return (
     <div className="book-page">
       <div className="book-card">
-        <div className="book-logo">PsicoApp</div>
+        <Brand />
         <div className="book-error"><XCircle size={48} /><h2>Link inválido</h2><p>{pageError}</p></div>
       </div>
     </div>
@@ -115,20 +150,19 @@ export default function SelfBookAppointment() {
   if (step === 'booked' && selectedSlot) return (
     <div className="book-page">
       <div className="book-card">
-        <div className="book-logo">PsicoApp</div>
+        <Brand />
         <div className="book-success">
-          <CheckCircle size={56} />
+          <div className="book-success-icon"><CheckCircle size={48} /></div>
           <h2>Sessão agendada!</h2>
-          <p className="book-datetime">{formatFull(selectedSlot.datetime)}</p>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            Duração: {selectedSlot.durationMinutes} min · {
-              selectedSlot.modality === 'presencial' ? '🏢 Presencial' :
-              selectedSlot.modality === 'online' ? '💻 Online' : '🏢💻 Presencial ou Online'
-            }
-          </p>
+          <div className="book-success-card">
+            <p className="book-datetime">{formatFull(selectedSlot.datetime)}</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+              {selectedSlot.durationMinutes} min · {modalityLabel(selectedSlot.modality)}
+            </p>
+          </div>
           {info.tenantName && (
-            <p style={{ marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              Seu terapeuta receberá a confirmação automaticamente.
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{info.tenantName}</strong> receberá a confirmação automaticamente.
             </p>
           )}
         </div>
@@ -142,57 +176,36 @@ export default function SelfBookAppointment() {
   if (step === 'form') return (
     <div className="book-page">
       <div className="book-card">
-        <div className="book-logo">PsicoApp</div>
-        <div className="book-header">
-          <Calendar size={36} className="book-icon" />
-          <h1>Agendar Sessão</h1>
-          {info.tenantName && <p className="book-therapist">com <strong>{info.tenantName}</strong></p>}
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            Informe seus dados para prosseguir com o agendamento.
-          </p>
-        </div>
+        <Brand />
+        <TherapistHero name={info.tenantName} subtitle="Informe seus dados para ver os horários disponíveis e confirmar sua sessão." />
 
-        <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              <User size={14} style={{ marginRight: '0.3rem', verticalAlign: 'middle' }} />
-              Nome completo
-            </label>
+        <form onSubmit={handleFormSubmit} className="book-form">
+          <div className="book-field">
+            <label className="book-label"><User size={14} /> Nome completo</label>
             <input
               type="text"
-              className="form-control"
+              className="book-input"
               placeholder="Seu nome"
               value={name}
               onChange={e => setName(e.target.value)}
               autoFocus
-              style={{ fontSize: '1rem', padding: '0.65rem 0.9rem' }}
             />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              <Phone size={14} style={{ marginRight: '0.3rem', verticalAlign: 'middle' }} />
-              Celular / WhatsApp
-            </label>
+          <div className="book-field">
+            <label className="book-label"><Phone size={14} /> Celular / WhatsApp</label>
             <input
               type="tel"
-              className="form-control"
+              className="book-input"
               placeholder="(51) 99999-9999"
               value={phone}
               onChange={e => setPhone(e.target.value)}
-              style={{ fontSize: '1rem', padding: '0.65rem 0.9rem' }}
             />
           </div>
 
-          {formError && (
-            <p style={{ color: 'var(--status-danger)', fontSize: '0.85rem', margin: 0 }}>{formError}</p>
-          )}
+          {formError && <p className="book-error-text">{formError}</p>}
 
-          <button
-            type="submit"
-            className="book-confirm-btn"
-            style={{ marginTop: '0.5rem', width: '100%', justifyContent: 'center' }}
-          >
+          <button type="submit" className="book-confirm-btn" style={{ width: '100%' }}>
             Ver horários disponíveis
           </button>
         </form>
@@ -224,26 +237,26 @@ export default function SelfBookAppointment() {
   return (
     <div className="book-page">
       <div className="book-card wide">
-        <div className="book-logo">PsicoApp</div>
+        <Brand />
 
-        <div className="book-header">
-          <Calendar size={36} className="book-icon" />
-          <h1>Escolha um horário</h1>
-          <p>
-            Olá, <strong>{name}</strong>!{' '}
-            {info.tenantName && <>Sessão com <strong>{info.tenantName}</strong>.</>}
+        <div className="book-hero">
+          <div className="book-avatar">{initials(info.tenantName)}</div>
+          <h1 className="book-therapist-name">Escolha um horário</h1>
+          <p className="book-subtitle">
+            Olá, <strong style={{ color: 'var(--text-primary)' }}>{name}</strong>!{' '}
+            {info.tenantName && <>Sessão com <strong style={{ color: 'var(--text-primary)' }}>{info.tenantName}</strong>.</>}
           </p>
           <button
+            className="book-link-btn"
             onClick={() => { setStep('form'); setSelectedSlot(null); setBookError(''); }}
-            style={{ background: 'none', border: 'none', color: 'var(--brand-primary)', cursor: 'pointer', fontSize: '0.85rem', marginTop: '0.25rem' }}
           >
-            ← Alterar dados
+            ← Alterar meus dados
           </button>
         </div>
 
         {info.availableSlots.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-            <Clock size={40} style={{ marginBottom: '0.75rem' }} />
+          <div className="book-empty">
+            <Clock size={40} />
             <p>Nenhum horário disponível no momento.</p>
           </div>
         ) : (
@@ -281,12 +294,8 @@ export default function SelfBookAppointment() {
                           className={`book-time-btn ${selectedSlot?.datetime === slot.datetime ? 'selected' : ''}`}
                           onClick={() => setSelectedSlot(selectedSlot?.datetime === slot.datetime ? null : slot)}
                         >
-                          <span className="book-time-value">
-                            {new Date(slot.datetime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <span style={{ marginLeft: '4px', fontSize: '0.75rem', opacity: 0.8 }}>
-                            {slot.modality === 'presencial' ? '🏢' : slot.modality === 'online' ? '💻' : '🏢💻'}
-                          </span>
+                          <span>{new Date(slot.datetime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>{modalityIcon(slot.modality)}</span>
                         </button>
                       ))}
                     </div>
@@ -298,16 +307,13 @@ export default function SelfBookAppointment() {
             {selectedSlot && (
               <div className="book-confirm-panel">
                 <div className="book-selected-info">
-                  <CheckCircle size={18} style={{ color: 'var(--status-success)' }} />
+                  <CheckCircle size={18} style={{ color: 'var(--status-success)', flexShrink: 0 }} />
                   <div>
                     <strong>{formatFull(selectedSlot.datetime)}</strong>
-                    <span> · {selectedSlot.durationMinutes} min · {
-                      selectedSlot.modality === 'presencial' ? '🏢 Presencial' :
-                      selectedSlot.modality === 'online' ? '💻 Online' : '🏢💻 Presencial/Online'
-                    }</span>
+                    <span style={{ color: 'var(--text-secondary)' }}> · {selectedSlot.durationMinutes} min · {modalityLabel(selectedSlot.modality)}</span>
                   </div>
                 </div>
-                {bookError && <p style={{ color: 'var(--status-danger)', fontSize: '0.85rem', margin: '0.5rem 0 0' }}>{bookError}</p>}
+                {bookError && <p className="book-error-text" style={{ width: '100%' }}>{bookError}</p>}
                 <button className="book-confirm-btn" onClick={handleBook} disabled={booking}>
                   {booking ? <><Loader size={16} className="spin" /> Confirmando...</> : 'Confirmar Agendamento'}
                 </button>
