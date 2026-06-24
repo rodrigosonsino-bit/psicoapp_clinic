@@ -180,13 +180,31 @@ export class SyncGoogleCalendarEventsUseCase {
                 const patient = await this.repository.findPatientById(tenantId, appt.patientId);
                 if (!patient) continue;
 
+                // Se for filho de uma série, só forçamos a criação de um evento individual
+                // quando temos certeza de que o RRULE do root NÃO cobre essa data (órfão real
+                // entre duas séries). Se o root ainda cobre essa data, deixamos o pull-sync
+                // normal vincular via correspondência de evento expandido — evita duplicar.
+                const forceCreate = appt.parentId ? !(await this.isCoveredByRootRecurrence(tenantId, appt)) : false;
+
                 const isPastoral = patient.email === PASTORAL_SENTINEL_EMAIL;
-                await this.googleCalendar.syncAppointment(tenantId, appt, patient.name, patient.phone, this.confirmUrlFor(appt), isPastoral);
-                logger.info({ tenantId, appointmentId: appt.id }, '🆕 Evento ausente recriado no Google Calendar a partir do PsicoApp (app é a referência)');
+                await this.googleCalendar.syncAppointment(tenantId, appt, patient.name, patient.phone, this.confirmUrlFor(appt), isPastoral, forceCreate);
+                logger.info({ tenantId, appointmentId: appt.id, forceCreate }, '🆕 Evento ausente recriado no Google Calendar a partir do PsicoApp (app é a referência)');
             } catch (err) {
                 logger.error({ err, tenantId, appointmentId: appt.id }, 'Erro ao recriar evento ausente no Google Calendar');
             }
         }
+    }
+
+    /** Verifica se a data de um filho de série ainda cai dentro do RRULE ativo do root. */
+    private async isCoveredByRootRecurrence(tenantId: string, child: PsychotherapyAppointment): Promise<boolean> {
+        if (!child.parentId) return false;
+        const root = await this.repository.findAppointmentById(tenantId, child.parentId);
+        if (!root || root.recurrence === 'none' || !root.recurrenceEndDate) return false;
+        if (child.scheduledAt.getTime() > root.recurrenceEndDate.getTime()) return false;
+
+        const intervalDays = root.recurrence === 'weekly' ? 7 : 14;
+        const diffDays = Math.round((child.scheduledAt.getTime() - root.scheduledAt.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 && diffDays % intervalDays === 0;
     }
 
     /**

@@ -137,7 +137,8 @@ export class GoogleCalendarService {
         patientName: string,
         patientPhone: string | null,
         confirmUrl: string,
-        isPastoral = false
+        isPastoral = false,
+        forceCreate = false
     ): Promise<void> {
         const auth = await this.getAuthenticatedClient(tenantId);
         if (!auth) {
@@ -152,8 +153,10 @@ export class GoogleCalendarService {
         const start = new Date(appointment.scheduledAt);
         const end = new Date(start.getTime() + appointment.durationMinutes * 60_000);
 
-        // Filhos de série sem googleEventId ainda serão vinculados pelo pull-sync — não criar evento individual
-        if (appointment.parentId && !appointment.googleEventId) {
+        // Filhos de série sem googleEventId ainda serão vinculados pelo pull-sync — não criar evento individual.
+        // forceCreate ignora essa espera (usado quando se sabe que não há RRULE cobrindo essa data, ex.:
+        // um filho órfão entre duas séries, que precisa de um evento individual de qualquer forma).
+        if (appointment.parentId && !appointment.googleEventId && !forceCreate) {
             logger.debug({ appointmentId: appointment.id }, 'Filho de série sem googleEventId — aguardando vinculação pelo pull-sync');
             return;
         }
