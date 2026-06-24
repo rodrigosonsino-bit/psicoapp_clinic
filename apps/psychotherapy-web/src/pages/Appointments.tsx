@@ -214,7 +214,7 @@ export default function Appointments() {
     setSyncing(true);
     try {
       // O sync roda em segundo plano no servidor (pode levar até ~1 min).
-      await fetchApi('/api/google/sync', { method: 'POST' });
+      await fetchApi('/auth/google/sync', { method: 'POST' });
       toast.success('Sincronização iniciada. Os agendamentos serão atualizados em instantes.');
       // Recarrega ao longo do tempo para refletir o resultado conforme conclui.
       setTimeout(() => loadAppointments(), 12000);
