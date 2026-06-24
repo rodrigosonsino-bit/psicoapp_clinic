@@ -3,6 +3,7 @@ import { GoogleCalendarClient } from '../../infrastructure/google/GoogleCalendar
 import { IMessageRepository } from '../../domain/repositories/IMessageRepository';
 import { ScheduledMessage } from '../../domain/models/ScheduledMessage';
 import { IMessageSchedulerService } from '../services/IMessageSchedulerService';
+import { WhatsappSessionManager } from '../../infrastructure/whatsapp/WhatsappSessionManager';
 import { logger } from '../../infrastructure/logger/logger';
 
 export class SyncGoogleCalendarUseCase {
@@ -10,7 +11,8 @@ export class SyncGoogleCalendarUseCase {
         private readonly googleClient: GoogleCalendarClient,
         private readonly messageRepository: IMessageRepository,
         private readonly dbPool: Pool,
-        private readonly scheduler: IMessageSchedulerService
+        private readonly scheduler: IMessageSchedulerService,
+        private readonly sessionManager?: WhatsappSessionManager
     ) {}
 
     public async execute(tenantId?: string): Promise<void> {
@@ -54,16 +56,25 @@ export class SyncGoogleCalendarUseCase {
                 const startDateTime = new Date(event.start.dateTime || event.start.date);
                 const clientName = this.extractClientName(event.summary);
 
-                // 1. Agendamento para o Cliente (24h antes do compromisso)
-                const clientSendAt = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
-                await this.scheduleReminder(
-                    config.userId,
-                    eventId,
-                    'client',
-                    phone,
-                    `Olá ${clientName}, lembrete do seu compromisso amanhã (${this.formatDate(startDateTime)}) às ${this.formatTime(startDateTime)}!`,
-                    clientSendAt
-                );
+                // Não enviar lembrete de "cliente" quando o telefone extraído do evento
+                // é o próprio número conectado do profissional (ex: evento de teste criado
+                // pelo próprio tenant usando seu número na descrição/agenda).
+                const isSelfPhone = await this.isOwnWhatsappNumber(config.userId, phone);
+
+                if (!isSelfPhone) {
+                    // 1. Agendamento para o Cliente (24h antes do compromisso)
+                    const clientSendAt = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+                    await this.scheduleReminder(
+                        config.userId,
+                        eventId,
+                        'client',
+                        phone,
+                        `Olá ${clientName}, lembrete do seu compromisso amanhã (${this.formatDate(startDateTime)}) às ${this.formatTime(startDateTime)}!`,
+                        clientSendAt
+                    );
+                } else {
+                    logger.info(`⏭️ Telefone do evento ${eventId} é o próprio número do tenant. Pulando lembrete de cliente.`);
+                }
 
                 // 2. Agendamento para Você/Profissional (30 minutos antes do compromisso)
                 const profPhone = process.env.PROFESSIONAL_PHONE; 
@@ -127,6 +138,19 @@ export class SyncGoogleCalendarUseCase {
         await this.scheduler.schedule(savedMessage, delayMs);
 
         logger.info(`✨ Lembrete do Google Calendar (${reminderType}) agendado com sucesso para ${recipientId} em ${sendAt.toISOString()}`);
+    }
+
+    private async isOwnWhatsappNumber(userId: string, phone: string): Promise<boolean> {
+        if (!this.sessionManager) return false;
+        try {
+            const client = await this.sessionManager.getSession(userId);
+            const myJid = client?.getMyJid();
+            if (!myJid) return false;
+            const myNumber = myJid.split('@')[0];
+            return myNumber === phone;
+        } catch {
+            return false;
+        }
     }
 
     private async checkIfAlreadyScheduled(userId: string, eventId: string, reminderType: string): Promise<boolean> {
