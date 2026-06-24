@@ -2,6 +2,7 @@ import { injectable, inject } from 'tsyringe';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { IPsychotherapyRepository, SaveAppointmentDTO } from '../../domain/repositories/IPsychotherapyRepository';
 import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalendarService';
+import { DeletePsychotherapyAppointmentUseCase } from './DeletePsychotherapyAppointmentUseCase';
 import { AppError } from '../../domain/errors/AppError';
 import { logger } from '../../infrastructure/logger';
 import { PASTORAL_SENTINEL_EMAIL, PASTORAL_SUMMARY_PREFIX } from '../../domain/constants/pastoral';
@@ -12,7 +13,8 @@ const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:3000';
 export class SavePsychotherapyAppointmentUseCase {
     constructor(
         @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository,
-        @inject('GoogleCalendarService') private readonly googleCalendar: GoogleCalendarService
+        @inject('GoogleCalendarService') private readonly googleCalendar: GoogleCalendarService,
+        private readonly deleteUseCase: DeletePsychotherapyAppointmentUseCase
     ) {}
 
     async execute(data: SaveAppointmentDTO & { mode?: 'single' | 'future' | 'all'; allowPast?: boolean }): Promise<PsychotherapyAppointment> {
@@ -66,10 +68,20 @@ export class SavePsychotherapyAppointmentUseCase {
         const mode = data.mode ?? 'single';
 
         if (mode === 'single') {
+            const before = await this.repository.findAppointmentById(data.tenantId, data.id);
             const appointment = await this.repository.saveAppointment(data);
             this.syncWithGoogleCalendar(appointment, data.tenantId).catch(err => {
                 logger.error({ err, appointmentId: appointment.id }, 'Falha no sync Google Calendar (background)');
             });
+
+            if (before && before.recurrence !== appointment.recurrence) {
+                try {
+                    await this.pruneStraySiblings(appointment);
+                } catch (err) {
+                    logger.error({ err, appointmentId: appointment.id }, 'Falha ao remover sessões futuras fora do novo padrão de recorrência');
+                }
+            }
+
             return appointment;
         }
 
@@ -115,6 +127,41 @@ export class SavePsychotherapyAppointmentUseCase {
         }
 
         return updatedTarget;
+    }
+
+    /**
+     * Quando a recorrência de um agendamento é alterada (ex.: semanal → quinzenal),
+     * remove automaticamente as sessões futuras da mesma série que não se encaixam
+     * mais no novo padrão, a partir da data do agendamento editado (âncora).
+     *
+     * Regras de segurança:
+     * - Nunca remove sessões anteriores ou iguais à âncora.
+     * - Nunca remove sessões já concluídas/canceladas (status diferente de
+     *   'scheduled'/'confirmed') — protege histórico e faturamento.
+     * - Se a nova recorrência for 'none', todas as sessões futuras da série são
+     *   removidas (a âncora passa a ser avulsa).
+     */
+    private async pruneStraySiblings(anchor: PsychotherapyAppointment): Promise<void> {
+        const rootId = anchor.parentId ?? anchor.id;
+        const series = await this.repository.listSeriesAppointments(anchor.tenantId, rootId);
+        const intervalDays = anchor.recurrence === 'weekly' ? 7 : anchor.recurrence === 'biweekly' ? 14 : null;
+
+        for (const sibling of series) {
+            if (sibling.id === anchor.id) continue;
+            if (sibling.scheduledAt.getTime() <= anchor.scheduledAt.getTime()) continue;
+            if (sibling.status !== 'scheduled' && sibling.status !== 'confirmed') continue;
+
+            const diffDays = Math.round((sibling.scheduledAt.getTime() - anchor.scheduledAt.getTime()) / (1000 * 60 * 60 * 24));
+            const fitsNewPattern = intervalDays !== null && diffDays % intervalDays === 0;
+
+            if (!fitsNewPattern) {
+                await this.deleteUseCase.execute(anchor.tenantId, sibling.id, 'single');
+                logger.info(
+                    { tenantId: anchor.tenantId, appointmentId: sibling.id, anchorId: anchor.id, newRecurrence: anchor.recurrence },
+                    '🗑️ Sessão futura removida automaticamente (fora do novo padrão de recorrência)'
+                );
+            }
+        }
     }
 
     private calculateOccurrences(start: Date, endDate: Date, recurrence: 'weekly' | 'biweekly'): Date[] {

@@ -44,6 +44,7 @@ export default function Appointments() {
   const [editAppointment, setEditAppointment] = useState<Appointment | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [deleteSeriesDialog, setDeleteSeriesDialog] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  const [confirmRecurrence, setConfirmRecurrence] = useState<{ open: boolean; appointment: Appointment | null; newRecurrence: Appointment['recurrence'] | null }>({ open: false, appointment: null, newRecurrence: null });
   const [viewType, setViewType] = useState<'all' | 'day' | 'week' | 'month'>('week');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [prefilledDate, setPrefilledDate] = useState<string | null>(null);
@@ -166,6 +167,11 @@ export default function Appointments() {
       setConfirmDelete({ open: false, id: null });
       setDeleteSeriesDialog({ open: false, id: null });
     }
+  };
+
+  const requestRecurrenceUpdate = (appointment: Appointment, newRecurrence: Appointment['recurrence']) => {
+    if (newRecurrence === appointment.recurrence) return;
+    setConfirmRecurrence({ open: true, appointment, newRecurrence });
   };
 
   const updateRecurrence = async (appointment: Appointment, newRecurrence: Appointment['recurrence']) => {
@@ -393,7 +399,7 @@ export default function Appointments() {
                         className="form-control"
                         style={{ fontSize: '0.75rem', padding: '2px 6px', height: 'auto', width: '110px' }}
                         value={a.recurrence}
-                        onChange={e => updateRecurrence(a, e.target.value as Appointment['recurrence'])}
+                        onChange={e => requestRecurrenceUpdate(a, e.target.value as Appointment['recurrence'])}
                       >
                         <option value="none">Avulsa</option>
                         <option value="weekly">Semanal</option>
@@ -541,6 +547,24 @@ export default function Appointments() {
         confirmLabel="Excluir" cancelLabel="Cancelar" variant="danger"
         onConfirm={() => handleDelete('single')}
         onCancel={() => setConfirmDelete({ open: false, id: null })}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmRecurrence.open}
+        title="Alterar recorrência"
+        message={
+          confirmRecurrence.newRecurrence === 'none'
+            ? 'Esta sessão passará a ser avulsa. Todas as sessões futuras desta série (ainda não realizadas) serão excluídas automaticamente. Sessões já realizadas ou canceladas não são afetadas.'
+            : `A recorrência será alterada para "${confirmRecurrence.newRecurrence === 'weekly' ? 'Semanal' : 'Quinzenal'}" a partir desta sessão. As sessões futuras que não se encaixarem no novo padrão (ainda não realizadas) serão excluídas automaticamente. Sessões já realizadas ou canceladas não são afetadas.`
+        }
+        confirmLabel="Confirmar" cancelLabel="Cancelar" variant="danger"
+        onConfirm={() => {
+          if (confirmRecurrence.appointment && confirmRecurrence.newRecurrence) {
+            updateRecurrence(confirmRecurrence.appointment, confirmRecurrence.newRecurrence);
+          }
+          setConfirmRecurrence({ open: false, appointment: null, newRecurrence: null });
+        }}
+        onCancel={() => setConfirmRecurrence({ open: false, appointment: null, newRecurrence: null })}
       />
 
       {deleteSeriesDialog.open && (
