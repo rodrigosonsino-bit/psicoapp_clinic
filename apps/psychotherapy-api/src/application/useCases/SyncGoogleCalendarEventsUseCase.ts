@@ -90,6 +90,16 @@ export class SyncGoogleCalendarEventsUseCase {
         });
 
         const events = response.data.items ?? [];
+
+        // ── 0. Agendamentos do app sem evento espelhado no Google: criar os que faltam ──
+        // Cobre o caso de um push anterior ter falhado (ex.: 404 ao tentar atualizar um
+        // evento já removido) e ter limpado a referência sem nunca recriar o evento.
+        try {
+            await this.createMissingGcalEvents(config.tenantId, timeMin, timeMax);
+        } catch (err) {
+            logger.error({ err, tenantId: config.tenantId }, 'Erro ao criar eventos faltantes no Google Calendar');
+        }
+
         if (events.length === 0) return;
 
         const patients = await this.repository.listPatients(config.tenantId);
@@ -139,6 +149,42 @@ export class SyncGoogleCalendarEventsUseCase {
                 await this.syncSeriesGroup(config, recurringEventId, occurrences, patients);
             } catch (seriesErr) {
                 logger.error({ err: seriesErr, recurringEventId, tenantId: config.tenantId }, 'Erro ao sincronizar série recorrente do Google Calendar');
+            }
+        }
+    }
+
+    /**
+     * Agendamentos do app que PERDERAM o evento espelhado no Google Calendar
+     * — por exemplo, um push anterior que falhou (evento removido
+     * externamente, 404 ao atualizar) limpa a referência (string vazia) mas
+     * não garante a recriação imediata. Cria o evento que falta para cada um.
+     *
+     * Importante: só considera `googleEventId === ''` (string vazia, deixada
+     * explicitamente por uma tentativa de sync que falhou), nunca `null`.
+     * `null` significa que o agendamento nunca passou por sincronização —
+     * normalmente dados históricos importados em lote — e não deve ganhar
+     * um evento novo retroativamente.
+     */
+    private async createMissingGcalEvents(tenantId: string, timeMin: Date, timeMax: Date): Promise<void> {
+        const { data: appointments } = await this.repository.listAppointments(tenantId, {
+            start: timeMin,
+            end: timeMax,
+            limit: 200
+        });
+
+        const missing = appointments.filter(a => a.googleEventId === '');
+        if (missing.length === 0) return;
+
+        for (const appt of missing) {
+            try {
+                const patient = await this.repository.findPatientById(tenantId, appt.patientId);
+                if (!patient) continue;
+
+                const isPastoral = patient.email === PASTORAL_SENTINEL_EMAIL;
+                await this.googleCalendar.syncAppointment(tenantId, appt, patient.name, patient.phone, this.confirmUrlFor(appt), isPastoral);
+                logger.info({ tenantId, appointmentId: appt.id }, '🆕 Evento ausente recriado no Google Calendar a partir do PsicoApp (app é a referência)');
+            } catch (err) {
+                logger.error({ err, tenantId, appointmentId: appt.id }, 'Erro ao recriar evento ausente no Google Calendar');
             }
         }
     }
