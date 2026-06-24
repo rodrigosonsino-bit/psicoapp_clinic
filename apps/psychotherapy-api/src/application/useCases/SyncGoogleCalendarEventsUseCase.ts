@@ -184,12 +184,34 @@ export class SyncGoogleCalendarEventsUseCase {
         const durationDrifted = existingAppt.durationMinutes !== durationMinutes;
         if (!timeDrifted && !durationDrifted) return;
 
+        const target = await this.repairCorruptedSeriesLink(tenantId, existingAppt);
         const isPastoral = patient.email === PASTORAL_SENTINEL_EMAIL;
-        await this.googleCalendar.syncAppointment(tenantId, existingAppt, patient.name, patient.phone, this.confirmUrlFor(existingAppt), isPastoral);
+        await this.googleCalendar.syncAppointment(tenantId, target, patient.name, patient.phone, this.confirmUrlFor(target), isPastoral);
         logger.info(
-            { tenantId, appointmentId: existingAppt.id, eventId: event.id },
+            { tenantId, appointmentId: target.id, eventId: event.id },
             '🔧 Divergência no Google Calendar corrigida a partir do PsicoApp (app é a referência)'
         );
+    }
+
+    /**
+     * Detecta um caso legado em que o agendamento RAIZ de uma série recorrente
+     * ficou vinculado ao ID de uma OCORRÊNCIA específica (formato
+     * "{idBase}_{timestamp}") em vez do ID do evento mestre. Tentar fazer
+     * `events.update` nesse ID com RRULE é inválido para a API do Google
+     * ("Invalid start time"). Em vez de tentar contornar a validação, limpamos
+     * o vínculo e deixamos o próximo push recriar o evento mestre corretamente.
+     */
+    private async repairCorruptedSeriesLink(
+        tenantId: string,
+        appt: PsychotherapyAppointment
+    ): Promise<PsychotherapyAppointment> {
+        const looksLikeOccurrenceId = /_[0-9]{8}T[0-9]{6}Z$/.test(appt.googleEventId ?? '');
+        if (appt.parentId || !looksLikeOccurrenceId) return appt;
+
+        await this.repository.updateAppointmentGoogleEvent(appt.id, tenantId, '', '');
+        const fresh = await this.repository.findAppointmentById(tenantId, appt.id);
+        logger.warn({ tenantId, appointmentId: appt.id, badEventId: appt.googleEventId }, '🩹 Vínculo corrompido (raiz de série apontava para ID de ocorrência) — corrigindo');
+        return fresh ?? appt;
     }
 
     // Lógica para eventos avulsos (sem recurringEventId): vincular ID ou corrigir divergência.
