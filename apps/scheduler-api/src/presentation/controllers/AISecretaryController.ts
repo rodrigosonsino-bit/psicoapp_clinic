@@ -14,7 +14,7 @@ export class AISecretaryController {
                 return;
             }
 
-            logger.info({ prompt, tenantId }, 'Processando solicitação com a IA Secretária');
+            logger.info({ tenantId, promptLength: prompt?.length }, 'Processando solicitação com a IA Secretária');
             const response = await this.geminiClient.processPrompt(prompt, currentContent, tenantId);
             
             res.json(response);

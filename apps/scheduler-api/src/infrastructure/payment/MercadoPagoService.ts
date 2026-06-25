@@ -94,7 +94,7 @@ export class MercadoPagoService implements IPaymentService {
         const dataId: string = body.data?.id || body.id;
 
         if (!dataId) {
-            logger.warn({ body }, 'Webhook MP sem data.id. Ignorando.');
+            logger.warn('Webhook MP sem data.id. Ignorando.');
             return;
         }
 
@@ -208,14 +208,20 @@ export class MercadoPagoService implements IPaymentService {
     private validateSignature(body: any, headers: Record<string, string>, secret: string): void {
         const xSignature = headers['x-signature'];
         const xRequestId = headers['x-request-id'];
-        if (!xSignature) return;
+        
+        if (!xSignature) {
+            throw new Error('Assinatura x-signature ausente no webhook Mercado Pago.');
+        }
 
         const parts = Object.fromEntries(
             xSignature.split(',').map((p) => p.split('=') as [string, string])
         );
         const ts = parts['ts'];
         const v1 = parts['v1'];
-        if (!ts || !v1) return;
+        
+        if (!ts || !v1) {
+            throw new Error('Assinatura incompleta (ts ou v1 ausentes) no webhook Mercado Pago.');
+        }
 
         const dataId = body?.data?.id ?? '';
         const message = `id:${dataId};request-id:${xRequestId ?? ''};ts:${ts};`;

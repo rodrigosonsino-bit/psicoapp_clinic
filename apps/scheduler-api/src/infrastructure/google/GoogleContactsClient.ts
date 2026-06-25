@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { Pool } from 'pg';
 import { logger } from '../logger/logger';
 import { GoogleCalendarClient } from './GoogleCalendarClient';
+import { encrypt } from '../utils/cryptoUtils';
 
 export interface ContactsSyncResult {
     totalGoogleContacts: number;
@@ -97,7 +98,7 @@ export class GoogleContactsClient {
                 try {
                     await this.dbPool.query(
                         'UPDATE google_calendar_configs SET access_token = $1, expiry_date = $2, updated_at = NOW() WHERE user_id = $3;',
-                        [tokens.access_token, tokens.expiry_date || config.expiryDate, userId]
+                        [encrypt(tokens.access_token), tokens.expiry_date || config.expiryDate, userId]
                     );
                     logger.info('[GoogleContacts] Token do Google atualizado automaticamente.');
                 } catch (err) {

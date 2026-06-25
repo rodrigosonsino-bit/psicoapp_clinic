@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ScheduledMessage } from '../services/api';
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { ScheduledMessage, getSecureImageUrl } from '../services/api';
 
 const statusTextDict = {
   pending: 'Pendente',
@@ -62,6 +62,17 @@ export const MessageItem = memo(({ item, onEdit, onResend, onDelete }: MessageIt
         {item.metadata?.recurrence && (
           <Text style={{ fontSize: 12, color: '#4F46E5', fontWeight: 'bold', marginTop: 4 }}>
             🔁 {item.metadata.recurrence}
+          </Text>
+        )}
+        {item.metadata?.imageUrl && (
+          <Text 
+            style={{ fontSize: 12, color: '#10B981', fontWeight: 'bold', marginTop: 4 }}
+            onPress={() => {
+                const url = getSecureImageUrl(item.metadata?.imageUrl);
+                if (url) Linking.openURL(url);
+            }}
+          >
+            🖼️ Ver Anexo
           </Text>
         )}
       </View>

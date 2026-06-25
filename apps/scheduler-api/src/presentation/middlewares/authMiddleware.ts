@@ -19,8 +19,14 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     const authHeader = req.headers.authorization;
     const authReq = req as AuthenticatedRequest;
 
+    let token = '';
+
+    if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7);
+    }
+
     // Permitir fallback para DEFAULT_USER_ID apenas em desenvolvimento local.
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (!token) {
         if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEFAULT_USER === 'true' && process.env.DEFAULT_USER_ID) {
             authReq.tenantId = process.env.DEFAULT_USER_ID;
             authReq.userId = process.env.DEFAULT_USER_ID;
@@ -30,7 +36,6 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     }
 
     try {
-        const token = authHeader.slice(7);
         const payload = jwtService.verifyToken(token);
         
         authReq.tenantId = payload.tenantId;

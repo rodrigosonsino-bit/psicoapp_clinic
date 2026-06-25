@@ -7,6 +7,7 @@ import {
     buildSaoPauloDateTimeIso, 
     addMinutesToSaoPauloIso 
 } from '../gemini/SarahTimezoneHelper';
+import { encrypt, decrypt } from '../utils/cryptoUtils';
 
 export interface GoogleCalendarConfig {
     userId: string;
@@ -157,7 +158,11 @@ export class GoogleCalendarClient {
         const result = await this.dbPool.query(
             'SELECT user_id as "userId", access_token as "accessToken", refresh_token as "refreshToken", expiry_date as "expiryDate", email, is_enabled as "isEnabled", calendar_id as "calendarId", calendar_name as "calendarName" FROM google_calendar_configs WHERE is_enabled = true;'
         );
-        return result.rows;
+        return result.rows.map(row => ({
+            ...row,
+            accessToken: decrypt(row.accessToken),
+            refreshToken: row.refreshToken ? decrypt(row.refreshToken) : null
+        }));
     }
 
     public async getConfig(userId: string): Promise<GoogleCalendarConfig | null> {
@@ -166,7 +171,12 @@ export class GoogleCalendarClient {
             [userId]
         );
         if (result.rows.length === 0) return null;
-        return result.rows[0];
+        const row = result.rows[0];
+        return {
+            ...row,
+            accessToken: decrypt(row.accessToken),
+            refreshToken: row.refreshToken ? decrypt(row.refreshToken) : null
+        };
     }
 
     public async deleteConfig(userId: string): Promise<void> {
@@ -174,20 +184,23 @@ export class GoogleCalendarClient {
     }
 
     private async saveConfig(config: GoogleCalendarConfig): Promise<void> {
+        const encAccess = encrypt(config.accessToken);
+        const encRefresh = config.refreshToken ? encrypt(config.refreshToken) : null;
+        
         await this.dbPool.query(
             `INSERT INTO google_calendar_configs (user_id, access_token, refresh_token, expiry_date, email, is_enabled, calendar_id, calendar_name, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
              ON CONFLICT (user_id)
              DO UPDATE SET 
                 access_token = EXCLUDED.access_token,
-                refresh_token = EXCLUDED.refresh_token,
+                refresh_token = COALESCE(EXCLUDED.refresh_token, google_calendar_configs.refresh_token),
                 expiry_date = EXCLUDED.expiry_date,
                 email = EXCLUDED.email,
                 is_enabled = EXCLUDED.is_enabled,
                 calendar_id = EXCLUDED.calendar_id,
                 calendar_name = EXCLUDED.calendar_name,
                 updated_at = NOW();`,
-            [config.userId, config.accessToken, config.refreshToken, config.expiryDate, config.email, config.isEnabled, config.calendarId || 'primary', config.calendarName || 'Principal']
+            [config.userId, encAccess, encRefresh, config.expiryDate, config.email, config.isEnabled, config.calendarId || 'primary', config.calendarName || 'Principal']
         );
     }
 

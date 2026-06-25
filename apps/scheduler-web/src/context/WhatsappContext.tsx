@@ -6,7 +6,6 @@ import {
   disconnectWhatsapp as apiDisconnectWhatsapp, getWhatsappPairingCode, 
   WhatsappConnectionStatus 
 } from '../services/api';
-import { SocketClient } from '../services/socket';
 
 interface WhatsappContextType {
   whatsappStatus: WhatsappConnectionStatus;
@@ -25,7 +24,7 @@ interface WhatsappContextType {
 const WhatsappContext = createContext<WhatsappContextType | undefined>(undefined);
 
 export function WhatsappProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated } = useAuth();
   
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsappConnectionStatus>({ connected: false, status: 'disconnected', hasQr: false });
   const [whatsappQr, setWhatsappQr] = useState<string | null>(null);
@@ -35,7 +34,6 @@ export function WhatsappProvider({ children }: { children: React.ReactNode }) {
   const [pairingLoading, setPairingLoading] = useState(false);
 
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const socketClientRef = useRef<SocketClient | null>(null);
 
   const fetchWhatsappStatus = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -70,136 +68,72 @@ export function WhatsappProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Set up WebSocket connection or fallback to polling
   useEffect(() => {
-    if (isAuthenticated && token) {
-      // Setup WS connection
-      console.log('Setting up WebSocket connection...');
-      const client = new SocketClient(token, {
-        onStatusChanged: (status) => {
-          console.log('WS WhatsApp status updated:', status);
-          setWhatsappStatus(status);
-          if (status.status !== 'connecting' || !status.hasQr) {
-            setWhatsappQr(null);
-          }
-        },
-        onQrReceived: (qr) => {
-          console.log('WS WhatsApp QR code received');
-          setWhatsappQr(qr);
-        },
-        onConnected: () => {
-          console.log('WS WhatsApp client authenticated and listening');
-          // If WS is successfully connected, stop fallback polling
-          stopPolling();
-        },
-        onDisconnected: () => {
-          console.warn('WS WhatsApp client disconnected. Falling back to HTTP polling.');
-          startPolling();
-        }
-      });
-
-      socketClientRef.current = client;
-      client.connect();
+    if (isAuthenticated) {
+      startPolling();
     } else {
-      // Clear WS client and polling if not authenticated
-      if (socketClientRef.current) {
-        socketClientRef.current.disconnect();
-        socketClientRef.current = null;
-      }
       stopPolling();
-      // Reset state
       setWhatsappStatus({ connected: false, status: 'disconnected', hasQr: false });
       setWhatsappQr(null);
       setPairingCode(null);
     }
 
     return () => {
-      if (socketClientRef.current) {
-        socketClientRef.current.disconnect();
-        socketClientRef.current = null;
-      }
       stopPolling();
     };
-  }, [isAuthenticated, token, startPolling, stopPolling]);
+  }, [isAuthenticated, startPolling, stopPolling]);
 
-  const connectWhatsapp = useCallback(async () => {
+  const connectWhatsapp = async () => {
     setWhatsappLoading(true);
     try {
-      const res = await apiConnectWhatsapp();
-      if (res.success) {
-        await fetchWhatsappStatus();
-      }
-      Alert.alert('Sucesso', res.message);
+      await apiConnectWhatsapp();
+      // Polling will naturally pick up the new status
     } catch (err: any) {
-      Alert.alert('Erro', err.response?.data?.error || 'Falha ao inicializar conexão.');
+      Alert.alert('Erro', err.response?.data?.error || 'Não foi possível iniciar conexão do WhatsApp.');
     } finally {
       setWhatsappLoading(false);
     }
-  }, [fetchWhatsappStatus]);
+  };
 
-  const disconnectWhatsapp = useCallback(async () => {
+  const disconnectWhatsapp = async () => {
     setWhatsappLoading(true);
     try {
-      const res = await apiDisconnectWhatsapp();
-      if (res.success) {
-        setWhatsappStatus({ connected: false, status: 'disconnected', hasQr: false });
-        setWhatsappQr(null);
-        setPairingCode(null);
-      }
-      Alert.alert('Sucesso', res.message);
+      await apiDisconnectWhatsapp();
+      setWhatsappStatus({ connected: false, status: 'disconnected', hasQr: false });
+      setWhatsappQr(null);
     } catch (err: any) {
-      Alert.alert('Erro', err.response?.data?.error || 'Falha ao desconectar.');
+      Alert.alert('Erro', err.response?.data?.error || 'Não foi possível desconectar o WhatsApp.');
     } finally {
       setWhatsappLoading(false);
     }
-  }, []);
+  };
 
-  const generatePairingCode = useCallback(async (phone: string) => {
-    if (!phone.trim()) {
-      Alert.alert('Atenção', 'Digite o número de telefone com DDI e DDD (Ex: 5518999999999)');
-      return;
-    }
-    
-    // Safety check for connecting/connected state
-    if (whatsappStatus.connected) {
-      Alert.alert('Aviso', 'WhatsApp já está conectado.');
-      return;
-    }
-
+  const generatePairingCode = async (phone: string) => {
     setPairingLoading(true);
     try {
-      // Safety step: initiate connection first if socket not active
-      if (whatsappStatus.status === 'disconnected') {
-        await apiConnectWhatsapp();
-      }
-      const res = await getWhatsappPairingCode(phone);
-      if (res.success) {
-        setPairingCode(res.code);
-        Alert.alert('Código Gerado', `Use o código: ${res.code} para conectar o aparelho.`);
-      }
+      // Clean phone number: remove any non-digit chars
+      const cleanPhone = phone.replace(/\D/g, '');
+      const res = await getWhatsappPairingCode(cleanPhone);
+      setPairingCode(res.code);
     } catch (err: any) {
-      Alert.alert('Erro', err.response?.data?.error || 'Falha ao gerar código de pareamento.');
+      Alert.alert('Erro', err.response?.data?.error || 'Não foi possível gerar o código de pareamento.');
     } finally {
       setPairingLoading(false);
     }
-  }, [whatsappStatus]);
+  };
 
   return (
-    <WhatsappContext.Provider
-      value={{
-        whatsappStatus,
-        whatsappQr,
-        whatsappLoading,
-        pairingCode,
-        pairingLoading,
-        setWhatsappStatus,
-        setWhatsappQr,
-        fetchWhatsappStatus,
-        connectWhatsapp,
-        disconnectWhatsapp,
-        generatePairingCode
-      }}
-    >
+    <WhatsappContext.Provider value={{
+      whatsappStatus, setWhatsappStatus,
+      whatsappQr, setWhatsappQr,
+      whatsappLoading,
+      pairingCode,
+      pairingLoading,
+      fetchWhatsappStatus,
+      connectWhatsapp,
+      disconnectWhatsapp,
+      generatePairingCode
+    }}>
       {children}
     </WhatsappContext.Provider>
   );

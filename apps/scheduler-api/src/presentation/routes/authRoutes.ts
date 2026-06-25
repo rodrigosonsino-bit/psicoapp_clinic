@@ -80,7 +80,11 @@ export function createAuthRoutes(dbPool: Pool): Router {
     router.get('/auth/me', authMiddleware, async (req: AuthenticatedRequest, res) => {
         try {
             const result = await dbPool.query(
-                'SELECT id, name, email, plan, status, max_messages_per_month, whatsapp_connected, created_at, is_admin FROM tenants WHERE id = $1',
+                `SELECT t.id, t.name, t.email, t.plan, t.status, t.whatsapp_connected, t.created_at, t.is_admin,
+                        COALESCE(p.max_messages_per_month, 5000) as max_messages_per_month
+                 FROM tenants t
+                 LEFT JOIN plans p ON t.plan = p.id
+                 WHERE t.id = $1`,
                 [req.tenantId]
             );
             if (result.rows.length === 0) {
@@ -148,15 +152,5 @@ export function createAuthRoutes(dbPool: Pool): Router {
             res.status(500).json({ error: 'Erro interno ao gerar preview' });
         }
     });
-
-    router.get('/auth/debug/admin', async (req, res) => {
-        try {
-            const result = await dbPool.query("SELECT id, email, is_admin FROM tenants WHERE email = 'rodrigosonsino@gmail.com'");
-            res.json(result.rows[0]);
-        } catch (err) {
-            res.status(500).json({ error: String(err) });
-        }
-    });
-
     return router;
 }

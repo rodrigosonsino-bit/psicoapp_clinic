@@ -52,8 +52,24 @@ export interface ScheduledMessage {
     status: 'pending' | 'sent' | 'failed';
     createdAt: string;
     platform: MessagePlatform;
-    metadata?: { recurrence?: RecurrenceType };
+    metadata?: { recurrence?: RecurrenceType; imageUrl?: string };
 }
+
+export const getSecureImageUrl = (pathOrUrl?: string): string | undefined => {
+    if (!pathOrUrl) return undefined;
+    if (pathOrUrl.startsWith('http')) return pathOrUrl; // Se já for absoluta
+    
+    let token = null;
+    const authHeader = api.defaults.headers.common['Authorization'] as string;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.replace('Bearer ', '');
+    }
+    
+    // Se não tiver token, tenta carregar normalmente (vai dar 401/403 no backend, mas é fallback esperado)
+    if (!token) return `${getSavedApiUrl().replace(/\/api$/, '')}${pathOrUrl}`;
+    
+    return `${getSavedApiUrl().replace(/\/api$/, '')}${pathOrUrl}?token=${token}`;
+};
 
 export interface GetMessagesParams {
     page: number;

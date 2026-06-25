@@ -33,6 +33,9 @@ export class GeminiClient {
     }
 
     private getUserId(): string {
+        if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEFAULT_USER !== 'true') {
+            throw new Error('Vazamento prevenido: AI requer tenantId explicíto em produção.');
+        }
         return process.env.DEFAULT_USER_ID || 'default-user-id';
     }
 
@@ -53,25 +56,10 @@ export class GeminiClient {
             logger.warn('⚠️ GEMINI_API_KEY não configurada no .env. A secretária de IA funcionará em modo simulação.');
         }
 
-        // Criar tabela de histórico de conversas da IA se necessário
-        this.initializeTable().catch(err => {
-            logger.error({ err }, 'Erro ao inicializar tabela whatsapp_ai_chats');
-        });
+        // TBD: Tabela whatsapp_ai_chats removida daqui, agora gerenciada via node-pg-migrate
     }
 
-    private async initializeTable() {
-        await this.dbPool.query(`
-            CREATE TABLE IF NOT EXISTS whatsapp_ai_chats (
-                id SERIAL PRIMARY KEY,
-                contact_jid VARCHAR(255) NOT NULL,
-                role VARCHAR(50) NOT NULL,
-                message_text TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_whatsapp_ai_chats_jid ON whatsapp_ai_chats(contact_jid);
-            CREATE INDEX IF NOT EXISTS idx_whatsapp_ai_chats_jid_created ON whatsapp_ai_chats(contact_jid, created_at ASC);
-        `);
-    }
+
 
     public async processPrompt(prompt: string, currentContent?: string, tenantId?: string): Promise<GeminiResponse> {
         if (!this.ai) {

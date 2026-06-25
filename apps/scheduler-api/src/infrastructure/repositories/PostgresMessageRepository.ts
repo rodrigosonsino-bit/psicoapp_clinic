@@ -117,7 +117,7 @@ export class PostgresMessageRepository implements IMessageRepository {
             SELECT sm.*, wc.name AS recipient_name
             FROM scheduled_messages sm
             LEFT JOIN whatsapp_contacts wc
-              ON wc.id = sm.recipient_id OR wc.id = sm.recipient_id || '@s.whatsapp.net'
+              ON (wc.id = sm.recipient_id OR wc.id = sm.recipient_id || '@s.whatsapp.net') AND wc.tenant_id = sm.user_id::uuid
             WHERE ${conditions.join(' AND ')}
             ORDER BY ${orderBy}
             LIMIT $${limitIdx} OFFSET $${offsetIdx};

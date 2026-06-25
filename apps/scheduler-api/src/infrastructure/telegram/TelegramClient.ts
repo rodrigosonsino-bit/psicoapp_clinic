@@ -46,9 +46,9 @@ export class TelegramClient {
                 const text = (ctx.message as any).text;
 
                 if (chat.type === 'group' || chat.type === 'supergroup') {
-                    logger.info(`📩 Telegram: Mensagem no grupo "${chat.title}" (ID: ${chat.id}) de ${from.first_name}: ${text}`);
-                } else if (chat.type === 'private') {
-                    logger.info(`📩 Telegram: Mensagem privada de ${from.first_name} (ID: ${chat.id}): ${text}`);
+                    logger.info(`📩 Telegram: Mensagem no grupo "${chat.title}" (ID: ${chat.id}) de ${from.first_name} (Tamanho: ${text?.length || 0})`);
+                } else {
+                    logger.info(`📩 Telegram: Mensagem privada de ${from.first_name} (ID: ${chat.id}) (Tamanho: ${text?.length || 0})`);
                 }
             });
 
