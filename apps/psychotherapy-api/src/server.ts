@@ -69,10 +69,18 @@ app.use(helmet({
     }
 }));
 
-// Restrict CORS via environment variable (fallback to Vite dev server port)
+// Restrict CORS via environment variable (fallback to Vite dev server port).
+// Accepts a comma-separated allowlist for dev + deployed frontend origins.
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const allowedCorsOrigins =
+    corsOrigin === '*'
+        ? '*'
+        : corsOrigin
+              .split(',')
+              .map(origin => origin.trim())
+              .filter(Boolean);
 app.use(cors({
-    origin: corsOrigin === '*' ? '*' : corsOrigin.split(','),
+    origin: allowedCorsOrigins,
     credentials: true
 }));
 
@@ -118,6 +126,9 @@ app.use(errorHandler);
 // Bootstrap process: Only connect to the DB and listen to the port when run directly
 if (require.main === module) {
     const dbPool = container.resolve(Pool);
+    const shouldBootWhatsapp =
+        process.env.DISABLE_WHATSAPP_BOOT !== 'true' &&
+        process.env.ENABLE_WHATSAPP !== 'false';
     
     logger.info('⏳ Testando conexão com o banco de dados...');
     dbPool.query('SELECT 1')
@@ -128,20 +139,22 @@ if (require.main === module) {
 
                 // Inicializar WhatsApp (opcional — só se ENABLE_WHATSAPP não for false)
                 const sessionManager = container.resolve<WhatsappSessionManager>('WhatsappSessionManager');
-                if (process.env.ENABLE_WHATSAPP !== 'false') {
+                if (shouldBootWhatsapp) {
                     const dbPool = container.resolve(Pool);
                     const receiptHandler = createPaymentReceiptHandler(dbPool);
                     sessionManager.initializeAll(dbPool, receiptHandler).catch(err => {
                         logger.error({ err }, '⚠️ Falha ao inicializar sessões WhatsApp (não crítico — app continua)');
                     });
                     logger.info('📱 WhatsApp Session Manager inicializado');
+                } else {
+                    logger.warn('⚠️ WhatsApp boot desativado via ENABLE_WHATSAPP=false ou DISABLE_WHATSAPP_BOOT=true');
                 }
 
                 if (process.env.ENABLE_REMINDERS !== 'false') {
                     const repository = container.resolve<IPsychotherapyRepository>('IPsychotherapyRepository');
                     const scheduler = new ReminderScheduler(
                         repository,
-                        process.env.ENABLE_WHATSAPP !== 'false' ? sessionManager : undefined
+                        shouldBootWhatsapp ? sessionManager : undefined
                     );
                     scheduler.start();
                 }
