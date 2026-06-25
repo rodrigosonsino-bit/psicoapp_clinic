@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
 import { ScheduledMessage, getMessages, BASE_URL, deleteMessage, scheduleMessage } from '../services/api';
 
@@ -193,6 +193,15 @@ export function useMessages() {
     setEditingMessage(null);
     setIsResending(false);
   }, []);
+
+  // Polling automático e carregamento inicial unificados no hook
+  useEffect(() => {
+    loadMessages();
+    const interval = setInterval(() => {
+      loadMessages(true, undefined, undefined, true);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [loadMessages]);
 
   return {
     messages,

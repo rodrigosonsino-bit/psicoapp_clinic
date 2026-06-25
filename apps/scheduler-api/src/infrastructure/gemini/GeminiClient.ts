@@ -56,8 +56,7 @@ export class GeminiClient {
             logger.warn('⚠️ GEMINI_API_KEY não configurada no .env. A secretária de IA funcionará em modo simulação.');
         }
 
-        // TBD: Tabela whatsapp_ai_chats removida daqui, agora gerenciada via node-pg-migrate
-    }
+      }
 
 
 

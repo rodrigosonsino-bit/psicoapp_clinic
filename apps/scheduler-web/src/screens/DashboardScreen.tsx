@@ -20,7 +20,6 @@ import { useMessages } from '../hooks/useMessages';
 import { useWhatsappData } from '../hooks/useWhatsappData';
 import { useCalendarData } from '../hooks/useCalendarData';
 import { useAISettings } from '../hooks/useAISettings';
-import { useEffect } from 'react';
 import { GroupsModal } from '../components/GroupsModal';
 import { ContactsModal } from '../components/ContactsModal';
 import { EditLoadingOverlay } from '../components/EditLoadingOverlay';
@@ -64,15 +63,6 @@ export function DashboardScreen(props: DashboardScreenProps) {
     setAiPrefillData(null);
     messagesData.openNewModal();
   };
-
-  // TODO: (Dívida Técnica) Mover a lógica de polling (useEffect) para dentro do `useMessages` ou `useMessagePolling`
-  useEffect(() => {
-    loadMessages();
-    const interval = setInterval(() => {
-      loadMessages(true, undefined, undefined, true);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [loadMessages]);
 
   const renderMessageItem = React.useCallback(({ item }: any) => {
     return (

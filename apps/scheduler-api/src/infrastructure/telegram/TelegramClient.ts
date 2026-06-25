@@ -55,7 +55,7 @@ export class TelegramClient {
             // Handle polling-loop errors. bot.catch() is the right place — bot.launch().catch()
             // only fires when launch() rejects, but individual getUpdates errors (409 Conflict,
             // 401 Unauthorized, timeouts de rede, etc.) são roteados aqui pelo Telegraf.
-            // Qualquer erro aqui derruba o polling, então TODO erro precisa de retry — não só o 409.
+            // Qualquer erro aqui derruba o polling, então cada erro precisa de retry — não só o 409.
             // Sem isso, um 401 (token revogado/rotacionado) deixa o bot morto pra sempre até
             // o processo reiniciar (incidente de 2026-06-23).
             this.bot.catch((err: any) => {

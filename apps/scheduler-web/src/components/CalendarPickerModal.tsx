@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator, FlatList, StyleSheet } from 'react-native';
 import { GoogleCalendarItem, GoogleCalendarStatus } from '../services/api';
+import { colors, spacing, radius, fontSize } from '../theme/tokens';
 
 interface CalendarPickerModalProps {
   visible: boolean;
@@ -38,7 +39,7 @@ export function CalendarPickerModal({
             Escolha qual agenda do Google Calendar será monitorada para enviar lembretes automáticos:
           </Text>
           {calendarListLoading ? (
-            <ActivityIndicator size="large" color="#2E7D32" style={{ marginVertical: 30 }} />
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 30 }} />
           ) : (
             <FlatList
               data={calendarList}
@@ -51,7 +52,7 @@ export function CalendarPickerModal({
                     style={[styles.calPickerItem, isSelected && styles.calPickerItemSelected]}
                     onPress={() => onSelectCalendar(item)}
                   >
-                    <View style={[styles.calPickerDot, { backgroundColor: item.backgroundColor || '#4285f4' }]} />
+                    <View style={[styles.calPickerDot, { backgroundColor: item.backgroundColor || colors.primary }]} />
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.calPickerItemName, isSelected && styles.calPickerItemNameSelected]}>
                         {item.summary} {item.primary ? '(Principal)' : ''}
@@ -62,7 +63,7 @@ export function CalendarPickerModal({
                   </TouchableOpacity>
                 );
               }}
-              ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#999', marginVertical: 20 }}>Nenhuma agenda encontrada.</Text>}
+              ListEmptyComponent={<Text style={{ textAlign: 'center', color: colors.textMuted, marginVertical: 20 }}>Nenhuma agenda encontrada.</Text>}
             />
           )}
         </View>
@@ -74,82 +75,86 @@ export function CalendarPickerModal({
 const styles = StyleSheet.create({
   calPickerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.lg,
   },
   calPickerContainer: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: colors.bgBase,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     width: '100%',
     maxWidth: 500,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
   },
   calPickerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: spacing.md,
   },
   calPickerTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontWeight: '800',
-    color: '#1E293B',
+    color: colors.textPrimary,
   },
   calPickerCloseBtn: {
-    fontSize: 20,
-    color: '#64748B',
+    fontSize: fontSize.xl,
+    color: colors.textSecondary,
     fontWeight: '700',
-    padding: 4,
+    padding: spacing.xs,
   },
   calPickerSubtitle: {
-    fontSize: 13,
-    color: '#64748B',
-    lineHeight: 18,
-    marginBottom: 15,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
   },
   calPickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
+    padding: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 8,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface,
+    marginBottom: spacing.sm,
   },
   calPickerItemSelected: {
-    borderColor: '#4F46E5',
-    backgroundColor: '#EEF2FF',
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryMuted,
   },
   calPickerDot: {
     width: 12,
     height: 12,
-    borderRadius: 6,
-    marginRight: 10,
+    borderRadius: radius.full,
+    marginRight: spacing.sm,
   },
   calPickerItemName: {
-    fontSize: 14,
+    fontSize: fontSize.md,
     fontWeight: '600',
-    color: '#334155',
+    color: colors.textPrimary,
   },
   calPickerItemNameSelected: {
-    color: '#4F46E5',
+    color: colors.primary,
+    fontWeight: '800',
   },
   calPickerItemDesc: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
     marginTop: 2,
   },
   calPickerCheck: {
-    fontSize: 16,
+    fontSize: fontSize.lg,
     fontWeight: '800',
-    color: '#4F46E5',
-    marginLeft: 8,
+    color: colors.primary,
+    marginLeft: spacing.sm,
   },
 });

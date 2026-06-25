@@ -28,9 +28,12 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     // Permitir fallback para DEFAULT_USER_ID apenas em desenvolvimento local.
     if (!token) {
         if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEFAULT_USER === 'true' && process.env.DEFAULT_USER_ID) {
-            authReq.tenantId = process.env.DEFAULT_USER_ID;
-            authReq.userId = process.env.DEFAULT_USER_ID;
-            return next();
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (uuidRegex.test(process.env.DEFAULT_USER_ID)) {
+                authReq.tenantId = process.env.DEFAULT_USER_ID;
+                authReq.userId = process.env.DEFAULT_USER_ID;
+                return next();
+            }
         }
         return res.status(401).json({ error: 'Token não fornecido ou cabeçalho Authorization inválido' });
     }

@@ -104,10 +104,12 @@ export class WhatsappClient {
 
             const { state, saveCreds } = await usePostgresAuthState(dbPool, this.tenantId);
 
+            const logLevel = (process.env.WHATSAPP_LOG_LEVEL || 'silent') as pino.Level;
+            
             this.sock = makeWASocket({
                 version,
                 auth: state,
-                logger: pino({ level: 'silent' }) as any,
+                logger: pino({ level: logLevel }) as any,
                 browser: Browsers.ubuntu('Chrome'),
                 connectTimeoutMs: 90000,
                 defaultQueryTimeoutMs: 60000,
@@ -652,8 +654,16 @@ export class WhatsappClient {
         if (!this.sock) return;
 
         try {
-            const groups = await this.sock.groupFetchAllParticipating();
-            const groupList = Object.values(groups);
+            logger.info('📱 Iniciando busca de grupos do WhatsApp...');
+            // Add an explicit timeout since groupFetchAllParticipating can hang
+            const timeoutMs = 15000;
+            const fetchPromise = this.sock.groupFetchAllParticipating();
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error(`Timeout de ${timeoutMs}ms ao buscar grupos`)), timeoutMs);
+            });
+
+            const groups = await Promise.race([fetchPromise, timeoutPromise]);
+            const groupList = Object.values(groups as any);
 
             logger.info('📱 BUSCA DE GRUPOS CONCLUÍDA:');
             groupList.forEach((g: any) => {
@@ -664,7 +674,7 @@ export class WhatsappClient {
                 logger.info('Este número não participa de nenhum grupo no momento.');
             }
         } catch (error) {
-            logger.error({ err: error }, 'Erro ao mapear grupos do WhatsApp.');
+            logger.error({ err: error }, 'Erro ou Timeout ao mapear grupos do WhatsApp.');
         }
     }
 

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useCalendar } from '../context/CalendarContext';
 import { GoogleCalendarEvent, getGoogleCalendarEvents, toggleEventAutoSend } from '../services/api';
+import { colors, spacing, radius, fontSize } from '../theme/tokens';
 
 interface CalendarIntegrationCardProps {
   onOpenCalendarPicker: () => void;
@@ -72,7 +73,7 @@ export function CalendarIntegrationCard({ onOpenCalendarPicker, onRefreshMessage
       </View>
       
       {calendarLoading ? (
-        <ActivityIndicator size="small" color="#4F46E5" style={{ marginVertical: 10 }} />
+        <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 10 }} />
       ) : !calendarStatus.connected ? (
         <View>
           <Text style={styles.calendarCardDescription}>
@@ -85,7 +86,7 @@ export function CalendarIntegrationCard({ onOpenCalendarPicker, onRefreshMessage
       ) : (
         <View>
           <Text style={styles.calendarCardDescription}>
-            Sua agenda <Text style={{ fontWeight: 'bold' }}>{calendarStatus.email}</Text> está integrada. O sistema monitora seus compromissos e envia mensagens autônomas.
+            Sua agenda <Text style={{ fontWeight: 'bold', color: colors.textPrimary }}>{calendarStatus.email}</Text> está integrada. O sistema monitora seus compromissos e envia mensagens autônomas.
           </Text>
           
           {/* Calendar Selector */}
@@ -106,13 +107,13 @@ export function CalendarIntegrationCard({ onOpenCalendarPicker, onRefreshMessage
               disabled={syncingCalendar}
             >
               {syncingCalendar ? (
-                <ActivityIndicator size="small" color="#334155" />
+                <ActivityIndicator size="small" color={colors.textPrimary} />
               ) : (
                 <Text style={styles.calendarActionButtonText}>🔄 Sincronizar Agora</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity style={[styles.calendarActionButton, styles.calendarDisconnectButton]} onPress={disconnectCalendar}>
-              <Text style={styles.calendarActionButtonText}>❌ Desconectar</Text>
+              <Text style={styles.calendarActionDisconnectText}>❌ Desconectar</Text>
             </TouchableOpacity>
           </View>
 
@@ -131,7 +132,7 @@ export function CalendarIntegrationCard({ onOpenCalendarPicker, onRefreshMessage
           {showEventsPanel && (
             <View style={styles.evtPanel}>
               {eventsLoading ? (
-                <ActivityIndicator size="small" color="#4F46E5" style={{ marginVertical: 12 }} />
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
               ) : calendarEvents.length === 0 ? (
                 <Text style={styles.evtEmptyText}>Nenhum compromisso nos próximos 7 dias.</Text>
               ) : (
@@ -146,7 +147,7 @@ export function CalendarIntegrationCard({ onOpenCalendarPicker, onRefreshMessage
                         style={[styles.evtToggle, evt.autoSend ? styles.evtToggleOn : styles.evtToggleOff]}
                         onPress={() => handleToggleAutoSend(evt)}
                       >
-                        <Text style={styles.evtToggleText}>
+                        <Text style={evt.autoSend ? styles.evtToggleTextOn : styles.evtToggleTextOff}>
                           {evt.autoSend ? '✉️ ON' : '🔇 OFF'}
                         </Text>
                       </TouchableOpacity>
@@ -164,172 +165,189 @@ export function CalendarIntegrationCard({ onOpenCalendarPicker, onRefreshMessage
 
 const styles = StyleSheet.create({
   calendarCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
+    borderColor: colors.borderDefault,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   calendarCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   calendarCardTitle: {
-    fontSize: 16,
+    fontSize: fontSize.lg,
     fontWeight: '800',
-    color: '#0F172A',
+    color: colors.textPrimary,
     letterSpacing: -0.3,
   },
   connectedBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#DCFCE7',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryMuted,
+    borderWidth: 1,
+    borderColor: colors.borderPrimary,
   },
   connectedBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#15803D',
+    color: colors.primary,
+    letterSpacing: 0.5,
   },
   calendarCardDescription: {
-    fontSize: 13,
-    color: '#64748B',
-    lineHeight: 18,
-    marginBottom: 16,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
   },
   calendarConnectButton: {
-    backgroundColor: '#4F46E5',
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   calendarConnectButtonText: {
-    color: '#FFF',
-    fontWeight: '700',
-    fontSize: 14,
+    color: colors.textInverse,
+    fontWeight: '800',
+    fontSize: fontSize.md,
   },
   calendarSelectorButton: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.bgRaised,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: colors.borderDefault,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   calendarSelectorRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   calendarSelectorLabel: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
     fontWeight: '600',
     marginBottom: 2,
   },
   calendarSelectorValue: {
-    fontSize: 13,
-    color: '#0F172A',
+    fontSize: fontSize.sm,
+    color: colors.textPrimary,
     fontWeight: '700',
   },
   calendarSelectorArrow: {
-    fontSize: 12,
-    color: '#64748B',
-    marginLeft: 8,
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    marginLeft: spacing.sm,
   },
   calendarActionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    gap: 8,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
   calendarActionButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.bgRaised,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#FFF',
+    borderColor: colors.borderDefault,
   },
   calendarActionButtonText: {
-    fontSize: 13,
+    fontSize: fontSize.sm,
     fontWeight: '700',
-    color: '#334155',
+    color: colors.textPrimary,
   },
   calendarDisconnectButton: {
-    borderColor: '#FCA5A5',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerMuted,
+    borderColor: colors.dangerBorder,
+  },
+  calendarActionDisconnectText: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: colors.danger,
   },
   evtPanelToggle: {
-    paddingVertical: 10,
+    paddingVertical: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: colors.borderMuted,
     alignItems: 'center',
   },
   evtPanelToggleText: {
-    fontSize: 12,
+    fontSize: fontSize.sm,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: colors.textSecondary,
   },
   evtPanel: {
-    marginTop: 10,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    padding: 10,
+    marginTop: spacing.sm,
+    backgroundColor: colors.bgRaised,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.borderDefault,
   },
   evtEmptyText: {
-    fontSize: 12,
-    color: '#64748B',
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginVertical: 10,
+    marginVertical: spacing.md,
   },
   evtScrollContainer: {
-    maxHeight: 200,
+    maxHeight: 250,
   },
   evtItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: colors.borderMuted,
   },
   evtItemTitle: {
-    fontSize: 13,
+    fontSize: fontSize.sm,
     fontWeight: '700',
-    color: '#334155',
+    color: colors.textPrimary,
   },
   evtItemTime: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   evtToggle: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
   },
   evtToggleOn: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.primaryMuted,
+    borderColor: colors.borderPrimary,
   },
   evtToggleOff: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.bgBase,
+    borderColor: colors.borderMuted,
   },
-  evtToggleText: {
+  evtToggleTextOn: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#15803D',
+    color: colors.primary,
+  },
+  evtToggleTextOff: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.textMuted,
   },
 });
+

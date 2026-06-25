@@ -34,10 +34,11 @@ export class HealthController {
 
         // Verifica Redis
         try {
-            if (this.redisClient.status === 'ready') {
+            const pingRes = await this.redisClient.ping();
+            if (pingRes === 'PONG') {
                  healthStatus.services.redis = 'up';
             } else {
-                 throw new Error(`Status atual: ${this.redisClient.status}`);
+                 throw new Error(`Ping respondeu com: ${pingRes}`);
             }
         } catch (error) {
             logger.error({ err: error }, 'HealthCheck: Falha de conexão com Redis');

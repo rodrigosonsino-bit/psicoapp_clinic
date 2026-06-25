@@ -25,6 +25,11 @@ export class WhatsappSessionManager {
                 const tenantId = row.id;
                 logger.info(`Auto-conectando WhatsApp para tenant: ${tenantId}`);
                 await this.createSession(tenantId);
+                
+                // Aguarda 3 segundos entre a inicialização de cada tenant para evitar 
+                // "thundering herd" e event loop starvation que causam os erros 1006
+                // por estrangulamento do websocket no boot da API.
+                await new Promise(resolve => setTimeout(resolve, 3000));
             }
             logger.info(`Sessões ativas inicializadas: ${this.sessions.size}`);
         } catch (err) {

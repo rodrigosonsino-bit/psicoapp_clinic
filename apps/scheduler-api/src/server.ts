@@ -46,6 +46,13 @@ const dbPool = process.env.DATABASE_URL
         connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONN_TIMEOUT || '2000', 10)
       });
 
+// Tratar erros inesperados no pool do PostgreSQL para evitar crash do Node.js
+// Neon e provedores Serverless costumam derrubar conexões inativas ou fechar conexões
+// abruptamente, o que gera um evento 'error' no pool que, se não tratado, derruba a API.
+dbPool.on('error', (err, client) => {
+    logger.error({ err }, '⚠️ Erro inesperado no pool do PostgreSQL (conexão perdida/timeout). O pool tentará reconectar automaticamente.');
+});
+
 let redisConnection: any;
 
 if (process.env.REDIS_URL === 'mock') {
@@ -65,7 +72,7 @@ if (process.env.REDIS_URL === 'mock') {
         });
 }
 
-// TBD: Removido ensureDatabaseSchema (usando node-pg-migrate)
+// Removed TBD ensureDatabaseSchema
 async function connectWithRetry(pool: Pool, retries = 5, delay = 2000): Promise<void> {
     for (let i = 1; i <= retries; i++) {
         try {
@@ -100,7 +107,11 @@ async function bootstrap() {
             return geminiClient.generateAutoReply(ctx.from, ctx.name, ctx.text, settings.instructions, ctx.mediaData, ctx.tenantId);
         };
 
-        await sessionManager.initializeAll(dbPool, messageHandler);
+        if (process.env.DISABLE_WHATSAPP_BOOT !== 'true') {
+            await sessionManager.initializeAll(dbPool, messageHandler);
+        } else {
+            logger.warn('⚠️  Inicialização do WhatsApp pulada via DISABLE_WHATSAPP_BOOT=true');
+        }
 
         const telegramClient = new TelegramClient(process.env.TELEGRAM_BOT_TOKEN || '');
         telegramClient.initialize().catch(err => {
@@ -178,3 +189,5 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+process.on('unhandledRejection', (reason, promise) => { console.error('Unhandled Rejection at:', promise, 'reason:', reason); });

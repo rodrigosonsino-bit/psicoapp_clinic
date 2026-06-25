@@ -38,8 +38,8 @@ export function createApp(
 ): express.Application {
     const app = express();
     
-    // Confia no cabeçalho X-Forwarded-For do Railway/proxy para o rate limiter funcionar
-    app.set('trust proxy', true);
+    // Confia em exatamente 1 hop de proxy (Railway), evitando spoof de X-Forwarded-For via trust proxy permissivo
+    app.set('trust proxy', 1);
     
     // Helmet config: CSP seguro mas leniente para o Expo Web (unsafe-inline/eval) e OAuth
     app.use(helmet({
