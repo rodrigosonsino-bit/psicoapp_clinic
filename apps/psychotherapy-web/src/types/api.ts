@@ -133,6 +133,7 @@ export interface TenantProfile {
   address: string | null;
   twoFactorEnabled?: boolean;
   bookingPage?: BookingPageSettings | null;
+  whatsappReminderTemplate?: string | null;
 }
 
 export interface DashboardAnalytics {

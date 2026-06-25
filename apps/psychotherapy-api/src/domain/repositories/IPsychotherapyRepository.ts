@@ -63,6 +63,7 @@ export interface UpdateTenantProfileDTO {
     professionalId?: string | null;
     address?: string | null;
     bookingPage?: import('../models/TenantProfile').BookingPageSettings | null;
+    whatsappReminderTemplate?: string | null;
 }
 
 export interface SaveReceiptDTO {
@@ -138,6 +139,7 @@ export interface UpcomingAppointment {
     reminderChannel: ReminderChannel;
     scheduledAt: Date;
     durationMinutes: number;
+    whatsappReminderTemplate: string | null;
 }
 
 export type ReminderLogStatus = 'success' | 'failed';
@@ -211,6 +213,8 @@ export interface IPsychotherapyRepository {
     deleteAppointment(tenantId: string, id: string): Promise<void>;
     updateAppointmentStatus(tenantId: string, id: string, status: AppointmentStatus): Promise<PsychotherapyAppointment>;
     findUpcomingAppointments(windowStart: Date, windowEnd: Date): Promise<UpcomingAppointment[]>;
+    /** Agendamentos futuros cuja janela normal já passou mas que têm tentativa de WhatsApp falhada e nenhum sucesso ainda (retry). */
+    findFailedWhatsappReminders(now: Date, windowStart: Date, maxAttempts: number): Promise<UpcomingAppointment[]>;
     markReminderSent(appointmentId: string, tenantId: string, channelUsed: ReminderLogChannel, status: ReminderLogStatus, errorMessage?: string): Promise<void>;
     hasReminderBeenSent(appointmentId: string, channelUsed: ReminderLogChannel): Promise<boolean>;
     countScheduledSessionsByPatient(tenantId: string, month: string): Promise<Map<string, number>>;

@@ -376,7 +376,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = this.validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
@@ -394,16 +394,18 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 professional_id = COALESCE($4, professional_id),
                 address = COALESCE($5, address),
                 booking_page = COALESCE($6::jsonb, booking_page),
+                whatsapp_reminder_template = COALESCE($7, whatsapp_reminder_template),
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
             data.document !== undefined ? data.document : null,
             data.professionalId !== undefined ? data.professionalId : null,
             data.address !== undefined ? data.address : null,
-            data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null
+            data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null,
+            data.whatsappReminderTemplate !== undefined ? data.whatsappReminderTemplate : null
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Tenant não encontrado');
@@ -1201,7 +1203,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 p.email         AS patient_email,
                 p.reminder_channel,
                 a.scheduled_at,
-                a.duration_minutes
+                a.duration_minutes,
+                t.whatsapp_reminder_template
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
             JOIN tenants t ON t.id = a.tenant_id
@@ -1223,6 +1226,58 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             reminderChannel: row.reminder_channel ?? 'whatsapp',
             scheduledAt:    new Date(row.scheduled_at),
             durationMinutes: row.duration_minutes,
+            whatsappReminderTemplate: row.whatsapp_reminder_template ?? null,
+        }));
+    }
+
+    async findFailedWhatsappReminders(now: Date, windowStart: Date, maxAttempts: number): Promise<UpcomingAppointment[]> {
+        const result = await this.dbPool.query(`
+            SELECT
+                a.id            AS appointment_id,
+                a.tenant_id,
+                t.name          AS tenant_name,
+                a.patient_id,
+                p.name          AS patient_name,
+                p.phone         AS patient_phone,
+                p.email         AS patient_email,
+                p.reminder_channel,
+                a.scheduled_at,
+                a.duration_minutes,
+                t.whatsapp_reminder_template
+            FROM psychotherapy_appointments a
+            JOIN psychotherapy_patients p ON p.id = a.patient_id
+            JOIN tenants t ON t.id = a.tenant_id
+            WHERE a.scheduled_at > $1
+              AND a.scheduled_at < $2
+              AND a.status IN ('scheduled', 'confirmed')
+              AND p.reminder_channel IN ('whatsapp', 'both')
+              AND EXISTS (
+                  SELECT 1 FROM psychotherapy_reminders_log rl
+                  WHERE rl.appointment_id = a.id AND rl.channel_used = 'whatsapp' AND rl.status = 'failed'
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM psychotherapy_reminders_log rl2
+                  WHERE rl2.appointment_id = a.id AND rl2.channel_used = 'whatsapp' AND rl2.status = 'success'
+              )
+              AND (
+                  SELECT COUNT(*) FROM psychotherapy_reminders_log rl3
+                  WHERE rl3.appointment_id = a.id AND rl3.channel_used = 'whatsapp' AND rl3.status = 'failed'
+              ) < $3
+            ORDER BY a.scheduled_at ASC;
+        `, [now, windowStart, maxAttempts]);
+
+        return result.rows.map(row => ({
+            appointmentId:  row.appointment_id,
+            tenantId:       row.tenant_id,
+            tenantName:     row.tenant_name,
+            patientId:      row.patient_id,
+            patientName:    row.patient_name,
+            patientPhone:   row.patient_phone,
+            patientEmail:   row.patient_email,
+            reminderChannel: row.reminder_channel ?? 'whatsapp',
+            scheduledAt:    new Date(row.scheduled_at),
+            durationMinutes: row.duration_minutes,
+            whatsappReminderTemplate: row.whatsapp_reminder_template ?? null,
         }));
     }
 
@@ -1629,7 +1684,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.professional_id,
             row.address,
             row.totp_enabled || false,
-            row.booking_page ?? null
+            row.booking_page ?? null,
+            row.whatsapp_reminder_template ?? null
         );
     }
 

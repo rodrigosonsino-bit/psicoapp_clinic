@@ -35,7 +35,8 @@ export class ProfileController {
             document: data.document,
             professionalId: data.professionalId,
             address: data.address,
-            bookingPage: data.bookingPage
+            bookingPage: data.bookingPage,
+            whatsappReminderTemplate: data.whatsappReminderTemplate
         });
 
         res.status(200).json(updatedProfile.toJSON());

@@ -47,6 +47,7 @@ export interface TenantProfileRow {
     address: string | null;
     totp_enabled?: boolean;
     booking_page?: import('../../domain/models/TenantProfile').BookingPageSettings | null;
+    whatsapp_reminder_template?: string | null;
 }
 
 // Linha da tabela: psychotherapy_receipts

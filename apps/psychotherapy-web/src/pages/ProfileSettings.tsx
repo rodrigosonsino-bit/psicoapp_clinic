@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, User, CreditCard, Shield, MapPin, ShieldCheck, ShieldOff, Copy, CalendarDays, CheckCircle, XCircle, Smartphone, RefreshCw, Power, Loader2, Palette } from 'lucide-react';
+import { Save, User, CreditCard, Shield, MapPin, ShieldCheck, ShieldOff, Copy, CalendarDays, CheckCircle, XCircle, Smartphone, RefreshCw, Power, Loader2, Palette, MessageSquare } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { TenantProfile, TotpSetupResult, GoogleCalendarStatus, WhatsappStatus, BookingPageSettings } from '../types/api';
 import { useToast } from '../context/ToastContext';
@@ -13,7 +13,8 @@ export default function ProfileSettings() {
     document: '',
     professionalId: '',
     address: '',
-    twoFactorEnabled: false
+    twoFactorEnabled: false,
+    whatsappReminderTemplate: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,7 +32,8 @@ export default function ProfileSettings() {
         document: data.document || '',
         professionalId: data.professionalId || '',
         address: data.address || '',
-        twoFactorEnabled: data.twoFactorEnabled || false
+        twoFactorEnabled: data.twoFactorEnabled || false,
+        whatsappReminderTemplate: data.whatsappReminderTemplate || ''
       });
     } catch (err) {
       console.error(err);
@@ -179,6 +181,38 @@ export default function ProfileSettings() {
                 style={{ resize: 'vertical', minHeight: '80px' }}
                 disabled={saving}
               />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label flex items-center gap-2">
+                <MessageSquare size={16} className="text-muted" /> Mensagem de Lembrete (WhatsApp)
+              </label>
+              <textarea
+                className="form-control"
+                rows={5}
+                placeholder={'Olá, {nome}! 😊\n\nLembrando que você tem uma sessão agendada:\n📅 {data}\n⏱️ Duração: {duracao} minutos\n\nPor favor, confirme sua presença respondendo esta mensagem.\nCaso precise reagendar, entre em contato com antecedência.'}
+                value={formData.whatsappReminderTemplate}
+                onChange={e => setFormData({ ...formData, whatsappReminderTemplate: e.target.value })}
+                style={{ resize: 'vertical', minHeight: '120px', fontFamily: 'inherit' }}
+                disabled={saving}
+                maxLength={1000}
+              />
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                Use <code>{'{nome}'}</code>, <code>{'{data}'}</code> e <code>{'{duracao}'}</code> para inserir os dados do agendamento. Deixe vazio para usar a mensagem padrão (mostrada acima como exemplo).
+              </p>
+              {formData.whatsappReminderTemplate && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ marginTop: '0.5rem' }}
+                  onClick={() => setFormData({ ...formData, whatsappReminderTemplate: '' })}
+                  disabled={saving}
+                >
+                  Restaurar mensagem padrão
+                </button>
+              )}
             </div>
           </div>
 

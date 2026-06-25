@@ -17,16 +17,22 @@ function formatDateTimeBR(date: Date): string {
     });
 }
 
+const DEFAULT_REMINDER_TEMPLATE =
+    `Olá, {nome}! 😊\n\n` +
+    `Lembrando que você tem uma sessão agendada:\n` +
+    `📅 {data}\n` +
+    `⏱️ Duração: {duracao} minutos\n\n` +
+    `Por favor, confirme sua presença respondendo esta mensagem.\n` +
+    `Caso precise reagendar, entre em contato com antecedência.`;
+
 function buildWhatsAppMessage(appointment: UpcomingAppointment): string {
     const dateStr = formatDateTimeBR(appointment.scheduledAt);
-    return (
-        `Olá, ${appointment.patientName}! 😊\n\n` +
-        `Lembrando que você tem uma sessão agendada:\n` +
-        `📅 ${dateStr}\n` +
-        `⏱️ Duração: ${appointment.durationMinutes} minutos\n\n` +
-        `Por favor, confirme sua presença respondendo esta mensagem.\n` +
-        `Caso precise reagendar, entre em contato com antecedência.`
-    );
+    const template = appointment.whatsappReminderTemplate?.trim() || DEFAULT_REMINDER_TEMPLATE;
+
+    return template
+        .replace(/{nome}/g, appointment.patientName)
+        .replace(/{data}/g, dateStr)
+        .replace(/{duracao}/g, String(appointment.durationMinutes));
 }
 
 // ── Resultado do processamento ─────────────────────────────────────────────────
@@ -38,7 +44,11 @@ export interface ReminderRunResult {
     emailSent: number;
     emailFailed: number;
     skipped: number;
+    whatsappRetried: number;
 }
+
+/** Máximo de tentativas de WhatsApp por agendamento antes de desistir definitivamente. */
+const MAX_WHATSAPP_ATTEMPTS = 5;
 
 // ── Scheduler ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +87,7 @@ export class ReminderScheduler {
             emailSent: 0,
             emailFailed: 0,
             skipped: 0,
+            whatsappRetried: 0,
         };
 
         try {
@@ -88,12 +99,24 @@ export class ReminderScheduler {
             const appointments = await this.repository.findUpcomingAppointments(windowStart, windowEnd);
             result.totalAppointments = appointments.length;
 
-            if (appointments.length === 0) return result;
+            if (appointments.length > 0) {
+                logger.info({ count: appointments.length }, '🔔 Processando lembretes de agendamentos');
 
-            logger.info({ count: appointments.length }, '🔔 Processando lembretes de agendamentos');
+                for (const appt of appointments) {
+                    await this.dispatchReminder(appt, result);
+                }
+            }
 
-            for (const appt of appointments) {
-                await this.dispatchReminder(appt, result);
+            // Retry: agendamentos cuja janela normal já passou mas o WhatsApp falhou (ex: sessão desconectada)
+            // e a sessão ainda não aconteceu — tenta de novo em vez de desistir silenciosamente.
+            const retryCandidates = await this.repository.findFailedWhatsappReminders(now, windowStart, MAX_WHATSAPP_ATTEMPTS);
+            if (retryCandidates.length > 0) {
+                logger.info({ count: retryCandidates.length }, '🔁 Reprocessando lembretes de WhatsApp que falharam anteriormente');
+                for (const appt of retryCandidates) {
+                    if (!appt.patientPhone) continue;
+                    result.whatsappRetried++;
+                    await this.sendViaWhatsApp(appt, result);
+                }
             }
 
             logger.info(result, '🔔 Ciclo de lembretes concluído');

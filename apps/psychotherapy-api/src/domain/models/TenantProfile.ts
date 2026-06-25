@@ -19,7 +19,8 @@ export class TenantProfile {
         public readonly professionalId: string | null,
         public readonly address: string | null,
         public readonly twoFactorEnabled: boolean = false,
-        public readonly bookingPage: BookingPageSettings | null = null
+        public readonly bookingPage: BookingPageSettings | null = null,
+        public readonly whatsappReminderTemplate: string | null = null
     ) {}
 
     toJSON() {
@@ -32,7 +33,8 @@ export class TenantProfile {
             professionalId: this.professionalId,
             address: this.address,
             twoFactorEnabled: this.twoFactorEnabled,
-            bookingPage: this.bookingPage
+            bookingPage: this.bookingPage,
+            whatsappReminderTemplate: this.whatsappReminderTemplate
         };
     }
 }

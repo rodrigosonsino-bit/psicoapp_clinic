@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, MessageCircle, Mail, Search, ChevronLeft, ChevronRight, Link2, ExternalLink, Pencil } from 'lucide-react';
+import { Plus, Trash2, MessageCircle, Mail, Search, ChevronLeft, ChevronRight, Link2, ExternalLink, Pencil, Bell, BellOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { fetchApi } from '../services/api';
 import type { Patient, PaginatedResponse, BookingLinkResult } from '../types/api';
@@ -27,6 +27,7 @@ export default function Patients() {
   const [showModal, setShowModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [editPatient, setEditPatient] = useState<Patient | null>(null);
+  const [togglingReminderId, setTogglingReminderId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
@@ -81,6 +82,35 @@ export default function Patients() {
       toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao excluir paciente.');
     } finally {
       setConfirmDelete({ open: false, id: null });
+    }
+  };
+
+  const toggleReminder = async (patient: Patient) => {
+    const newChannel: ReminderChannel = patient.reminderChannel === 'none' ? 'whatsapp' : 'none';
+    setTogglingReminderId(patient.id);
+    try {
+      await fetchApi('/api/psychotherapy/patients', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: patient.id,
+          name: patient.name,
+          status: patient.status,
+          paymentType: patient.paymentType,
+          defaultSessionPriceCents: patient.defaultSessionPriceCents,
+          notes: patient.notes,
+          document: patient.document,
+          phone: patient.phone,
+          email: patient.email,
+          fullName: patient.fullName,
+          reminderChannel: newChannel,
+        })
+      });
+      toast.success(newChannel === 'none' ? `Lembretes desativados para ${patient.name}.` : `Lembretes ativados para ${patient.name}.`);
+      loadPatients(page, search);
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao atualizar lembretes.');
+    } finally {
+      setTogglingReminderId(null);
     }
   };
 
@@ -190,6 +220,15 @@ export default function Patients() {
                           onClick={() => handleEditPatient(p)}
                         >
                           <Pencil size={16} />
+                        </button>
+                        <button
+                          className="btn-icon"
+                          title={p.reminderChannel === 'none' ? 'Lembretes desativados — clique para ativar' : 'Lembretes ativados — clique para desativar'}
+                          onClick={() => toggleReminder(p)}
+                          disabled={togglingReminderId === p.id}
+                          style={{ color: p.reminderChannel === 'none' ? 'var(--text-muted)' : 'var(--status-success)' }}
+                        >
+                          {p.reminderChannel === 'none' ? <BellOff size={16} /> : <Bell size={16} />}
                         </button>
                         <button
                           className="btn-icon"

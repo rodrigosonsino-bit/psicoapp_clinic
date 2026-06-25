@@ -95,7 +95,8 @@ const updateProfileSchema = z.object({
     fullName: z.string().min(1).nullable().optional(),
     document: z.string().nullable().optional(),
     professionalId: z.string().nullable().optional(),
-    address: z.string().nullable().optional()
+    address: z.string().nullable().optional(),
+    whatsappReminderTemplate: z.string().max(1000).nullable().optional()
 });
 
 const issueReceiptSchema = z.object({
