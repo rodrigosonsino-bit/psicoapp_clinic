@@ -34,6 +34,7 @@ const globalRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     limit: 300,
     skip: () => process.env.NODE_ENV === 'test',
+    validate: { trustProxy: false },
     handler: (_req, res) => {
         res.status(429).json({
             error: 'Muitas requisições. Tente novamente em alguns minutos.'
@@ -46,6 +47,7 @@ const strictRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     limit: 200,
     skip: (req) => process.env.NODE_ENV === 'test' || !['POST', 'PUT', 'DELETE'].includes(req.method),
+    validate: { trustProxy: false },
     handler: (_req, res) => {
         res.status(429).json({
             error: 'Muitas requisições. Tente novamente em alguns minutos.'
