@@ -92,12 +92,14 @@ export default function Receipts() {
     doc.setTextColor(primaryColor.r, primaryColor.g, primaryColor.b);
     doc.setFont('Helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text('RECIBO DE MENTORIA E DESENVOLVIMENTO PESSOAL', 20, 25);
+    const titleText = 'RECIBO DE MENTORIA E DESENVOLVIMENTO PESSOAL';
+    const splitTitle = doc.splitTextToSize(titleText, 105);
+    doc.text(splitTitle, 20, 22);
 
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(secondarySlate.r, secondarySlate.g, secondarySlate.b);
-    doc.text(`Documento gerado automaticamente pelo PsicoApp`, 20, 30);
+    doc.text(`Documento gerado automaticamente pelo PsicoApp`, 20, 34);
 
     // Document Number and Value Box
     doc.setFillColor(lightBg.r, lightBg.g, lightBg.b);
