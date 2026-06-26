@@ -315,12 +315,18 @@ function IssueReceiptModal({ patients, onClose, onSave }: IssueReceiptModalProps
   const [formData, setFormData] = useState({
     patientId: '',
     amountText: '',
-    description: 'Sessões de Mentoria e Desenvolvimento Pessoal',
+    description: 'Sessão de Mentoria e Desenvolvimento Pessoal',
     markMonthAsPaid: format(new Date(), 'yyyy-MM')
   });
 
+  const [patientCpf, setPatientCpf] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
+
+  useEffect(() => {
+    const p = patients.find(pat => pat.id === formData.patientId);
+    setPatientCpf(p?.document || '');
+  }, [formData.patientId, patients]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,12 +335,38 @@ function IssueReceiptModal({ patients, onClose, onSave }: IssueReceiptModalProps
       return;
     }
     const selectedPatient = patients.find(p => p.id === formData.patientId);
-    if (!selectedPatient?.document || !selectedPatient.document.trim()) {
-      toast.error('Não é possível emitir recibo para paciente sem CPF cadastrado.');
+    if (!selectedPatient) {
+      toast.error('Paciente inválido.');
+      return;
+    }
+    if (!patientCpf || !patientCpf.trim()) {
+      toast.error('O CPF do paciente é obrigatório para emissão do recibo.');
       return;
     }
     try {
       setSubmitting(true);
+
+      // Se o CPF digitado for diferente do CPF atual do paciente, atualiza o perfil do paciente
+      if (patientCpf.trim() !== (selectedPatient.document || '').trim()) {
+        await fetchApi('/api/psychotherapy/patients', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: selectedPatient.id,
+            name: selectedPatient.name,
+            fullName: selectedPatient.fullName,
+            status: selectedPatient.status,
+            paymentType: selectedPatient.paymentType,
+            defaultSessionPriceCents: selectedPatient.defaultSessionPriceCents,
+            document: patientCpf.trim(),
+            phone: selectedPatient.phone,
+            email: selectedPatient.email,
+            reminderChannel: selectedPatient.reminderChannel
+          })
+        });
+        // Atualiza a referência em memória para a geração do PDF
+        selectedPatient.document = patientCpf.trim();
+      }
+
       const payload = {
         patientId: formData.patientId,
         amountCents: Math.round(Number(formData.amountText) * 100),
@@ -376,6 +408,21 @@ function IssueReceiptModal({ patients, onClose, onSave }: IssueReceiptModalProps
               ))}
             </select>
           </div>
+
+          {formData.patientId && (
+            <div className="form-group animate-fade-in">
+              <label className="form-label">CPF do Paciente *</label>
+              <input 
+                required 
+                type="text" 
+                className="form-control" 
+                placeholder="Ex: 000.000.000-00"
+                value={patientCpf}
+                onChange={e => setPatientCpf(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Valor (R$) *</label>
