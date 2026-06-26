@@ -91,8 +91,8 @@ export default function Receipts() {
     // --- 2. HEADER ---
     doc.setTextColor(primaryColor.r, primaryColor.g, primaryColor.b);
     doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('RECIBO DE SERVIÇOS PSICOLÓGICOS', 20, 25);
+    doc.setFontSize(14);
+    doc.text('RECIBO DE MENTORIA E DESENVOLVIMENTO PESSOAL', 20, 25);
 
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(9);
@@ -189,7 +189,7 @@ export default function Receipts() {
     doc.setFontSize(10);
     doc.setFont('Helvetica', 'normal');
     
-    const statementText = `Declaro para os devidos fins que recebi de ${displayName}, inscrito no CPF sob o nº ${patient.document || '___________________'}, a importância de ${formatCurrency(receipt.amountCents)} referente a serviços de psicoterapia correspondentes a: "${receipt.description}".`;
+    const statementText = `Declaro para os devidos fins que recebi de ${displayName}, inscrito no CPF sob o nº ${patient.document || '___________________'}, a importância de ${formatCurrency(receipt.amountCents)} referente a mentoria e desenvolvimento pessoal correspondente a: "${receipt.description}".`;
     
     // Split text automatically to fit width (170mm)
     const splitText = doc.splitTextToSize(statementText, 170);
@@ -212,12 +212,12 @@ export default function Receipts() {
     doc.setTextColor(secondarySlate.r, secondarySlate.g, secondarySlate.b);
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(9);
-    doc.text(`Psicoterapeuta - CRP: ${profile.professionalId || 'Não informado'}`, 105, 211, { align: 'center' });
+    doc.text('Mentoria e Desenvolvimento Pessoal', 105, 211, { align: 'center' });
 
     // Footer info
     doc.setFontSize(8);
     doc.setTextColor(secondarySlate.r, secondarySlate.g, secondarySlate.b);
-    doc.text('Este recibo comprova a prestação de serviços de psicoterapia para fins tributários ou de reembolso de plano de saúde.', 105, 260, { align: 'center' });
+    doc.text('Este recibo comprova a prestação de serviços de mentoria e desenvolvimento pessoal.', 105, 260, { align: 'center' });
 
     doc.save(`Recibo_${receipt.receiptNumber}_${displayName.replace(/\s+/g, '_')}.pdf`);
   };
@@ -315,7 +315,7 @@ function IssueReceiptModal({ patients, onClose, onSave }: IssueReceiptModalProps
   const [formData, setFormData] = useState({
     patientId: '',
     amountText: '',
-    description: 'Sessões de Psicoterapia',
+    description: 'Sessões de Mentoria e Desenvolvimento Pessoal',
     markMonthAsPaid: format(new Date(), 'yyyy-MM')
   });
 
@@ -326,6 +326,11 @@ function IssueReceiptModal({ patients, onClose, onSave }: IssueReceiptModalProps
     e.preventDefault();
     if (!formData.amountText || parseFloat(formData.amountText) <= 0) {
       toast.error('O valor inserido é inválido.');
+      return;
+    }
+    const selectedPatient = patients.find(p => p.id === formData.patientId);
+    if (!selectedPatient?.document || !selectedPatient.document.trim()) {
+      toast.error('Não é possível emitir recibo para paciente sem CPF cadastrado.');
       return;
     }
     try {

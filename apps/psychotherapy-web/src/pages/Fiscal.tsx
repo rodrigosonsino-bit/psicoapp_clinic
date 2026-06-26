@@ -59,16 +59,16 @@ export default function Fiscal() {
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF();
 
-      doc.setFontSize(16);
-      doc.text('RECIBO DE PRESTAÇÃO DE SERVIÇOS EM PSICOLOGIA', 105, 20, { align: 'center' });
-      
       doc.setFontSize(12);
+      doc.text('DECLARAÇÃO DE RENDIMENTOS - MENTORIA E DESENVOLVIMENTO PESSOAL', 105, 20, { align: 'center' });
+      
+      doc.setFontSize(11);
       doc.text(`Ano Base: ${year}`, 105, 30, { align: 'center' });
 
       doc.setFontSize(11);
-      doc.text(`Psicoterapeuta: ${report.tenant.fullName || report.tenant.name}`, 20, 50);
+      doc.text(`Profissional: ${report.tenant.fullName || report.tenant.name}`, 20, 50);
       if (report.tenant.document) doc.text(`CPF/CNPJ: ${report.tenant.document}`, 20, 58);
-      if (report.tenant.professionalId) doc.text(`Registro Profissional: ${report.tenant.professionalId}`, 20, 66);
+      if (report.tenant.professionalId) doc.text(`Registro/CRP: ${report.tenant.professionalId}`, 20, 66);
       if (report.tenant.address) doc.text(`Endereço: ${report.tenant.address}`, 20, 74);
 
       doc.line(20, 80, 190, 80);
@@ -83,7 +83,7 @@ export default function Fiscal() {
       }
 
       doc.text(`A importância de ${formatCurrency(patient.totalPaidCents)}`, 20, 111);
-      doc.text(`Referente a ${patient.sessionCount} sessões de psicoterapia realizadas durante o ano de ${year}.`, 20, 119);
+      doc.text(`Referente a ${patient.sessionCount} sessões de mentoria e desenvolvimento pessoal realizadas no ano de ${year}.`, 20, 119);
       
       doc.text(`Meses com registro de pagamento:`, 20, 127);
       const monthsStr = patient.months.map(m => m.split('-').reverse().join('/')).join(', ');

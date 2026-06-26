@@ -27,6 +27,10 @@ export class IssuePsychotherapyReceiptUseCase {
             throw new AppError('Paciente não encontrado', 404);
         }
 
+        if (!patient.document || !patient.document.trim()) {
+            throw new AppError('Não é possível emitir recibo para paciente sem CPF cadastrado.', 400);
+        }
+
         // 2. Issue the receipt
         const receiptDto: SaveReceiptDTO = {
             tenantId: data.tenantId,
