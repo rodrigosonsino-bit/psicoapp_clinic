@@ -2,13 +2,15 @@ import { Request, Response } from 'express';
 import { injectable } from 'tsyringe';
 import { IssuePsychotherapyReceiptUseCase } from '../../application/useCases/IssuePsychotherapyReceiptUseCase';
 import { ListPsychotherapyReceiptsUseCase } from '../../application/useCases/ListPsychotherapyReceiptsUseCase';
+import { DeletePsychotherapyReceiptUseCase } from '../../application/useCases/DeletePsychotherapyReceiptUseCase';
 import { AppError } from '../../domain/errors/AppError';
 
 @injectable()
 export class ReceiptController {
     constructor(
         private readonly issueReceiptUseCase: IssuePsychotherapyReceiptUseCase,
-        private readonly listReceiptsUseCase: ListPsychotherapyReceiptsUseCase
+        private readonly listReceiptsUseCase: ListPsychotherapyReceiptsUseCase,
+        private readonly deleteReceiptUseCase: DeletePsychotherapyReceiptUseCase
     ) {}
 
     issueReceipt = async (req: Request, res: Response): Promise<void> => {
@@ -37,5 +39,16 @@ export class ReceiptController {
 
         const receipts = await this.listReceiptsUseCase.execute(tenantId, patientId);
         res.status(200).json(receipts.map(r => r.toJSON()));
+    };
+
+    deleteReceipt = async (req: Request, res: Response): Promise<void> => {
+        const tenantId = (req as any).tenantId || (req as any).userId;
+        if (!tenantId) throw new AppError('Tenant não identificado', 401);
+
+        const { id } = req.params;
+
+        await this.deleteReceiptUseCase.execute(tenantId, id);
+
+        res.status(204).send();
     };
 }

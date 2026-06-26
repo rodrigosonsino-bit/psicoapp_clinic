@@ -194,6 +194,7 @@ export function createPsychotherapyRoutes(): Router {
     // Receipts
     router.post('/psychotherapy/receipts', validateBody(issueReceiptSchema), asyncHandler((req, res) => receiptController.issueReceipt(req, res)));
     router.get('/psychotherapy/receipts', validateQuery(listReceiptsQuerySchema), asyncHandler((req, res) => receiptController.listReceipts(req, res)));
+    router.delete('/psychotherapy/receipts/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => receiptController.deleteReceipt(req, res)));
 
     // Sessions
     const sessionController = container.resolve(SessionController);

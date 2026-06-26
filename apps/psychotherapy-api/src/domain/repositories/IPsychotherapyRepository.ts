@@ -195,6 +195,7 @@ export interface IPsychotherapyRepository {
     updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile>;
     saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt>;
     listReceipts(tenantId: string, patientId?: string): Promise<PsychotherapyReceipt[]>;
+    deleteReceipt(tenantId: string, id: string): Promise<void>;
     saveSession(data: SaveSessionDTO): Promise<PsychotherapySession>;
     listSessions(tenantId: string, patientId?: string, start?: Date, end?: Date, pagination?: PaginationOptions): Promise<PaginatedResult<PsychotherapySession>>;
     deleteSession(tenantId: string, id: string): Promise<void>;

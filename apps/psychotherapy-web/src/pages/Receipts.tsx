@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { Printer, Plus, Download } from 'lucide-react';
+import { Printer, Plus, Download, Trash2 } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { Receipt, Patient, TenantProfile, PaginatedResponse } from '../types/api';
 import { useToast } from '../context/ToastContext';
 import { SkeletonTable } from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
 import { formatCurrency } from '../utils/formatters';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Receipts() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -15,6 +16,10 @@ export default function Receipts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({
+    open: false,
+    id: null
+  });
 
   const toast = useToast();
 
@@ -224,6 +229,26 @@ export default function Receipts() {
     doc.save(`Recibo_${receipt.receiptNumber}_${displayName.replace(/\s+/g, '_')}.pdf`);
   };
 
+  const askDeleteReceipt = (id: string) => {
+    setConfirmDelete({ open: true, id });
+  };
+
+  const handleDeleteReceipt = async () => {
+    const id = confirmDelete.id;
+    if (!id) return;
+
+    try {
+      await fetchApi(`/api/psychotherapy/receipts/${id}`, { method: 'DELETE' });
+      toast.success('Recibo excluído com sucesso.');
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao excluir recibo.');
+    } finally {
+      setConfirmDelete({ open: false, id: null });
+    }
+  };
+
   return (
     <div className="animate-fade-in">
       <div className="flex justify-between items-center mb-6">
@@ -277,9 +302,14 @@ export default function Receipts() {
                     <td><strong>{formatCurrency(r.amountCents)}</strong></td>
                     <td>{r.description}</td>
                     <td>
-                      <button className="btn-icon" onClick={() => handlePrint(r)} title="Baixar PDF">
-                        <Printer size={18} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn-icon" onClick={() => handlePrint(r)} title="Baixar PDF">
+                          <Printer size={18} />
+                        </button>
+                        <button className="btn-icon btn-danger" onClick={() => askDeleteReceipt(r.id)} title="Excluir Recibo">
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -303,6 +333,17 @@ export default function Receipts() {
           onSave={loadData}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={confirmDelete.open}
+        title="Excluir Recibo"
+        message="Esta ação irá remover permanentemente este recibo do banco de dados. Tem certeza de que deseja prosseguir?"
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={handleDeleteReceipt}
+        onCancel={() => setConfirmDelete({ open: false, id: null })}
+      />
     </div>
   );
 }

@@ -505,6 +505,16 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return result.rows.map(row => this.mapReceipt(row));
     }
 
+    async deleteReceipt(tenantId: string, id: string): Promise<void> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            DELETE FROM psychotherapy_receipts
+            WHERE tenant_id = $1 AND id = $2;
+        `, [validTenantId, id]);
+
+        if (result.rowCount === 0) throw new NotFoundError('Recibo não encontrado ou não autorizado');
+    }
+
     async saveSession(data: SaveSessionDTO): Promise<PsychotherapySession> {
         const tenantId = this.validateTenantId(data.tenantId);
         const result = await this.dbPool.query(`
