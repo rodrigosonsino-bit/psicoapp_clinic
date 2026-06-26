@@ -120,7 +120,9 @@ const expenseSchema = z.object({
     date: z.string().datetime().transform(val => new Date(val)),
     amountCents: z.number().int().positive('Valor deve ser positivo'),
     description: z.string().min(1, 'A descrição é obrigatória'),
-    category: z.enum(['rent', 'taxes', 'software', 'marketing', 'other'])
+    category: z.enum(['rent', 'taxes', 'software', 'marketing', 'utilities', 'office_supplies', 'services', 'cleaning', 'other']),
+    fixedExpenseId: z.string().uuid().nullable().optional(),
+    referenceMonth: z.string().nullable().optional()
 });
 
 const fixedExpenseSchema = z.object({

@@ -11,7 +11,7 @@ import ErrorState from '../components/ErrorState';
 import { formatCurrency } from '../utils/formatters';
 import './Expenses.css';
 
-type ExpenseCategory = 'rent' | 'taxes' | 'software' | 'marketing' | 'other';
+type ExpenseCategory = 'rent' | 'taxes' | 'software' | 'marketing' | 'utilities' | 'office_supplies' | 'services' | 'cleaning' | 'other';
 
 export default function Expenses() {
   const [activeTab, setActiveTab] = useState<'avulsas' | 'fixas'>('avulsas');
@@ -134,6 +134,10 @@ export default function Expenses() {
       'taxes': 'Impostos / Taxas',
       'software': 'Software / Apps',
       'marketing': 'Marketing',
+      'utilities': 'Água / Luz / Internet / Tel',
+      'office_supplies': 'Material de Consultório / Escritório',
+      'services': 'Supervisão / Terapia / Cursos',
+      'cleaning': 'Limpeza / Manutenção',
       'other': 'Outros'
     };
     return map[cat] || cat;
@@ -225,7 +229,7 @@ export default function Expenses() {
                     <span className="badge badge-info">{translateCategory(exp.category)}</span>
                     <span className="expense-amount">- {formatCurrency(exp.amountCents)}</span>
                     <div className="flex gap-2">
-                      <button className="btn-icon" onClick={() => openModal(exp)} disabled={!!exp.fixedExpenseId} title={exp.fixedExpenseId ? 'Despesas geradas automaticamente não podem ser editadas' : undefined}>
+                      <button className="btn-icon" onClick={() => openModal(exp)}>
                         <Edit2 size={16} />
                       </button>
                       <button className="btn-icon btn-danger" onClick={() => askDeleteExpense(exp.id)}>
@@ -360,7 +364,9 @@ function ExpenseModal({ expense, onClose, onSave }: ExpenseModalProps) {
           date: new Date(formData.date).toISOString(),
           amountCents: Math.round(parseFloat(formData.amount) * 100),
           description: formData.description,
-          category: formData.category
+          category: formData.category,
+          fixedExpenseId: expense?.fixedExpenseId || null,
+          referenceMonth: expense?.referenceMonth || null
         })
       });
       toast.success(expense?.id ? 'Despesa atualizada com sucesso.' : 'Despesa registrada com sucesso.');
@@ -419,6 +425,10 @@ function ExpenseModal({ expense, onClose, onSave }: ExpenseModalProps) {
               <option value="taxes">Impostos / Taxas</option>
               <option value="software">Software / Apps</option>
               <option value="marketing">Marketing</option>
+              <option value="utilities">Água / Luz / Internet / Tel</option>
+              <option value="office_supplies">Material de Consultório / Escritório</option>
+              <option value="services">Supervisão / Terapia / Cursos</option>
+              <option value="cleaning">Limpeza / Manutenção</option>
               <option value="other">Outros</option>
             </select>
           </div>
@@ -572,6 +582,10 @@ function FixedExpenseModal({ fixedExpense, onClose, onSave }: FixedExpenseModalP
                 <option value="taxes">Impostos / Taxas</option>
                 <option value="software">Software / Apps</option>
                 <option value="marketing">Marketing</option>
+                <option value="utilities">Água / Luz / Internet / Tel</option>
+                <option value="office_supplies">Material de Consultório / Escritório</option>
+                <option value="services">Supervisão / Terapia / Cursos</option>
+                <option value="cleaning">Limpeza / Manutenção</option>
                 <option value="other">Outros</option>
               </select>
             </div>

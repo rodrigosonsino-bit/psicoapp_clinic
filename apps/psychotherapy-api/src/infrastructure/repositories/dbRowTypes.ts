@@ -82,7 +82,7 @@ export interface ExpenseRow {
     date: Date;
     amount_cents: number;
     description: string;
-    category: 'rent' | 'taxes' | 'software' | 'marketing' | 'other';
+    category: 'rent' | 'taxes' | 'software' | 'marketing' | 'utilities' | 'office_supplies' | 'services' | 'cleaning' | 'other';
     fixed_expense_id: string | null;
     reference_month: string | null;
     created_at: Date;

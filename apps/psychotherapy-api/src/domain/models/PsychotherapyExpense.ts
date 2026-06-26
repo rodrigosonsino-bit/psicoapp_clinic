@@ -1,4 +1,4 @@
-export type ExpenseCategory = 'rent' | 'taxes' | 'software' | 'marketing' | 'other';
+export type ExpenseCategory = 'rent' | 'taxes' | 'software' | 'marketing' | 'utilities' | 'office_supplies' | 'services' | 'cleaning' | 'other';
 
 export interface PsychotherapyExpense {
     id: string;
