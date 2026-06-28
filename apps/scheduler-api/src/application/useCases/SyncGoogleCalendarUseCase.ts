@@ -33,7 +33,18 @@ export class SyncGoogleCalendarUseCase {
         }
     }
 
+    // Calendários pertencentes ao psychotherapy-api: as sessões já têm lembrete
+    // próprio enviado por ReminderScheduler (psychotherapy-api). O scheduler-api
+    // não deve duplicar esses lembretes.
+    private static readonly PSYCHOTHERAPY_CALENDAR_NAMES = ['sessões_terapia', 'sessoes_terapia'];
+
     private async syncUserCalendar(config: any): Promise<void> {
+        const calendarName = (config?.calendarName || '').toLowerCase();
+        if (SyncGoogleCalendarUseCase.PSYCHOTHERAPY_CALENDAR_NAMES.includes(calendarName)) {
+            logger.info(`⏭️ Calendário "${config.calendarName}" pertence ao psychotherapy-api. Pulando sincronização para evitar lembretes duplicados.`);
+            return;
+        }
+
         const events = await this.googleClient.getUpcomingEvents(config);
         logger.info(`📅 Encontrados ${events.length} eventos para o usuário ${config.userId} (${config.email})`);
 
