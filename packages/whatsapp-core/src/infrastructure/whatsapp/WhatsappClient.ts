@@ -563,7 +563,10 @@ export class WhatsappClient {
             throw new Error('Destinatário inválido.');
         }
 
-        if (recipientId.endsWith('@g.us')) {
+        // Grupos e identificadores LID (recurso de privacidade do WhatsApp que esconde o
+        // número) já chegam prontos e válidos — NÃO devem ser desmontados/reconstruídos
+        // a partir dos dígitos, senão viram um JID de telefone inválido.
+        if (recipientId.endsWith('@g.us') || recipientId.endsWith('@lid') || recipientId.endsWith('@hosted.lid')) {
             return recipientId;
         }
 
@@ -578,19 +581,35 @@ export class WhatsappClient {
             return `${cleanNumber}@s.whatsapp.net`;
         }
 
+        let pnJid = `${cleanNumber}@s.whatsapp.net`;
         try {
             logger.debug({ cleanNumber }, 'Consultando JID real no WhatsApp via onWhatsApp...');
             const results = await this.sock.onWhatsApp(cleanNumber);
             if (results && results.length > 0 && results[0].exists) {
-                logger.info({ original: recipientId, resolved: results[0].jid }, 'JID resolvido com sucesso via onWhatsApp');
-                return results[0].jid;
+                pnJid = results[0].jid;
+                logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp');
+            } else {
+                logger.warn({ cleanNumber }, 'Número não encontrado via onWhatsApp. Usando formato padrão.');
             }
-            logger.warn({ cleanNumber }, 'Número não encontrado via onWhatsApp. Usando formato padrão.');
-            return `${cleanNumber}@s.whatsapp.net`;
         } catch (err: any) {
             logger.error({ err: err.message, cleanNumber }, 'Erro ao resolver JID via onWhatsApp. Usando formato padrão.');
-            return `${cleanNumber}@s.whatsapp.net`;
         }
+
+        // onWhatsApp() no Baileys v7 retorna apenas a forma por número (PN), nunca o LID
+        // — precisamos consultar o mapeamento PN→LID separadamente e preferir o LID quando
+        // existir, já que é o endereço usado nas conversas já estabelecidas via privacidade.
+        try {
+            const lid = await this.sock.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);
+            if (lid) {
+                logger.info({ pnJid, lid }, 'LID encontrado para o PN — usando LID como destino.');
+                return lid;
+            }
+            logger.debug({ pnJid }, 'Nenhum LID mapeado para este PN. Usando PN como destino.');
+        } catch (err: any) {
+            logger.warn({ err: err.message, pnJid }, 'Erro ao consultar mapeamento LID para o PN. Usando PN como destino.');
+        }
+
+        return pnJid;
     }
 
     async sendMessage(recipientIdOrJid: string, text: string, imageUrl?: string): Promise<string | undefined> {
