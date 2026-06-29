@@ -593,7 +593,7 @@ export class WhatsappClient {
             const results = await this.sock.onWhatsApp(cleanNumber);
             if (results && results.length > 0 && results[0].exists) {
                 // BYPASS: Se o número fornecido tiver 12 dígitos, confia nele e ignora a autocorreção do WhatsApp para 13
-                if (cleanNumber.length === 12 && results[0].jid.length === 27) { // 27 = 13 digits + @s.whatsapp.net
+                if (cleanNumber.length === 12) {
                     logger.info({ original: cleanNumber, resolved: results[0].jid }, 'Ignorando autocorreção do onWhatsApp para forçar 12 dígitos');
                 } else {
                     pnJid = results[0].jid;
