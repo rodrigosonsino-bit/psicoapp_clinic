@@ -591,13 +591,12 @@ export class WhatsappClient {
         try {
             logger.debug({ cleanNumber }, 'Consultando JID real no WhatsApp via onWhatsApp...');
             const results = await this.sock.onWhatsApp(cleanNumber);
+            
+            const logLine = `[DEBUG JID] Time: ${new Date().toISOString()} | Input: ${cleanNumber} | onWhatsApp Results: ${JSON.stringify(results)}\n`;
+            try { require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', logLine); } catch (e) {}
+
             if (results && results.length > 0 && results[0].exists) {
-                // BYPASS: Se o número fornecido tiver 12 dígitos, confia nele e ignora a autocorreção do WhatsApp para 13
-                if (cleanNumber.length === 12) {
-                    logger.info({ original: cleanNumber, resolved: results[0].jid }, 'Ignorando autocorreção do onWhatsApp para forçar 12 dígitos');
-                } else {
-                    pnJid = results[0].jid;
-                }
+                pnJid = results[0].jid;
                 logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp');
             } else {
                 let foundFallback = false;
@@ -605,6 +604,10 @@ export class WhatsappClient {
                     const without9 = cleanNumber.slice(0, 4) + cleanNumber.slice(5);
                     logger.debug({ without9 }, 'Número BR com 13 dígitos não encontrado. Tentando sem o 9...');
                     const fallbackResults = await this.sock.onWhatsApp(without9);
+                    
+                    const logLine2 = `[DEBUG JID] Time: ${new Date().toISOString()} | Fallback Input: ${without9} | onWhatsApp Results: ${JSON.stringify(fallbackResults)}\n`;
+                    try { require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', logLine2); } catch (e) {}
+
                     if (fallbackResults && fallbackResults.length > 0 && fallbackResults[0].exists) {
                         pnJid = fallbackResults[0].jid;
                         foundFallback = true;
@@ -614,6 +617,10 @@ export class WhatsappClient {
                     const with9 = cleanNumber.slice(0, 4) + '9' + cleanNumber.slice(4);
                     logger.debug({ with9 }, 'Número BR com 12 dígitos não encontrado. Tentando com o 9...');
                     const fallbackResults = await this.sock.onWhatsApp(with9);
+                    
+                    const logLine3 = `[DEBUG JID] Time: ${new Date().toISOString()} | Fallback Input: ${with9} | onWhatsApp Results: ${JSON.stringify(fallbackResults)}\n`;
+                    try { require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', logLine3); } catch (e) {}
+
                     if (fallbackResults && fallbackResults.length > 0 && fallbackResults[0].exists) {
                         pnJid = fallbackResults[0].jid;
                         foundFallback = true;
@@ -629,9 +636,14 @@ export class WhatsappClient {
             logger.error({ err: err.message, cleanNumber }, 'Erro ao resolver JID via onWhatsApp. Usando formato padrão.');
         }
 
-        // onWhatsApp() no Baileys v7 retorna apenas a forma por número (PN), nunca o LID
-        // — precisamos consultar o mapeamento PN→LID separadamente e preferir o LID quando
-        // existir, já que é o endereço usado nas conversas já estabelecidas via privacidade.
+        try {
+            require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', `[DEBUG JID] Final pnJid used for sending: ${pnJid}\n`);
+        } catch (e) {}
+
+        // Comentado para evitar falha silenciosa: o envio para LID em algumas
+        // sessões não sincronizadas faz a mensagem se perder.
+        // Sempre enviaremos para o PN (Phone Number JID).
+        /*
         try {
             const lid = await this.sock.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);
             if (lid) {
@@ -642,6 +654,7 @@ export class WhatsappClient {
         } catch (err: any) {
             logger.warn({ err: err.message, pnJid }, 'Erro ao consultar mapeamento LID para o PN. Usando PN como destino.');
         }
+        */
 
         return pnJid;
     }
@@ -659,6 +672,15 @@ export class WhatsappClient {
 
         try {
             let sentMsg: any;
+            
+            // Simular comportamento humano para evitar drop silencioso por anti-spam do servidor
+            try {
+                await this.sock.sendPresenceUpdate('composing', recipientJid);
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            } catch (presenceErr) {
+                logger.warn({ presenceErr, recipientJid }, 'Falha ao enviar presence update, ignorando...');
+            }
+
             if (imageUrl) {
                 const fullImagePath = path.join(__dirname, '../../../public', imageUrl);
                 if (fs.existsSync(fullImagePath)) {
@@ -672,6 +694,10 @@ export class WhatsappClient {
             } else {
                 sentMsg = await this.sock.sendMessage(recipientJid, { text });
             }
+
+            try {
+                await this.sock.sendPresenceUpdate('paused', recipientJid);
+            } catch (presenceErr) {}
 
             if (sentMsg?.key?.id && sentMsg.message) {
                 this.cacheSentMessage(sentMsg.key.id, sentMsg.message);

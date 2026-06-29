@@ -74,6 +74,8 @@ export class MessageWorker {
                     const waMessageId = await client.sendMessage(message.recipientId, message.content, imageUrl);
                     if (waMessageId) {
                         await this.messageRepository.attachWhatsappMessageId(messageId, waMessageId);
+                    } else {
+                        throw new Error(`Falha no envio da mensagem via WhatsApp: a API do Baileys não retornou um ID de mensagem válido (possível falha silenciosa).`);
                     }
                 }
 
