@@ -35,6 +35,10 @@ export class WhatsappClient {
     private dbPool: Pool | null = null;
     private contactsCache: Map<string, string> = new Map();
     private aiSentMessagesJid: Set<string> = new Set();
+    // Cache de mensagens próprias enviadas recentemente, indexado por message id.
+    // Necessário para o getMessage do Baileys conseguir reenviar o conteúdo real
+    // quando o destinatário pede retry por falha de descriptografia (ver getMessage abaixo).
+    private sentMessageStore: Map<string, any> = new Map();
     private processedMessageIds: Set<string> = new Set();
     private messageBuffers: Map<string, {
         timer: NodeJS.Timeout;
@@ -121,9 +125,11 @@ export class WhatsappClient {
                 // getMessage é obrigatório para que o WhatsApp faça retry correto de
                 // mensagens que falharam na descriptografia ("Aguardando mensagem").
                 // Sem ele, o receptor envia um retry receipt e o remetente não consegue
-                // reenviar a mensagem com as chaves corretas.
+                // reenviar a mensagem com as chaves corretas — a mensagem fica marcada
+                // como "sent" no nosso banco, mas nunca chega de fato ao destinatário.
                 getMessage: async (key) => {
-                    return undefined;
+                    if (!key.id) return undefined;
+                    return this.sentMessageStore.get(key.id);
                 },
             });
 
@@ -567,18 +573,23 @@ export class WhatsappClient {
         }
 
         try {
+            let sentMsg: any;
             if (imageUrl) {
                 const fullImagePath = path.join(__dirname, '../../../public', imageUrl);
                 if (fs.existsSync(fullImagePath)) {
                     logger.info({ fullImagePath }, '[Baileys] Enviando imagem a partir de buffer...');
                     const imageBuffer = fs.readFileSync(fullImagePath);
-                    await this.sock.sendMessage(recipientJid, { image: imageBuffer, caption: text });
+                    sentMsg = await this.sock.sendMessage(recipientJid, { image: imageBuffer, caption: text });
                 } else {
                     logger.warn({ fullImagePath }, '⚠️ Imagem não encontrada. Enviando apenas o texto como fallback.');
-                    await this.sock.sendMessage(recipientJid, { text });
+                    sentMsg = await this.sock.sendMessage(recipientJid, { text });
                 }
             } else {
-                await this.sock.sendMessage(recipientJid, { text });
+                sentMsg = await this.sock.sendMessage(recipientJid, { text });
+            }
+
+            if (sentMsg?.key?.id && sentMsg.message) {
+                this.cacheSentMessage(sentMsg.key.id, sentMsg.message);
             }
         } finally {
             if (recipientJid) {
@@ -587,6 +598,15 @@ export class WhatsappClient {
                 }, 2000);
             }
         }
+    }
+
+    private cacheSentMessage(id: string, content: any): void {
+        this.sentMessageStore.set(id, content);
+        // Retries de descriptografia chegam em poucos segundos/minutos; não há
+        // necessidade de guardar indefinidamente.
+        setTimeout(() => {
+            this.sentMessageStore.delete(id);
+        }, 10 * 60 * 1000);
     }
 
     public async getGroups() {
