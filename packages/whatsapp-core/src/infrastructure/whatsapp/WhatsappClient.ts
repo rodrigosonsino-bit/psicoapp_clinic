@@ -257,6 +257,11 @@ export class WhatsappClient {
                     this.logGroups().catch((err: any) => {
                         logger.warn({ err }, 'Falha ao listar grupos.');
                     });
+
+                    // Diagnóstico temporário, somente leitura (não envia nenhuma mensagem):
+                    // confirma diretamente com o WhatsApp se a conta está sob reachout
+                    // timelock ou limite de novas conversas (causa raiz investigada do erro 463).
+                    this.runAccountRestrictionDiagnostic();
                 }
             });
 
@@ -720,6 +725,19 @@ export class WhatsappClient {
             );
         } catch (error) {
             logger.error({ err: error, id }, 'Erro ao desativar IA para o contato no banco.');
+        }
+    }
+
+    private async runAccountRestrictionDiagnostic() {
+        if (!this.sock) return;
+        try {
+            const [reachout, cap] = await Promise.all([
+                this.sock.fetchAccountReachoutTimelock?.(),
+                this.sock.fetchNewChatMessageCap?.()
+            ]);
+            logger.info({ tenantId: this.tenantId, reachout, cap }, '🔎 [DIAG] Diagnóstico de restrição de conta WhatsApp (somente leitura)');
+        } catch (err: any) {
+            logger.warn({ err: err.message, tenantId: this.tenantId }, '🔎 [DIAG] Falha ao consultar diagnóstico de restrição de conta.');
         }
     }
 
