@@ -312,12 +312,13 @@ export class WhatsappClient {
                 for (const { key, update } of updates) {
                     if (!key?.fromMe || !key?.id || update?.status === undefined) continue;
                     // Baileys/WAProto status: 0 ERROR, 1 PENDING, 2 SERVER_ACK, 3 DELIVERY_ACK, 4 READ, 5 PLAYED
-                    let status: 'delivered' | 'read' | null = null;
+                    let status: 'delivered' | 'read' | 'failed' | null = null;
                     if (update.status === 3) status = 'delivered';
                     else if (update.status >= 4) status = 'read';
+                    else if (update.status === 0) status = 'failed';
                     if (!status) continue;
                     try {
-                        await this.onMessageStatusUpdate({ tenantId: this.tenantId, waMessageId: key.id, status });
+                        await this.onMessageStatusUpdate({ tenantId: this.tenantId, waMessageId: key.id, status } as any);
                     } catch (err) {
                         logger.error({ err, waMessageId: key.id, status }, 'Erro ao processar receipt de status de mensagem.');
                     }
@@ -591,7 +592,12 @@ export class WhatsappClient {
             logger.debug({ cleanNumber }, 'Consultando JID real no WhatsApp via onWhatsApp...');
             const results = await this.sock.onWhatsApp(cleanNumber);
             if (results && results.length > 0 && results[0].exists) {
-                pnJid = results[0].jid;
+                // BYPASS: Se o número fornecido tiver 12 dígitos, confia nele e ignora a autocorreção do WhatsApp para 13
+                if (cleanNumber.length === 12 && results[0].jid.length === 27) { // 27 = 13 digits + @s.whatsapp.net
+                    logger.info({ original: cleanNumber, resolved: results[0].jid }, 'Ignorando autocorreção do onWhatsApp para forçar 12 dígitos');
+                } else {
+                    pnJid = results[0].jid;
+                }
                 logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp');
             } else {
                 let foundFallback = false;
