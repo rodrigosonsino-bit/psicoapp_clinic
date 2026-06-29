@@ -8,6 +8,7 @@ import {
 } from '@whiskeysockets/baileys';
 import { Pool } from 'pg';
 import pino from 'pino';
+import { logger as appLogger } from '../logger';
 
 /**
  * Adaptador customizado para armazenar o estado de autenticação do Baileys no PostgreSQL.
@@ -88,7 +89,13 @@ export async function usePostgresAuthState(
             for (const category in data) {
                 const targets = data[category];
                 if (targets) {
-                    for (const id in targets) {
+                    const ids = Object.keys(targets);
+                    // Diagnóstico temporário: confirmar se categorias raras (tctoken,
+                    // lid-mapping) chegam a ser persistidas — sem logar valores/JIDs.
+                    if (category === 'tctoken' || category === 'lid-mapping') {
+                        appLogger.info({ tenantId, category, idCount: ids.length }, '🔎 [DIAG] rawKeyStore.set chamado para categoria rara');
+                    }
+                    for (const id of ids) {
                         const value = targets[id];
                         const key = `${category}-${id}`;
                         tasks.push(value ? writeData(key, value) : removeData(key));
