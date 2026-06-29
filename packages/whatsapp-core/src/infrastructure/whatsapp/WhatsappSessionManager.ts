@@ -1,9 +1,11 @@
 import { Pool } from 'pg';
 import { WhatsappClient, IncomingMessageHandler, MessageStatusHandler } from './WhatsappClient';
 import { logger } from '../logger';
+import { acquireTenantSocketLock, TenantSocketLock } from './TenantSocketLock';
 
 export class WhatsappSessionManager {
     private sessions: Map<string, WhatsappClient> = new Map();
+    private locks: Map<string, TenantSocketLock> = new Map();
     private dbPool: Pool | null = null;
     private messageHandler?: IncomingMessageHandler;
     private statusHandler?: MessageStatusHandler;
@@ -14,6 +16,11 @@ export class WhatsappSessionManager {
         this.dbPool = dbPool;
         this.messageHandler = messageHandler;
         this.statusHandler = statusHandler;
+
+        if (process.env.DISABLE_WHATSAPP_BOOT === 'true') {
+            logger.info('⚠️ WhatsApp auto-boot desativado. Inicializando apenas o gerenciador de sessões.');
+            return;
+        }
 
         try {
             logger.info('🚀 Inicializando sessões ativas do WhatsApp...');
@@ -26,9 +33,12 @@ export class WhatsappSessionManager {
             for (const row of result.rows) {
                 const tenantId = row.id;
                 logger.info(`Auto-conectando WhatsApp para tenant: ${tenantId}`);
-                await this.createSession(tenantId);
-                
-                // Aguarda 3 segundos entre a inicialização de cada tenant para evitar 
+                const client = await this.createSession(tenantId);
+                if (!client) {
+                    logger.warn({ tenantId }, '⏭️ Sessão não iniciada nesta instância (outra instância já detém o socket deste tenant).');
+                }
+
+                // Aguarda 3 segundos entre a inicialização de cada tenant para evitar
                 // "thundering herd" e event loop starvation que causam os erros 1006
                 // por estrangulamento do websocket no boot da API.
                 await new Promise(resolve => setTimeout(resolve, 3000));
@@ -56,7 +66,11 @@ export class WhatsappSessionManager {
                 return null;
             }
             const client = await this.createSession(tenantId);
-            logger.info({ tenantId }, '✅ Lazy init de sessão WhatsApp realizado com sucesso.');
+            if (client) {
+                logger.info({ tenantId }, '✅ Lazy init de sessão WhatsApp realizado com sucesso.');
+            } else {
+                logger.warn({ tenantId }, '⏭️ Lazy init não realizado: outra instância já detém o socket deste tenant.');
+            }
             return client;
         } catch (err) {
             logger.error({ err, tenantId }, 'Falha no lazy init da sessão WhatsApp.');
@@ -64,7 +78,13 @@ export class WhatsappSessionManager {
         }
     }
 
-    async createSession(tenantId: string): Promise<WhatsappClient> {
+    /**
+     * Cria a sessão WhatsApp do tenant, mas só se conseguir adquirir o lock distribuído
+     * (advisory lock do Postgres) que garante que nenhuma outra instância do servidor
+     * (ex: container antigo de um rolling deploy ainda em desligamento) esteja com o
+     * socket desse tenant aberto ao mesmo tempo. Retorna null se o lock já está em uso.
+     */
+    async createSession(tenantId: string): Promise<WhatsappClient | null> {
         if (!this.dbPool) {
             throw new Error('WhatsappSessionManager não inicializado.');
         }
@@ -74,12 +94,35 @@ export class WhatsappSessionManager {
             return existing;
         }
 
-        logger.info({ tenantId }, 'Criando nova sessão WhatsApp para tenant');
-        const client = new WhatsappClient(tenantId, { onIncomingMessage: this.messageHandler, onMessageStatusUpdate: this.statusHandler });
+        const lock = await acquireTenantSocketLock(this.dbPool, tenantId);
+        if (!lock) {
+            return null;
+        }
 
-        await client.initialize(this.dbPool);
-        this.sessions.set(tenantId, client);
-        return client;
+        try {
+            logger.info({ tenantId }, 'Criando nova sessão WhatsApp para tenant');
+            const client = new WhatsappClient(tenantId, { onIncomingMessage: this.messageHandler, onMessageStatusUpdate: this.statusHandler });
+
+            await client.initialize(this.dbPool);
+            this.sessions.set(tenantId, client);
+            this.locks.set(tenantId, lock);
+            return client;
+        } catch (err) {
+            await lock.release();
+            throw err;
+        }
+    }
+
+    private async releaseLock(tenantId: string): Promise<void> {
+        const lock = this.locks.get(tenantId);
+        if (lock) {
+            this.locks.delete(tenantId);
+            try {
+                await lock.release();
+            } catch (err) {
+                logger.error({ err, tenantId }, 'Erro ao liberar lock de sessão WhatsApp do tenant.');
+            }
+        }
     }
 
     async destroySession(tenantId: string): Promise<void> {
@@ -91,6 +134,7 @@ export class WhatsappSessionManager {
                 logger.error({ err, tenantId }, 'Erro ao deslogar sessão durante destruição');
             }
             this.sessions.delete(tenantId);
+            await this.releaseLock(tenantId);
             logger.info({ tenantId }, 'Sessão do WhatsApp destruída com sucesso.');
         }
     }
@@ -106,6 +150,7 @@ export class WhatsappSessionManager {
             try { await client.close(); } catch { }
         }
         this.sessions.delete(tenantId);
+        await this.releaseLock(tenantId);
         logger.info({ tenantId }, 'Sessão WhatsApp removida da memória (force remove).');
     }
 
@@ -117,6 +162,7 @@ export class WhatsappSessionManager {
             } catch (err) {
                 logger.error({ err, tenantId }, 'Erro ao fechar sessão durante encerramento global');
             }
+            await this.releaseLock(tenantId);
         }
         this.sessions.clear();
         logger.info('Todos os sockets do WhatsApp foram fechados.');

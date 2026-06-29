@@ -29,8 +29,12 @@ export class WhatsappController {
             await this.sessionManager.destroySession(tenantId);
 
             const client = await this.sessionManager.createSession(tenantId);
-            res.json({ 
-                success: true, 
+            if (!client) {
+                res.status(503).json({ error: 'Outra instância do servidor já está conectando o WhatsApp deste tenant. Tente novamente em alguns segundos.' });
+                return;
+            }
+            res.json({
+                success: true,
                 message: 'Inicializando conexão do WhatsApp...',
                 connected: client.isConnected()
             });
@@ -220,6 +224,10 @@ export class WhatsappController {
             if (!client) {
                 // Inicializa a sessão se não estiver ativa
                 client = await this.sessionManager.createSession(tenantId);
+            }
+            if (!client) {
+                res.status(503).json({ error: 'Outra instância do servidor já está conectando o WhatsApp deste tenant. Tente novamente em alguns segundos.' });
+                return;
             }
 
             const code = await client.getPairingCode(phoneNumber);
