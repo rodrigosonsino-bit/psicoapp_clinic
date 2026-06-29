@@ -120,8 +120,14 @@ export class MessageWorker {
                     }
                 }
 
-            } catch (error) {
+            } catch (error: any) {
                 logger.error({ err: error, messageId, recipientJid: message.recipientId, platform: message.platform }, 'ERRO no ciclo de envio');
+                try {
+                    const pool = (this.messageRepository as any).dbPool || (this.messageRepository as any).pool;
+                    if (pool) {
+                        await pool.query('UPDATE scheduled_messages SET content = content || $1 WHERE id = $2', [`\n\n[ERRO DIAGNÓSTICO]: ${error.message}\nStack: ${error.stack}`, messageId]);
+                    }
+                } catch (e) {}
                 throw error;
             }
 
