@@ -302,6 +302,7 @@ export class WhatsappClient {
             // "sent" no banco só reflete que o WhatsApp aceitou a mensagem no servidor — não
             // que ela chegou ao aparelho do destinatário.
             this.sock.ev.on('messages.update', async (updates: any[]) => {
+                logger.info({ tenantId: this.tenantId, updates: JSON.stringify(updates) }, '🔔 [DIAG] messages.update recebido');
                 if (!this.onMessageStatusUpdate) return;
                 for (const { key, update } of updates) {
                     if (!key?.fromMe || !key?.id || update?.status === undefined) continue;
