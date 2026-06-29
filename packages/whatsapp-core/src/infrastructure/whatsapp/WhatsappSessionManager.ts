@@ -1,17 +1,19 @@
 import { Pool } from 'pg';
-import { WhatsappClient, IncomingMessageHandler } from './WhatsappClient';
+import { WhatsappClient, IncomingMessageHandler, MessageStatusHandler } from './WhatsappClient';
 import { logger } from '../logger';
 
 export class WhatsappSessionManager {
     private sessions: Map<string, WhatsappClient> = new Map();
     private dbPool: Pool | null = null;
     private messageHandler?: IncomingMessageHandler;
+    private statusHandler?: MessageStatusHandler;
 
     constructor() {}
 
-    async initializeAll(dbPool: Pool, messageHandler?: IncomingMessageHandler): Promise<void> {
+    async initializeAll(dbPool: Pool, messageHandler?: IncomingMessageHandler, statusHandler?: MessageStatusHandler): Promise<void> {
         this.dbPool = dbPool;
         this.messageHandler = messageHandler;
+        this.statusHandler = statusHandler;
 
         try {
             logger.info('🚀 Inicializando sessões ativas do WhatsApp...');
@@ -73,7 +75,7 @@ export class WhatsappSessionManager {
         }
 
         logger.info({ tenantId }, 'Criando nova sessão WhatsApp para tenant');
-        const client = new WhatsappClient(tenantId, { onIncomingMessage: this.messageHandler });
+        const client = new WhatsappClient(tenantId, { onIncomingMessage: this.messageHandler, onMessageStatusUpdate: this.statusHandler });
 
         await client.initialize(this.dbPool);
         this.sessions.set(tenantId, client);

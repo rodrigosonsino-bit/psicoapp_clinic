@@ -99,6 +99,7 @@ async function bootstrap() {
         // 3. Conectar Canais de Comunicação (WhatsApp e Telegram) e IA
         const sessionManager = new WhatsappSessionManager();
         const geminiClient = new GeminiClient(dbPool, sessionManager);
+        const messageRepository = new PostgresMessageRepository(dbPool);
 
         // Handler de mensagens recebidas: delega para a IA (Sarah)
         const messageHandler = async (ctx: { tenantId: string; from: string; name: string; text: string; isAudio: boolean; isImage: boolean; isDocument: boolean; mediaData?: { mimeType: string; data: string } }) => {
@@ -107,8 +108,14 @@ async function bootstrap() {
             return geminiClient.generateAutoReply(ctx.from, ctx.name, ctx.text, settings.instructions, ctx.mediaData, ctx.tenantId);
         };
 
+        // Receipt real de entrega/leitura: corrige o status "sent" (que só significa que o
+        // WhatsApp aceitou no servidor) para refletir se a mensagem de fato chegou/foi lida.
+        const statusHandler = async (update: { tenantId: string; waMessageId: string; status: 'delivered' | 'read' }) => {
+            await messageRepository.updateDeliveryStatusByWaId(update.tenantId, update.waMessageId, update.status);
+        };
+
         if (process.env.DISABLE_WHATSAPP_BOOT !== 'true') {
-            await sessionManager.initializeAll(dbPool, messageHandler);
+            await sessionManager.initializeAll(dbPool, messageHandler, statusHandler);
         } else {
             logger.warn('⚠️  Inicialização do WhatsApp pulada via DISABLE_WHATSAPP_BOOT=true');
         }
@@ -123,7 +130,6 @@ async function bootstrap() {
         const PORT = process.env.PORT || 3000;
 
         // 5. Iniciar Worker de Fila (BullMQ)
-        const messageRepository = new PostgresMessageRepository(dbPool);
         const messageScheduler = new BullMQMessageScheduler(redisConnection);
         const usageTracker = new PostgresUsageTracker(dbPool);
         const messageWorker = new MessageWorker(redisConnection, messageRepository, sessionManager, { telegram: telegramClient }, messageScheduler, 'whatsapp-messages', usageTracker);

@@ -71,6 +71,27 @@ export class PostgresMessageRepository implements IMessageRepository {
         await this.dbPool.query(query, [status, id]);
     }
 
+    async attachWhatsappMessageId(id: string, waMessageId: string): Promise<void> {
+        const query = `
+            UPDATE scheduled_messages
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('waMessageId', $1::text)
+            WHERE id = $2;
+        `;
+        await this.dbPool.query(query, [waMessageId, id]);
+    }
+
+    async updateDeliveryStatusByWaId(tenantId: string, waMessageId: string, status: 'delivered' | 'read'): Promise<void> {
+        // Não regride status: read não pode voltar para delivered, e nada pode sobrescrever um status terminal 'failed'.
+        const query = `
+            UPDATE scheduled_messages
+            SET status = $1
+            WHERE user_id = $2
+              AND metadata->>'waMessageId' = $3
+              AND status NOT IN ('read', 'failed');
+        `;
+        await this.dbPool.query(query, [status, tenantId, waMessageId]);
+    }
+
     async findById(id: string, userId?: string): Promise<ScheduledMessage | null> {
         const query = userId 
             ? `SELECT * FROM scheduled_messages WHERE id = $1 AND user_id = $2;`

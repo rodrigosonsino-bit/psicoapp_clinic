@@ -71,7 +71,10 @@ export class MessageWorker {
                     if (!client || !client.isConnected()) {
                         throw new Error(`Sessão WhatsApp indisponível para o tenant: ${message.userId}`);
                     }
-                    await client.sendMessage(message.recipientId, message.content, imageUrl);
+                    const waMessageId = await client.sendMessage(message.recipientId, message.content, imageUrl);
+                    if (waMessageId) {
+                        await this.messageRepository.attachWhatsappMessageId(messageId, waMessageId);
+                    }
                 }
 
                 await this.messageRepository.updateStatus(messageId, 'sent');

@@ -1,4 +1,4 @@
-export type MessageStatus = 'pending' | 'sent' | 'failed';
+export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export type MessagePlatform = 'whatsapp' | 'telegram';
 

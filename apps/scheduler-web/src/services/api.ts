@@ -49,7 +49,7 @@ export interface ScheduledMessage {
     recipientId: string;
     recipientName?: string | null;
     sendAt: string;
-    status: 'pending' | 'sent' | 'failed';
+    status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
     createdAt: string;
     platform: MessagePlatform;
     metadata?: { recurrence?: RecurrenceType; imageUrl?: string };

@@ -22,8 +22,17 @@ export interface IncomingMessageContext {
 // Retorna o texto de resposta a enviar, ou null para não responder
 export type IncomingMessageHandler = (ctx: IncomingMessageContext) => Promise<string | null | undefined>;
 
+// Receipt real de entrega/leitura do WhatsApp para uma mensagem que nós enviamos.
+export interface MessageStatusUpdate {
+    tenantId: string;
+    waMessageId: string;
+    status: 'delivered' | 'read';
+}
+export type MessageStatusHandler = (update: MessageStatusUpdate) => Promise<void> | void;
+
 export interface WhatsappClientOptions {
     onIncomingMessage?: IncomingMessageHandler;
+    onMessageStatusUpdate?: MessageStatusHandler;
 }
 
 export class WhatsappClient {
@@ -53,10 +62,12 @@ export class WhatsappClient {
     private tenantId: string;
     private lastQrDataUrl: string | null = null;
     private readonly onIncomingMessage?: IncomingMessageHandler;
+    private readonly onMessageStatusUpdate?: MessageStatusHandler;
 
     constructor(tenantId: string, options?: WhatsappClientOptions) {
         this.tenantId = tenantId;
         this.onIncomingMessage = options?.onIncomingMessage;
+        this.onMessageStatusUpdate = options?.onMessageStatusUpdate;
     }
 
     public getLastQrDataUrl(): string | null {
@@ -283,6 +294,26 @@ export class WhatsappClient {
                         if (name) {
                             await this.upsertContact(u.id, name);
                         }
+                    }
+                }
+            });
+
+            // Receipts de entrega/leitura das mensagens que NÓS enviamos. Sem isso, o status
+            // "sent" no banco só reflete que o WhatsApp aceitou a mensagem no servidor — não
+            // que ela chegou ao aparelho do destinatário.
+            this.sock.ev.on('messages.update', async (updates: any[]) => {
+                if (!this.onMessageStatusUpdate) return;
+                for (const { key, update } of updates) {
+                    if (!key?.fromMe || !key?.id || update?.status === undefined) continue;
+                    // Baileys/WAProto status: 0 ERROR, 1 PENDING, 2 SERVER_ACK, 3 DELIVERY_ACK, 4 READ, 5 PLAYED
+                    let status: 'delivered' | 'read' | null = null;
+                    if (update.status === 3) status = 'delivered';
+                    else if (update.status >= 4) status = 'read';
+                    if (!status) continue;
+                    try {
+                        await this.onMessageStatusUpdate({ tenantId: this.tenantId, waMessageId: key.id, status });
+                    } catch (err) {
+                        logger.error({ err, waMessageId: key.id, status }, 'Erro ao processar receipt de status de mensagem.');
                     }
                 }
             });
@@ -561,7 +592,7 @@ export class WhatsappClient {
         }
     }
 
-    async sendMessage(recipientIdOrJid: string, text: string, imageUrl?: string) {
+    async sendMessage(recipientIdOrJid: string, text: string, imageUrl?: string): Promise<string | undefined> {
         if (!this.isReady || !this.sock) {
             throw new Error('Canal de transmissão Fechado: Sockets desconectados.');
         }
@@ -591,6 +622,8 @@ export class WhatsappClient {
             if (sentMsg?.key?.id && sentMsg.message) {
                 this.cacheSentMessage(sentMsg.key.id, sentMsg.message);
             }
+
+            return sentMsg?.key?.id as string | undefined;
         } finally {
             if (recipientJid) {
                 setTimeout(() => {
@@ -740,6 +773,7 @@ export class WhatsappClient {
             this.sock.ev.removeAllListeners('connection.update');
             this.sock.ev.removeAllListeners('creds.update');
             this.sock.ev.removeAllListeners('messages.upsert');
+            this.sock.ev.removeAllListeners('messages.update');
             this.sock.ev.removeAllListeners('messaging-history.set');
             this.sock.ev.removeAllListeners('contacts.upsert');
             this.sock.ev.removeAllListeners('contacts.update');

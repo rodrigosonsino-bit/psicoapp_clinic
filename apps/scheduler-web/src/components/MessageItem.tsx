@@ -5,6 +5,8 @@ import { ScheduledMessage, getSecureImageUrl } from '../services/api';
 const statusTextDict = {
   pending: 'Pendente',
   sent: 'Enviado',
+  delivered: 'Entregue',
+  read: 'Lido',
   failed: 'Falhou'
 };
 
@@ -29,28 +31,28 @@ export const MessageItem = memo(({ item, onEdit, onResend, onDelete }: MessageIt
             Para: {item.recipientName ?? item.recipientId}
           </Text>
           <View style={[
-            styles.inlineBadge, 
+            styles.inlineBadge,
+            item.status === 'read' ? styles.badgeRead :
+            item.status === 'delivered' ? styles.badgeDelivered :
             item.status === 'sent' ? styles.badgeSent :
             item.status === 'failed' ? styles.badgeFailed : styles.badgePending
           ]}>
             <Text style={[
               styles.statusText,
+              item.status === 'read' ? styles.badgeTextRead :
+              item.status === 'delivered' ? styles.badgeTextDelivered :
               item.status === 'sent' ? styles.badgeTextSent :
               item.status === 'failed' ? styles.badgeTextFailed : styles.badgeTextPending
             ]}>{statusTextDict[item.status]}</Text>
           </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {(item.status === 'pending' || item.status === 'sent') && (
-            <TouchableOpacity onPress={() => onEdit(item)} style={styles.editButtonCompact}>
-              <Text style={styles.editButtonTextCompact}>Editar</Text>
-            </TouchableOpacity>
-          )}
-          {item.status === 'sent' && (
-            <TouchableOpacity onPress={() => onResend(item)} style={[styles.editButtonCompact, { backgroundColor: '#EEF2FF', borderColor: '#4F46E5', marginLeft: 6 }]}>
-              <Text style={[styles.editButtonTextCompact, { color: '#4F46E5' }]}>🔁 Reenviar</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={() => onEdit(item)} style={styles.editButtonCompact}>
+            <Text style={styles.editButtonTextCompact}>Editar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => onResend(item)} style={[styles.editButtonCompact, { backgroundColor: '#EEF2FF', borderColor: '#4F46E5', marginLeft: 6 }]}>
+            <Text style={[styles.editButtonTextCompact, { color: '#4F46E5' }]}>🔁 Reenviar</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => onDelete(item.id)} style={styles.deleteButtonCompact}>
             <Text style={styles.deleteButtonTextCompact}>Excluir</Text>
           </TouchableOpacity>
@@ -122,6 +124,12 @@ const styles = StyleSheet.create({
   badgeSent: {
     backgroundColor: '#DCFCE7',
   },
+  badgeDelivered: {
+    backgroundColor: '#D1FAE5',
+  },
+  badgeRead: {
+    backgroundColor: '#DBEAFE',
+  },
   badgeFailed: {
     backgroundColor: '#FEE2E2',
   },
@@ -134,6 +142,12 @@ const styles = StyleSheet.create({
   },
   badgeTextSent: {
     color: '#15803D',
+  },
+  badgeTextDelivered: {
+    color: '#047857',
+  },
+  badgeTextRead: {
+    color: '#1D4ED8',
   },
   badgeTextFailed: {
     color: '#B91C1C',
