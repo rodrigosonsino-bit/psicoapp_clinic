@@ -25,7 +25,8 @@ export class ScheduleMessageUseCase {
         if (!dto.recipientId || dto.recipientId.trim() === '') {
             throw new Error("Recipient ID is required");
         }
-        if (dto.sendAt <= new Date()) {
+        const toleranceMs = 5 * 60 * 1000; // 5 minutos de tolerância para dessincronia de relógio do cliente
+        if (dto.sendAt.getTime() < Date.now() - toleranceMs) {
             throw new Error("Send date must be in the future");
         }
         if (!dto.userId) {
