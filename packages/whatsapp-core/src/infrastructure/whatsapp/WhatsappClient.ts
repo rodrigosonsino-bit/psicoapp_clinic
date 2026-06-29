@@ -594,7 +594,30 @@ export class WhatsappClient {
                 pnJid = results[0].jid;
                 logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp');
             } else {
-                logger.warn({ cleanNumber }, 'Número não encontrado via onWhatsApp. Usando formato padrão.');
+                let foundFallback = false;
+                if (cleanNumber.startsWith('55') && cleanNumber.length === 13) {
+                    const without9 = cleanNumber.slice(0, 4) + cleanNumber.slice(5);
+                    logger.debug({ without9 }, 'Número BR com 13 dígitos não encontrado. Tentando sem o 9...');
+                    const fallbackResults = await this.sock.onWhatsApp(without9);
+                    if (fallbackResults && fallbackResults.length > 0 && fallbackResults[0].exists) {
+                        pnJid = fallbackResults[0].jid;
+                        foundFallback = true;
+                        logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp (sem o 9)');
+                    }
+                } else if (cleanNumber.startsWith('55') && cleanNumber.length === 12) {
+                    const with9 = cleanNumber.slice(0, 4) + '9' + cleanNumber.slice(4);
+                    logger.debug({ with9 }, 'Número BR com 12 dígitos não encontrado. Tentando com o 9...');
+                    const fallbackResults = await this.sock.onWhatsApp(with9);
+                    if (fallbackResults && fallbackResults.length > 0 && fallbackResults[0].exists) {
+                        pnJid = fallbackResults[0].jid;
+                        foundFallback = true;
+                        logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp (com o 9)');
+                    }
+                }
+                
+                if (!foundFallback) {
+                    logger.warn({ cleanNumber }, 'Número não encontrado via onWhatsApp. Usando formato padrão.');
+                }
             }
         } catch (err: any) {
             logger.error({ err: err.message, cleanNumber }, 'Erro ao resolver JID via onWhatsApp. Usando formato padrão.');
@@ -907,6 +930,26 @@ export class WhatsappClient {
         }
 
         this.isReconnecting = false;
+    }
+
+    public async getDiagnostics() {
+        if (!this.sock) {
+            return { connected: false, error: 'Socket não inicializado' };
+        }
+        try {
+            const [reachout, cap] = await Promise.all([
+                this.sock.fetchAccountReachoutTimelock ? this.sock.fetchAccountReachoutTimelock().catch(() => null) : Promise.resolve(null),
+                this.sock.fetchNewChatMessageCap ? this.sock.fetchNewChatMessageCap().catch(() => null) : Promise.resolve(null)
+            ]);
+            return {
+                connected: this.isReady,
+                reachout,
+                cap,
+                myJid: this.getMyJid()
+            };
+        } catch (err: any) {
+            return { connected: this.isReady, error: err.message };
+        }
     }
 
     public async close() {
