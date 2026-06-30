@@ -34,7 +34,7 @@ container.registerSingleton('IPixProvider', useRealPix ? EfiBankPixProvider : Mo
 container.registerSingleton('GoogleCalendarService', GoogleCalendarService);
 
 // WhatsApp Session Manager (singleton — inicializado em server.ts via initializeAll)
-container.registerInstance('WhatsappSessionManager', new WhatsappSessionManager());
+container.registerInstance('WhatsappSessionManager', new WhatsappSessionManager('psicoapp'));
 
 // Broadcast: fila e dispatcher precisam ser singletons (mantêm conexão Redis/Queue viva)
 container.registerSingleton(BroadcastQueue);

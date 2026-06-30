@@ -59,13 +59,16 @@ export class WhatsappClient {
         mediaData?: { mimeType: string; data: string };
     }> = new Map();
     private lastMessageReceivedAt: number = Date.now();
-    private tenantId: string;
+    private readonly tenantId: string;
+    private readonly appName: string;
     private lastQrDataUrl: string | null = null;
     private readonly onIncomingMessage?: IncomingMessageHandler;
     private readonly onMessageStatusUpdate?: MessageStatusHandler;
 
-    constructor(tenantId: string, options?: WhatsappClientOptions) {
+    constructor(tenantId: string, appName: string = 'default', options?: WhatsappClientOptions) {
+        super();
         this.tenantId = tenantId;
+        this.appName = appName;
         this.onIncomingMessage = options?.onIncomingMessage;
         this.onMessageStatusUpdate = options?.onMessageStatusUpdate;
     }
@@ -117,7 +120,7 @@ export class WhatsappClient {
             const { version, isLatest } = await fetchLatestBaileysVersion();
             logger.info(`Usando versão do WhatsApp: ${version.join('.')} (Latest: ${isLatest})`);
 
-            const { state, saveCreds } = await usePostgresAuthState(dbPool, this.tenantId);
+            const { state, saveCreds } = await usePostgresAuthState(dbPool, this.tenantId, this.appName);
 
             const logLevel = (process.env.WHATSAPP_LOG_LEVEL || 'silent') as pino.Level;
             

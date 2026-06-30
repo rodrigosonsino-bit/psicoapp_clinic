@@ -1,16 +1,22 @@
 import { Pool } from 'pg';
+import { EventEmitter } from 'events';
 import { WhatsappClient, IncomingMessageHandler, MessageStatusHandler } from './WhatsappClient';
 import { logger } from '../logger';
 import { acquireTenantSocketLock, TenantSocketLock } from './TenantSocketLock';
+import { usePostgresAuthState } from './auth';
 
-export class WhatsappSessionManager {
+export class WhatsappSessionManager extends EventEmitter {
     private sessions: Map<string, WhatsappClient> = new Map();
     private locks: Map<string, TenantSocketLock> = new Map();
     private dbPool: Pool | null = null;
     private messageHandler?: IncomingMessageHandler;
     private statusHandler?: MessageStatusHandler;
+    private readonly appName: string;
 
-    constructor() {}
+    constructor(appName: string = 'default') {
+        super();
+        this.appName = appName;
+    }
 
     async initializeAll(dbPool: Pool, messageHandler?: IncomingMessageHandler, statusHandler?: MessageStatusHandler): Promise<void> {
         this.dbPool = dbPool;
@@ -33,6 +39,7 @@ export class WhatsappSessionManager {
             for (const row of result.rows) {
                 const tenantId = row.id;
                 logger.info(`Auto-conectando WhatsApp para tenant: ${tenantId}`);
+                const { state, saveCreds } = await usePostgresAuthState(this.dbPool!, tenantId, this.appName);
                 const client = await this.createSession(tenantId);
                 if (!client) {
                     logger.warn({ tenantId }, '⏭️ Sessão não iniciada nesta instância (outra instância já detém o socket deste tenant).');
@@ -101,7 +108,7 @@ export class WhatsappSessionManager {
 
         try {
             logger.info({ tenantId }, 'Criando nova sessão WhatsApp para tenant');
-            const client = new WhatsappClient(tenantId, { onIncomingMessage: this.messageHandler, onMessageStatusUpdate: this.statusHandler });
+            const client = new WhatsappClient(tenantId, this.appName, { onIncomingMessage: this.messageHandler, onMessageStatusUpdate: this.statusHandler });
 
             await client.initialize(this.dbPool);
             this.sessions.set(tenantId, client);

@@ -97,7 +97,7 @@ async function bootstrap() {
         await connectWithRetry(dbPool);
 
         // 3. Conectar Canais de Comunicação (WhatsApp e Telegram) e IA
-        const sessionManager = new WhatsappSessionManager();
+        const sessionManager = new WhatsappSessionManager('scheduler');
         const geminiClient = new GeminiClient(dbPool, sessionManager);
         const messageRepository = new PostgresMessageRepository(dbPool);
 

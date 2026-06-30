@@ -21,16 +21,18 @@ import { logger as appLogger } from '../logger';
  */
 export async function usePostgresAuthState(
     dbPool: Pool,
-    tenantId: string
+    tenantId: string,
+    appName: string = 'default'
 ): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> {
 
     const logger = pino({ level: 'silent' });
 
     const readData = async (key: string) => {
         try {
+            const prefixedKey = `${appName}:${key}`;
             const res = await dbPool.query(
                 'SELECT value FROM whatsapp_auth WHERE tenant_id = $1::uuid AND key = $2',
-                [tenantId, key]
+                [tenantId, prefixedKey]
             );
             if (res.rows.length > 0) {
                 return JSON.parse(JSON.stringify(res.rows[0].value), BufferJSON.reviver);
@@ -42,14 +44,15 @@ export async function usePostgresAuthState(
         }
     };
 
-    const writeData = async (key: string, value: any) => {
+        const writeData = async (key: string, value: any) => {
         try {
             const dataStr = JSON.stringify(value, BufferJSON.replacer);
+            const prefixedKey = `${appName}:${key}`;
             await dbPool.query(
                 `INSERT INTO whatsapp_auth (tenant_id, key, value)
                  VALUES ($1::uuid, $2, $3::jsonb)
                  ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value`,
-                [tenantId, key, dataStr]
+                [tenantId, prefixedKey, dataStr]
             );
         } catch (error) {
             console.error(`Erro ao salvar chave [${key}] no banco de dados (tenant: ${tenantId}):`, error);
@@ -59,11 +62,12 @@ export async function usePostgresAuthState(
         }
     };
 
-    const removeData = async (key: string) => {
+        const removeData = async (key: string) => {
         try {
+            const prefixedKey = `${appName}:${key}`;
             await dbPool.query(
                 'DELETE FROM whatsapp_auth WHERE tenant_id = $1::uuid AND key = $2',
-                [tenantId, key]
+                [tenantId, prefixedKey]
             );
         } catch (error) {
             console.error(`Erro ao remover chave [${key}] do banco de dados (tenant: ${tenantId}):`, error);
