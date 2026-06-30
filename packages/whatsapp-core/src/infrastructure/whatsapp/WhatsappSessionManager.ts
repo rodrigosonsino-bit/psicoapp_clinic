@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import { WhatsappClient, IncomingMessageHandler, MessageStatusHandler } from './WhatsappClient';
 import { logger } from '../logger';
 import { acquireTenantSocketLock, TenantSocketLock } from './TenantSocketLock';
-import { usePostgresAuthState } from './auth';
+import { usePostgresAuthState } from '../database/PostgresAuthState';
 
 export class WhatsappSessionManager extends EventEmitter {
     private sessions: Map<string, WhatsappClient> = new Map();

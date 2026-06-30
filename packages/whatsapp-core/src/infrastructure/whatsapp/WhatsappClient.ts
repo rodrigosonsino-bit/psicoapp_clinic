@@ -66,7 +66,6 @@ export class WhatsappClient {
     private readonly onMessageStatusUpdate?: MessageStatusHandler;
 
     constructor(tenantId: string, appName: string = 'default', options?: WhatsappClientOptions) {
-        super();
         this.tenantId = tenantId;
         this.appName = appName;
         this.onIncomingMessage = options?.onIncomingMessage;
