@@ -588,17 +588,61 @@ export class WhatsappClient {
         }
 
         let pnJid = `${cleanNumber}@s.whatsapp.net`;
-        
-        // [DEBUG] Bypass completo do onWhatsApp temporariamente
-        // Muitas vezes o onWhatsApp retorna uma variação do número (com/sem 9)
-        // que o Baileys depois recusa internamente por falta de prekey sessions.
-        // O servidor do WhatsApp aceita o número formatado diretamente na maioria dos casos.
-        
         try {
-            require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', `[DEBUG JID] Final pnJid used for sending (BYPASS ONWHATSAPP): ${pnJid}\n`);
+            logger.debug({ cleanNumber }, 'Consultando JID real no WhatsApp via onWhatsApp...');
+            const results = await this.sock.onWhatsApp(cleanNumber);
+            
+            const logLine = `[DEBUG JID] Time: ${new Date().toISOString()} | Input: ${cleanNumber} | onWhatsApp Results: ${JSON.stringify(results)}\n`;
+            try { require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', logLine); } catch (e) {}
+
+            if (results && results.length > 0 && results[0].exists) {
+                pnJid = results[0].jid;
+                logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp');
+            } else {
+                let foundFallback = false;
+                if (cleanNumber.startsWith('55') && cleanNumber.length === 13) {
+                    const without9 = cleanNumber.slice(0, 4) + cleanNumber.slice(5);
+                    logger.debug({ without9 }, 'Número BR com 13 dígitos não encontrado. Tentando sem o 9...');
+                    const fallbackResults = await this.sock.onWhatsApp(without9);
+                    
+                    const logLine2 = `[DEBUG JID] Time: ${new Date().toISOString()} | Fallback Input: ${without9} | onWhatsApp Results: ${JSON.stringify(fallbackResults)}\n`;
+                    try { require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', logLine2); } catch (e) {}
+
+                    if (fallbackResults && fallbackResults.length > 0 && fallbackResults[0].exists) {
+                        pnJid = fallbackResults[0].jid;
+                        foundFallback = true;
+                        logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp (sem o 9)');
+                    }
+                } else if (cleanNumber.startsWith('55') && cleanNumber.length === 12) {
+                    const with9 = cleanNumber.slice(0, 4) + '9' + cleanNumber.slice(4);
+                    logger.debug({ with9 }, 'Número BR com 12 dígitos não encontrado. Tentando com o 9...');
+                    const fallbackResults = await this.sock.onWhatsApp(with9);
+                    
+                    const logLine3 = `[DEBUG JID] Time: ${new Date().toISOString()} | Fallback Input: ${with9} | onWhatsApp Results: ${JSON.stringify(fallbackResults)}\n`;
+                    try { require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', logLine3); } catch (e) {}
+
+                    if (fallbackResults && fallbackResults.length > 0 && fallbackResults[0].exists) {
+                        pnJid = fallbackResults[0].jid;
+                        foundFallback = true;
+                        logger.info({ original: recipientId, resolved: pnJid }, 'JID resolvido com sucesso via onWhatsApp (com o 9)');
+                    }
+                }
+                
+                if (!foundFallback) {
+                    logger.warn({ cleanNumber }, 'Número não encontrado via onWhatsApp. Usando formato padrão.');
+                }
+            }
+        } catch (err: any) {
+            logger.error({ err: err.message, cleanNumber }, 'Erro ao resolver JID via onWhatsApp. Usando formato padrão.');
+        }
+
+        try {
+            require('fs').appendFileSync('C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/resolve-debug.log', `[DEBUG JID] Final pnJid used for sending: ${pnJid}\n`);
         } catch (e) {}
 
-        return pnJid;
+        // Comentado para evitar falha silenciosa: o envio para LID em algumas
+        // sessões não sincronizadas faz a mensagem se perder.
+        // Sempre enviaremos para o PN (Phone Number JID).
         /*
         try {
             const lid = await this.sock.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);
