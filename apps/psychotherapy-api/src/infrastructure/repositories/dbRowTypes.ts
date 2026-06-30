@@ -14,6 +14,7 @@ export interface PatientRow {
     created_at: Date;
     updated_at: Date;
     full_name: string | null;
+    whatsapp_bulk_opt_in?: boolean;
 }
 
 // Linha da tabela: psychotherapy_monthly_records
@@ -61,6 +62,13 @@ export interface ReceiptRow {
     description: string;
     created_at: Date;
     updated_at: Date;
+    patient_name_snapshot?: string | null;
+    patient_document_snapshot?: string | null;
+    tenant_name_snapshot?: string | null;
+    tenant_document_snapshot?: string | null;
+    tenant_professional_id_snapshot?: string | null;
+    tenant_address_snapshot?: string | null;
+    status?: 'issued' | 'cancelled';
 }
 
 // Linha da tabela: psychotherapy_sessions

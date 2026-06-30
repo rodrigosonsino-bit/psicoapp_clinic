@@ -35,4 +35,12 @@ export interface IAuthRepository {
     enableTotp(tenantId: string): Promise<void>;
     disableTotp(tenantId: string): Promise<void>;
     consumeBackupCode(tenantId: string, code: string): Promise<boolean>;
+    save2faChallenge(challengeHash: string, tenantId: string, expiresAt: Date): Promise<void>;
+    rotateRefreshToken(
+        oldTokenHash: string,
+        newRefreshToken: string,
+        newRefreshTokenHash: string,
+        expiresAt: Date,
+        newId: string
+    ): Promise<{ tenantId: string; familyId: string } | null>;
 }

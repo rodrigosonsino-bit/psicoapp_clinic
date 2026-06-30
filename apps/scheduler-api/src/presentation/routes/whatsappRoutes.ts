@@ -17,6 +17,7 @@ export function createWhatsappRoutes(sessionManager: WhatsappSessionManager, dbP
     router.post('/whatsapp/disconnect', controller.disconnect);
     router.delete('/whatsapp/session', controller.clearSession);   // limpeza forçada
     router.get('/whatsapp/qr', controller.getQr);
+    router.get('/whatsapp/diagnostics', controller.getDiagnostics);
     router.get('/whatsapp/groups', controller.getGroups);
     router.get('/whatsapp/contacts', controller.getContacts);
     router.post('/whatsapp/pairing-code', controller.getPairingCode);

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
-import { ScheduledMessage, getMessages, BASE_URL, deleteMessage, scheduleMessage } from '../services/api';
+import { ScheduledMessage, getMessages, BASE_URL, deleteMessage, scheduleMessage, updateMessage } from '../services/api';
 
 export function useMessages() {
   const [messages, setMessages] = useState<ScheduledMessage[]>([]);
@@ -149,8 +149,13 @@ export function useMessages() {
     sendAt.setSeconds(sendAt.getSeconds() + 10);
 
     try {
-      await scheduleMessage(item.content, item.recipientId, sendAt.toISOString(), item.platform || 'whatsapp', 'Única');
-      Alert.alert('Sucesso', 'Mensagem reenviada com sucesso!');
+      if (item.status === 'failed') {
+        await updateMessage(item.id, { sendAt: sendAt.toISOString() });
+        Alert.alert('Sucesso', 'Mensagem reenviada com sucesso!');
+      } else {
+        await scheduleMessage(item.content, item.recipientId, sendAt.toISOString(), item.platform || 'whatsapp', 'Única');
+        Alert.alert('Sucesso', 'Mensagem reenviada com sucesso!');
+      }
       loadMessages(true);
     } catch (error: any) {
       Alert.alert('Erro', error?.response?.data?.error || 'Não foi possível reenviar a mensagem.');
@@ -184,7 +189,7 @@ export function useMessages() {
     }
 
     setEditingMessage(targetItem);
-    setIsResending(false);
+    setIsResending(targetItem.status === 'sent');
     setModalVisible(true);
   }, [messages]);
 

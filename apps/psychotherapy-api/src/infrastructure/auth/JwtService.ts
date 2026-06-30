@@ -5,6 +5,8 @@ export interface TokenPayload {
     email: string;
     plan: string;
     twoFactorPending?: boolean;
+    tokenUse?: 'session' | '2fa-challenge';
+    jti?: string;
 }
 
 export class JwtService {

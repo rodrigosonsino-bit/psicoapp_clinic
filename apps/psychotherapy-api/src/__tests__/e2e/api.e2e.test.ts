@@ -36,7 +36,8 @@ describe('E2E - API Integration Tests', () => {
         authToken = jwtService.generateToken({
             tenantId: testTenantId,
             email: 'test@example.com',
-            plan: 'starter'
+            plan: 'starter',
+            tokenUse: 'session'
         });
     });
 
@@ -108,14 +109,10 @@ describe('E2E - API Integration Tests', () => {
                 plan: 'starter',
                 status: 'active'
             };
-            const mockRecord = {
+            mockAuthRepo.rotateRefreshToken.mockResolvedValue({
                 tenantId: testTenantId,
-                tokenHash: 'hash',
-                expiresAt: new Date(Date.now() + 100000),
-                revokedAt: null
-            };
-            
-            mockAuthRepo.findRefreshToken.mockResolvedValue(mockRecord);
+                familyId: 'family-1'
+            });
             mockAuthRepo.findTenantById.mockResolvedValue(tenantData);
 
             const res = await request(app)
@@ -273,7 +270,7 @@ describe('E2E - API Integration Tests', () => {
                 updatedAt: new Date(),
                 toJSON: () => ({ id: 'receipt-uuid', receiptNumber: 10, amountCents: 15000 })
             };
-            mockRepo.findPatientById.mockResolvedValue({ id: 'pat-uuid', name: 'Patient X' } as any);
+            mockRepo.findPatientById.mockResolvedValue({ id: 'pat-uuid', name: 'Patient X', document: '12345678901' } as any);
             mockRepo.saveReceipt.mockResolvedValue(mockReceipt as any);
 
             const res = await request(app)

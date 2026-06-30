@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, MessageCircle, Mail, Search, ChevronLeft, ChevronRight, Link2, ExternalLink, Pencil, Bell, BellOff } from 'lucide-react';
+import { Plus, Trash2, MessageCircle, Mail, Search, ChevronLeft, ChevronRight, Link2, ExternalLink, Pencil, Bell, BellOff, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { fetchApi } from '../services/api';
-import type { Patient, PaginatedResponse, BookingLinkResult } from '../types/api';
+import type { Patient, PaginatedResponse, BookingLinkResult, Broadcast, BroadcastPreview } from '../types/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonTable } from '../components/Skeleton';
@@ -25,6 +25,7 @@ export default function Patients() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [editPatient, setEditPatient] = useState<Patient | null>(null);
   const [togglingReminderId, setTogglingReminderId] = useState<string | null>(null);
@@ -130,9 +131,14 @@ export default function Patients() {
     <div className="patients-page animate-fade-in">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-h1">Pacientes</h1>
-        <button className="btn btn-primary" onClick={() => { setEditPatient(null); setShowModal(true); }}>
-          <Plus size={18} /> Novo Paciente
-        </button>
+        <div className="flex gap-2">
+          <button className="btn btn-secondary" onClick={() => setShowBroadcastModal(true)}>
+            <Send size={18} /> Mensagem em massa
+          </button>
+          <button className="btn btn-primary" onClick={() => { setEditPatient(null); setShowModal(true); }}>
+            <Plus size={18} /> Novo Paciente
+          </button>
+        </div>
       </div>
 
       {/* Busca */}
@@ -290,6 +296,10 @@ export default function Patients() {
         />
       )}
 
+      {showBroadcastModal && (
+        <BroadcastDialog onClose={() => setShowBroadcastModal(false)} />
+      )}
+
       <ConfirmDialog
         isOpen={confirmDelete.open}
         title="Excluir paciente"
@@ -338,7 +348,32 @@ function PatientModal({ patientToEdit, onClose, onSave }: PatientModalProps) {
   }, [patientToEdit]);
 
   const [submitting, setSubmitting] = useState(false);
+  const [optIn, setOptIn] = useState(patientToEdit?.whatsappBulkOptIn ?? false);
+  const [savingOptIn, setSavingOptIn] = useState(false);
   const toast = useToast();
+
+  useEffect(() => {
+    setOptIn(patientToEdit?.whatsappBulkOptIn ?? false);
+  }, [patientToEdit]);
+
+  const handleOptInChange = async (checked: boolean) => {
+    if (!patientToEdit) {
+      setOptIn(checked);
+      return;
+    }
+    setSavingOptIn(true);
+    try {
+      await fetchApi(`/api/psychotherapy/patients/${patientToEdit.id}/broadcast-opt-in`, {
+        method: 'PATCH',
+        body: JSON.stringify({ optIn: checked })
+      });
+      setOptIn(checked);
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao salvar consentimento.');
+    } finally {
+      setSavingOptIn(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -434,6 +469,21 @@ function PatientModal({ patientToEdit, onClose, onSave }: PatientModalProps) {
             </div>
           </div>
           <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: patientToEdit ? 'pointer' : 'default' }}>
+              <input
+                type="checkbox"
+                checked={optIn}
+                onChange={e => handleOptInChange(e.target.checked)}
+                disabled={submitting || savingOptIn || !patientToEdit}
+                style={{ width: '1rem', height: '1rem' }}
+              />
+              Aceita receber mensagens em massa (broadcast) via WhatsApp
+            </label>
+            {!patientToEdit && (
+              <p className="text-small text-muted mt-1">Disponível após criar o paciente.</p>
+            )}
+          </div>
+          <div className="form-group">
             <label className="form-label">Canal de Lembrete</label>
             <select className="form-control" value={formData.reminderChannel}
               onChange={e => setFormData({ ...formData, reminderChannel: e.target.value as ReminderChannel })}
@@ -454,4 +504,215 @@ function PatientModal({ patientToEdit, onClose, onSave }: PatientModalProps) {
       </div>
     </div>
   );
+}
+
+// ── BroadcastDialog (mensagem em massa para pacientes ativos com opt-in) ────
+
+const TERMINAL_BROADCAST_STATUSES: Broadcast['status'][] = ['completed', 'partial_failed', 'canceled'];
+
+function isTerminalBroadcast(status: Broadcast['status']): boolean {
+  return TERMINAL_BROADCAST_STATUSES.includes(status);
+}
+
+function BroadcastDialog({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  const [preview, setPreview] = useState<BroadcastPreview | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(true);
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    textareaRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previouslyFocusedRef.current?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadPreview = useCallback(async () => {
+    try {
+      setLoadingPreview(true);
+      const res = await fetchApi<{ data: BroadcastPreview }>('/api/psychotherapy/broadcasts/preview');
+      setPreview(res.data);
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao carregar destinatários.');
+    } finally {
+      setLoadingPreview(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { loadPreview(); }, [loadPreview]);
+
+  // Polling de status enquanto houver campanha ativa não-terminal
+  useEffect(() => {
+    if (!broadcast || isTerminalBroadcast(broadcast.status)) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetchApi<{ data: Broadcast }>(`/api/psychotherapy/broadcasts/${broadcast.id}`);
+        setBroadcast(res.data);
+      } catch {
+        // erro de polling não é crítico; próxima rodada tenta novamente
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [broadcast]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    try {
+      setSubmitting(true);
+      const res = await fetchApi<{ data: Broadcast }>('/api/psychotherapy/broadcasts', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ message: message.trim() })
+      });
+      setBroadcast(res.data);
+      toast.success(`Campanha aceita para ${res.data.totalRecipients} paciente(s). O envio é assíncrono.`);
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao criar campanha de mensagem em massa.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelBroadcast = async () => {
+    if (!broadcast) return;
+    try {
+      await fetchApi(`/api/psychotherapy/broadcasts/${broadcast.id}/cancel`, { method: 'POST' });
+      setBroadcast({ ...broadcast, status: 'canceled' });
+      toast.success('Campanha cancelada. Mensagens já enviadas não podem ser desfeitas.');
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao cancelar campanha.');
+    }
+  };
+
+  const handleNewCampaign = () => {
+    setBroadcast(null);
+    setMessage('');
+    setIdempotencyKey(crypto.randomUUID());
+    loadPreview();
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div
+        className="modal-content animate-fade-in"
+        style={{ maxWidth: '560px' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="broadcast-dialog-title"
+        ref={dialogRef}
+      >
+        <h2 id="broadcast-dialog-title" className="text-h2 mb-4">Mensagem em massa</h2>
+
+        {!broadcast ? (
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="broadcast-preview">Destinatários</label>
+              {loadingPreview ? (
+                <p className="text-small">Calculando destinatários elegíveis...</p>
+              ) : preview ? (
+                <div id="broadcast-preview" className="text-small">
+                  <p><strong>{preview.eligible}</strong> paciente(s) ativo(s), com opt-in e telefone válido receberão esta mensagem.</p>
+                  {(preview.excluded.inactive > 0 || preview.excluded.withoutOptIn > 0 || preview.excluded.withoutPhone > 0 || preview.excluded.invalidPhone > 0) && (
+                    <p className="text-muted mt-1">
+                      Excluídos: {preview.excluded.inactive} inativos, {preview.excluded.withoutOptIn} sem opt-in, {preview.excluded.withoutPhone} sem telefone, {preview.excluded.invalidPhone} com telefone inválido.
+                    </p>
+                  )}
+                  {preview.eligible > preview.maxRecipients && (
+                    <p className="text-error mt-1">
+                      O lote excede o limite atual de {preview.maxRecipients} destinatários por campanha.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="broadcast-message">Mensagem *</label>
+              <textarea
+                id="broadcast-message"
+                ref={textareaRef}
+                required
+                className="form-control"
+                rows={5}
+                maxLength={1000}
+                placeholder="Escreva a mensagem que será enviada a todos os pacientes ativos com opt-in..."
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                disabled={submitting}
+              />
+              <p className="text-small text-muted mt-1">{message.length}/1000</p>
+            </div>
+
+            <p className="text-small text-muted">
+              O envio é assíncrono e respeita um intervalo entre mensagens para reduzir o risco de bloqueio do WhatsApp.
+              Mensagens já enviadas não podem ser desfeitas.
+            </p>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancelar</button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={submitting || !message.trim() || loadingPreview || !preview || preview.eligible === 0}
+              >
+                {submitting ? 'Enviando...' : `Enviar para ${preview?.eligible ?? 0} paciente(s)`}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <p className="mb-2">Campanha aceita — {broadcast.totalRecipients} destinatário(s).</p>
+            <p className="text-small text-muted mb-4">Status: {translateBroadcastStatus(broadcast.status)}</p>
+
+            {broadcast.counts && (
+              <ul className="text-small mb-4">
+                <li>Enviadas: {broadcast.counts.sent}</li>
+                <li>Aguardando envio: {broadcast.counts.queued + broadcast.counts.retry_wait + broadcast.counts.sending}</li>
+                <li>Falhas: {broadcast.counts.failed}</li>
+                <li>Status desconhecido: {broadcast.counts.delivery_unknown}</li>
+                <li>Canceladas: {broadcast.counts.canceled}</li>
+              </ul>
+            )}
+
+            <div className="flex justify-end gap-2 mt-6">
+              {!isTerminalBroadcast(broadcast.status) && (
+                <button type="button" className="btn btn-secondary" onClick={handleCancelBroadcast}>Cancelar campanha</button>
+              )}
+              {isTerminalBroadcast(broadcast.status) && (
+                <button type="button" className="btn btn-secondary" onClick={handleNewCampaign}>Nova campanha</button>
+              )}
+              <button type="button" className="btn btn-primary" onClick={onClose}>Fechar</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function translateBroadcastStatus(status: Broadcast['status']): string {
+  switch (status) {
+    case 'queued': return 'na fila';
+    case 'processing': return 'enviando';
+    case 'completed': return 'concluída';
+    case 'partial_failed': return 'concluída com falhas parciais';
+    case 'canceled': return 'cancelada';
+    default: return status;
+  }
 }

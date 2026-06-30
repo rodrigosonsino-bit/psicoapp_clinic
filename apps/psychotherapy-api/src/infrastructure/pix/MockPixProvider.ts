@@ -41,4 +41,8 @@ export class MockPixProvider implements IPixProvider {
     async cancelCharge(_txid: string): Promise<void> {
         // no-op em modo mock
     }
+
+    async getChargeStatus(_txid: string): Promise<'pending' | 'paid' | 'canceled'> {
+        return 'pending';
+    }
 }

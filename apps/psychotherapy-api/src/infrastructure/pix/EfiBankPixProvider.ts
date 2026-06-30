@@ -98,6 +98,23 @@ export class EfiBankPixProvider implements IPixProvider {
         });
     }
 
+    async getChargeStatus(txid: string): Promise<'pending' | 'paid' | 'canceled'> {
+        const token = await this.getAccessToken();
+        const response = await fetch(`${this.baseUrl}/v2/cob/${txid}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: AbortSignal.timeout(10000)
+        });
+
+        if (!response.ok) {
+            throw new AppError('Falha ao consultar cobrança no Efí Bank', 502);
+        }
+
+        const data: any = await response.json();
+        if (data.status === 'CONCLUIDA') return 'paid';
+        if (data.status === 'ATIVA') return 'pending';
+        return 'canceled';
+    }
+
     private async getAccessToken(): Promise<string> {
         if (this.accessToken && Date.now() < this.tokenExpiresAt) {
             return this.accessToken;

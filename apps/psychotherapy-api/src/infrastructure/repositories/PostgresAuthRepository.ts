@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import crypto from 'crypto';
 import { injectable } from 'tsyringe';
 import { IAuthRepository, TenantAuth, CreateTenantDTO, RefreshTokenRecord } from '../../domain/repositories/IAuthRepository';
 
@@ -45,10 +46,11 @@ export class PostgresAuthRepository implements IAuthRepository {
 
     async saveRefreshToken(tenantId: string, tokenHash: string, expiresAt: Date): Promise<void> {
         const validTenantId = this.validateId(tenantId);
+        const tokenId = crypto.randomUUID();
         await this.dbPool.query(`
-            INSERT INTO auth_refresh_tokens (tenant_id, token_hash, expires_at)
-            VALUES ($1, $2, $3);
-        `, [validTenantId, tokenHash, expiresAt]);
+            INSERT INTO auth_refresh_tokens (id, tenant_id, token_hash, expires_at, family_id)
+            VALUES ($1, $2, $3, $4, $5);
+        `, [tokenId, validTenantId, tokenHash, expiresAt, tokenId]);
     }
 
     async findRefreshToken(tokenHash: string): Promise<RefreshTokenRecord | null> {
@@ -116,6 +118,87 @@ export class PostgresAuthRepository implements IAuthRepository {
             UPDATE tenants SET totp_backup_codes = $2 WHERE id = $1;
         `, [validId, codes]);
         return true;
+    }
+
+    async save2faChallenge(challengeHash: string, tenantId: string, expiresAt: Date): Promise<void> {
+        const validTenantId = this.validateId(tenantId);
+        await this.dbPool.query(`
+            INSERT INTO two_factor_challenges (challenge_hash, tenant_id, expires_at)
+            VALUES ($1, $2, $3);
+        `, [challengeHash, validTenantId, expiresAt]);
+    }
+
+    async rotateRefreshToken(
+        oldTokenHash: string,
+        newRefreshToken: string,
+        newRefreshTokenHash: string,
+        expiresAt: Date,
+        newId: string
+    ): Promise<{ tenantId: string; familyId: string } | null> {
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const tokenRes = await client.query(`
+                SELECT id, tenant_id as "tenantId", expires_at as "expiresAt", 
+                       revoked_at as "revokedAt", family_id as "familyId"
+                FROM auth_refresh_tokens
+                WHERE token_hash = $1
+                FOR UPDATE;
+            `, [oldTokenHash]);
+
+            if (tokenRes.rowCount !== 1) {
+                await client.query('ROLLBACK');
+                return null;
+            }
+
+            const currentToken = tokenRes.rows[0];
+            const familyId = currentToken.familyId || currentToken.id;
+
+            if (new Date(currentToken.expiresAt) <= new Date()) {
+                await client.query('ROLLBACK');
+                throw new Error('Refresh token expirado');
+            }
+
+            if (currentToken.revokedAt !== null) {
+                await client.query(`
+                    UPDATE auth_refresh_tokens
+                    SET revoked_at = NOW()
+                    WHERE family_id = $1 AND revoked_at IS NULL;
+                `, [familyId]);
+
+                await client.query('COMMIT');
+                throw new Error('Token já utilizado');
+            }
+
+            await client.query(`
+                UPDATE auth_refresh_tokens
+                SET revoked_at = NOW()
+                WHERE id = $1;
+            `, [currentToken.id]);
+
+            await client.query(`
+                INSERT INTO auth_refresh_tokens (id, tenant_id, token_hash, expires_at, family_id, parent_id)
+                VALUES ($1, $2, $3, $4, $5, $6);
+            `, [newId, currentToken.tenantId, newRefreshTokenHash, expiresAt, familyId, currentToken.id]);
+
+            await client.query(`
+                UPDATE auth_refresh_tokens
+                SET replaced_by_id = $1
+                WHERE id = $2;
+            `, [newId, currentToken.id]);
+
+            await client.query('COMMIT');
+            return {
+                tenantId: currentToken.tenantId,
+                familyId: familyId
+            };
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     // ── Helpers privados ──────────────────────────────────────────────────────

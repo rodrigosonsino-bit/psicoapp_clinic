@@ -149,6 +149,28 @@ export class WhatsappController {
         }
     };
 
+    getDiagnostics = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+        const tenantId = req.tenantId;
+        if (!tenantId) {
+            res.status(401).json({ error: 'Não autorizado' });
+            return;
+        }
+
+        try {
+            const client = await this.sessionManager.getSession(tenantId);
+            if (!client) {
+                res.status(404).json({ error: 'Sessão do WhatsApp não encontrada' });
+                return;
+            }
+
+            const diagnostics = await client.getDiagnostics();
+            res.json(diagnostics);
+        } catch (error: any) {
+            logger.error({ err: error, tenantId }, 'Erro ao rodar diagnóstico do WhatsApp');
+            res.status(500).json({ error: 'Erro ao rodar diagnóstico' });
+        }
+    };
+
     getGroups = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
         const tenantId = req.tenantId;
         if (!tenantId) {

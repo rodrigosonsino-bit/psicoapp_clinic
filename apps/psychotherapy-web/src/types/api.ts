@@ -34,8 +34,42 @@ export interface Patient {
   email: string | null;
   reminderChannel: ReminderChannel;
   fullName: string | null;
+  whatsappBulkOptIn?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BroadcastPreview {
+  eligible: number;
+  excluded: {
+    inactive: number;
+    deleted: number;
+    withoutPhone: number;
+    invalidPhone: number;
+    withoutOptIn: number;
+  };
+  maxRecipients: number;
+}
+
+export type BroadcastStatus = 'queued' | 'processing' | 'completed' | 'partial_failed' | 'canceled';
+
+export interface BroadcastStatusCounts {
+  queued: number;
+  sending: number;
+  retry_wait: number;
+  sent: number;
+  failed: number;
+  delivery_unknown: number;
+  canceled: number;
+}
+
+export interface Broadcast {
+  id: string;
+  tenantId: string;
+  status: BroadcastStatus;
+  totalRecipients: number;
+  createdAt: string;
+  counts?: BroadcastStatusCounts;
 }
 
 export interface WhatsappStatus {
@@ -114,6 +148,13 @@ export interface Receipt {
   description: string;
   createdAt: string;
   updatedAt: string;
+  patientNameSnapshot?: string | null;
+  patientDocumentSnapshot?: string | null;
+  tenantNameSnapshot?: string | null;
+  tenantDocumentSnapshot?: string | null;
+  tenantProfessionalIdSnapshot?: string | null;
+  tenantAddressSnapshot?: string | null;
+  status?: 'issued' | 'cancelled';
 }
 
 export interface BookingPageSettings {

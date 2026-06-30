@@ -13,7 +13,7 @@ describe('IssuePsychotherapyReceiptUseCase', () => {
     });
 
     it('Should issue receipt for an existing patient', async () => {
-        repositoryMock.findPatientById.mockResolvedValue({} as any);
+        repositoryMock.findPatientById.mockResolvedValue({ document: '12345678901' } as any);
         repositoryMock.saveReceipt.mockResolvedValue({} as any);
 
         const request = {

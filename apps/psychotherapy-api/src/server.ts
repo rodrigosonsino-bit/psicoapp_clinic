@@ -20,6 +20,13 @@ import { IPsychotherapyRepository } from './domain/repositories/IPsychotherapyRe
 import { PixController } from './presentation/controllers/PixController';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
 import { createPaymentReceiptHandler } from './infrastructure/whatsapp/PaymentReceiptHandler';
+import nodeCron from 'node-cron';
+import { reconcilePixCharges } from './scripts/reconcilePixCharges';
+import { BroadcastOutboxDispatcher } from './infrastructure/queue/BroadcastOutboxDispatcher';
+import { BroadcastQueue } from './infrastructure/queue/BroadcastQueue';
+import { BroadcastWorker } from './infrastructure/queue/BroadcastWorker';
+import { closeBroadcastRedisConnection } from './infrastructure/queue/redisConnection';
+import { IBroadcastRepository } from './domain/repositories/IBroadcastRepository';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3333;
@@ -125,12 +132,13 @@ app.get('*', (_req, res) => {
 
 app.use(errorHandler);
 
+let broadcastDispatcher: BroadcastOutboxDispatcher | null = null;
+let broadcastWorker: BroadcastWorker | null = null;
+
 // Bootstrap process: Only connect to the DB and listen to the port when run directly
 if (require.main === module) {
     const dbPool = container.resolve(Pool);
-    const shouldBootWhatsapp =
-        process.env.DISABLE_WHATSAPP_BOOT !== 'true' &&
-        process.env.ENABLE_WHATSAPP !== 'false';
+    const isWhatsappEnabled = process.env.ENABLE_WHATSAPP !== 'false';
     
     logger.info('⏳ Testando conexão com o banco de dados...');
     dbPool.query('SELECT 1')
@@ -141,7 +149,7 @@ if (require.main === module) {
 
                 // Inicializar WhatsApp (opcional — só se ENABLE_WHATSAPP não for false)
                 const sessionManager = container.resolve<WhatsappSessionManager>('WhatsappSessionManager');
-                if (shouldBootWhatsapp) {
+                if (isWhatsappEnabled) {
                     const dbPool = container.resolve(Pool);
                     const receiptHandler = createPaymentReceiptHandler(dbPool);
                     sessionManager.initializeAll(dbPool, receiptHandler).catch(err => {
@@ -149,14 +157,14 @@ if (require.main === module) {
                     });
                     logger.info('📱 WhatsApp Session Manager inicializado');
                 } else {
-                    logger.warn('⚠️ WhatsApp boot desativado via ENABLE_WHATSAPP=false ou DISABLE_WHATSAPP_BOOT=true');
+                    logger.warn('⚠️ WhatsApp desativado via ENABLE_WHATSAPP=false');
                 }
 
                 if (process.env.ENABLE_REMINDERS !== 'false') {
                     const repository = container.resolve<IPsychotherapyRepository>('IPsychotherapyRepository');
                     const scheduler = new ReminderScheduler(
                         repository,
-                        shouldBootWhatsapp ? sessionManager : undefined
+                        isWhatsappEnabled ? sessionManager : undefined
                     );
                     scheduler.start();
                 }
@@ -166,12 +174,68 @@ if (require.main === module) {
                     const syncJob = new GoogleCalendarSyncJob(syncUseCase);
                     syncJob.start();
                 }
+
+                // Broadcast (mensagem em massa): desligado por padrão via feature flags.
+                if (process.env.ENABLE_BROADCAST_MESSAGES === 'true') {
+                    broadcastDispatcher = container.resolve(BroadcastOutboxDispatcher);
+                    broadcastDispatcher.start();
+                    logger.info('📣 Broadcast outbox dispatcher iniciado.');
+
+                    if (process.env.BROADCAST_WORKER_ENABLED === 'true') {
+                        if (!isWhatsappEnabled) {
+                            logger.warn('⚠️ BROADCAST_WORKER_ENABLED=true mas WhatsApp não foi inicializado neste processo. Worker não será iniciado.');
+                        } else {
+                            const broadcastRepository = container.resolve<IBroadcastRepository>('IBroadcastRepository');
+                            broadcastWorker = new BroadcastWorker(broadcastRepository, sessionManager);
+                            broadcastWorker.start();
+                            logger.info('📣 Broadcast worker iniciado.');
+                        }
+                    }
+                }
+
+                // Cron 1: Limpeza diária de failed_totp_attempts
+                nodeCron.schedule('0 3 * * *', async () => {
+                    logger.info('🧹 Executando limpeza diária de failed_totp_attempts...');
+                    const pool = container.resolve(Pool);
+                    try {
+                        await pool.query("DELETE FROM failed_totp_attempts WHERE attempted_at < NOW() - INTERVAL '24 hours';");
+                        logger.info('✅ Limpeza de failed_totp_attempts concluída.');
+                    } catch (err) {
+                        logger.error({ err }, 'Erro ao limpar failed_totp_attempts.');
+                    }
+                });
+
+                // Cron 2: Conciliação ativa Pix a cada 15 minutos
+                nodeCron.schedule('*/15 * * * *', async () => {
+                    try {
+                        await reconcilePixCharges();
+                    } catch (err) {
+                        logger.error({ err }, 'Erro ao rodar conciliação ativa Pix em background');
+                    }
+                });
             });
         })
         .catch(err => {
             logger.error({ err }, '❌ Falha ao conectar ao banco de dados durante a inicialização.');
             process.exit(1);
         });
+
+    const gracefulShutdown = async (signal: string) => {
+        logger.info(`🛑 Recebido ${signal}. Encerrando processos de broadcast...`);
+        try {
+            await broadcastWorker?.stop();
+            broadcastDispatcher?.stop();
+            await container.resolve(BroadcastQueue).close();
+            await closeBroadcastRedisConnection();
+        } catch (err) {
+            logger.error({ err }, 'Erro durante o encerramento gracioso do broadcast.');
+        } finally {
+            process.exit(0);
+        }
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 export default app;

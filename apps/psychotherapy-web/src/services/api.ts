@@ -74,6 +74,7 @@ export async function fetchApi<T = unknown>(
     response.status === 401 &&
     endpoint !== '/auth/refresh' &&
     endpoint !== '/auth/login' &&
+    endpoint !== '/auth/2fa/login' &&
     endpoint !== '/auth/register'
   ) {
     try {

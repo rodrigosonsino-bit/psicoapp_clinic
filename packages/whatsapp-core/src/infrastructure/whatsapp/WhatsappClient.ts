@@ -608,15 +608,7 @@ export class WhatsappClient {
         }
 
         try {
-            let sentMsg: any;
-            
-            // Simular comportamento humano para evitar drop silencioso por anti-spam do servidor
-            try {
-                await this.sock.sendPresenceUpdate('composing', recipientJid);
-                await new Promise(resolve => setTimeout(resolve, 1500));
-            } catch (presenceErr) {
-                logger.warn({ presenceErr, recipientJid }, 'Falha ao enviar presence update, ignorando...');
-            }
+            let sentMsg;
 
             if (imageUrl) {
                 const fullImagePath = path.join(__dirname, '../../../public', imageUrl);

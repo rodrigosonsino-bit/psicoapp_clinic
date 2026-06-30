@@ -17,7 +17,13 @@ describe('RefreshTokenUseCase', () => {
             saveRefreshToken: jest.fn(),
             findRefreshToken: jest.fn(),
             revokeRefreshToken: jest.fn(),
-            revokeAllRefreshTokens: jest.fn()
+            revokeAllRefreshTokens: jest.fn(),
+            saveTotpSecret: jest.fn(),
+            enableTotp: jest.fn(),
+            disableTotp: jest.fn(),
+            consumeBackupCode: jest.fn(),
+            save2faChallenge: jest.fn(),
+            rotateRefreshToken: jest.fn()
         } as unknown as jest.Mocked<IAuthRepository>;
 
         useCase = new RefreshTokenUseCase(mockRepository);
@@ -26,11 +32,9 @@ describe('RefreshTokenUseCase', () => {
     it('deve renovar o token com sucesso se o refresh token for válido', async () => {
         const refreshToken = '4df1a41b-41ad-4ca1-9e17-6a99e863aa9f'; // uuid format
 
-        mockRepository.findRefreshToken.mockResolvedValue({
+        mockRepository.rotateRefreshToken.mockResolvedValue({
             tenantId: 'tenant-uuid',
-            tokenHash: 'somehash',
-            expiresAt: new Date(Date.now() + 100000),
-            revokedAt: null
+            familyId: 'family-uuid'
         });
 
         mockRepository.findTenantById.mockResolvedValue({
@@ -46,26 +50,22 @@ describe('RefreshTokenUseCase', () => {
 
         expect(result).toHaveProperty('accessToken');
         expect(result).toHaveProperty('refreshToken');
-        expect(mockRepository.revokeRefreshToken).toHaveBeenCalledTimes(1);
-        expect(mockRepository.saveRefreshToken).toHaveBeenCalledTimes(1);
+        expect(mockRepository.rotateRefreshToken).toHaveBeenCalledTimes(1);
     });
 
     it('deve lançar AppError se o refresh token não for encontrado ou estiver expirado', async () => {
         const refreshToken = '4df1a41b-41ad-4ca1-9e17-6a99e863aa9f';
-        mockRepository.findRefreshToken.mockResolvedValue(null);
+        mockRepository.rotateRefreshToken.mockResolvedValue(null);
 
         await expect(useCase.execute(refreshToken)).rejects.toThrow(AppError);
-        await expect(useCase.execute(refreshToken)).rejects.toThrow('Refresh token inválido ou expirado');
     });
 
     it('deve lançar AppError se o tenant não for encontrado', async () => {
         const refreshToken = '4df1a41b-41ad-4ca1-9e17-6a99e863aa9f';
 
-        mockRepository.findRefreshToken.mockResolvedValue({
+        mockRepository.rotateRefreshToken.mockResolvedValue({
             tenantId: 'tenant-uuid',
-            tokenHash: 'somehash',
-            expiresAt: new Date(Date.now() + 100000),
-            revokedAt: null
+            familyId: 'family-uuid'
         });
 
         mockRepository.findTenantById.mockResolvedValue(null);

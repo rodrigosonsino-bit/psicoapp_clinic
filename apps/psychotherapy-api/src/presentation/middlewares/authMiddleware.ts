@@ -36,6 +36,10 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
         const token = authHeader.slice(7);
         const payload = getJwtService().verifyToken(token);
         
+        if (payload.twoFactorPending === true || payload.tokenUse !== 'session') {
+            return res.status(401).json({ error: 'Token inválido ou com segundo fator pendente' });
+        }
+        
         authReq.tenantId = payload.tenantId;
         authReq.tenantEmail = payload.email;
         authReq.tenantPlan = payload.plan;

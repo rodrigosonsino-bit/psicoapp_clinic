@@ -52,7 +52,8 @@ describe('Models', () => {
                 professionalId: 'Professional ID',
                 address: 'Address',
                 twoFactorEnabled: false,
-                bookingPage: null
+                bookingPage: null,
+                whatsappReminderTemplate: null
             });
         });
     });

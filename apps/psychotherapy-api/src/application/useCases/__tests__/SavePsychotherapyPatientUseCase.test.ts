@@ -43,6 +43,7 @@ describe('SavePsychotherapyPatientUseCase', () => {
             email: null,
             reminderChannel: 'whatsapp',
             fullName: null,
+            whatsappBulkOptIn: false,
             createdAt: expect.any(Date),
             updatedAt: expect.any(Date)
         };

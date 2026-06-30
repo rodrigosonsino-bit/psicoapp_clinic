@@ -118,6 +118,8 @@ export interface SaveAppointmentDTO {
     recurrenceEndDate?: Date | null;
     notes?: string | null;
     parentId?: string | null;
+    calendarEventId?: string | null;
+    groupId?: string | null;
 }
 
 export interface ListAppointmentsOptions {
@@ -186,6 +188,8 @@ export interface IPsychotherapyRepository {
     listPatients(tenantId: string): Promise<PsychotherapyPatient[]>;
     listPatients(tenantId: string, pagination: PaginationOptions): Promise<PaginatedResult<PsychotherapyPatient>>;
     findPatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;
+    findActivePatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;
+    findPatientByIdIncludingDeleted(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;
     deletePatient(tenantId: string, id: string): Promise<void>;
     saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord>;
     bulkSaveMonthlyRecords(records: SaveMonthlyRecordDTO[]): Promise<PsychotherapyMonthlyRecord[]>;
@@ -249,6 +253,46 @@ export interface IPsychotherapyRepository {
     findPatientByPhone(tenantId: string, phone: string): Promise<PsychotherapyPatient | null>;
 
     listSeriesAppointments(tenantId: string, rootId: string): Promise<PsychotherapyAppointment[]>;
+
+    // Ledger / Payments
+    registerPayment(data: RegisterPaymentDTO): Promise<FinancialPayment>;
+    voidPayment(tenantId: string, paymentId: string, voidedBy: string, reason: string): Promise<FinancialPayment>;
+    findPaymentByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<FinancialPayment | null>;
+    findPaymentById(tenantId: string, id: string): Promise<FinancialPayment | null>;
+}
+
+export interface FinancialPayment {
+    id: string;
+    tenantId: string;
+    patientId: string;
+    monthlyRecordId: string | null;
+    amountCents: number;
+    currency: string;
+    paidAt: Date;
+    method: 'pix' | 'credit_card' | 'cash' | 'bank_transfer' | 'other';
+    source: 'manual' | 'pix';
+    status: 'confirmed' | 'voided';
+    providerTxid: string | null;
+    idempotencyKey: string;
+    voidedAt: Date | null;
+    voidedBy: string | null;
+    voidReason: string | null;
+    createdBy: string;
+    createdAt: Date;
+}
+
+export interface RegisterPaymentDTO {
+    id?: string;
+    tenantId: string;
+    patientId: string;
+    monthlyRecordId?: string | null;
+    amountCents: number;
+    paidAt: Date;
+    method: 'pix' | 'credit_card' | 'cash' | 'bank_transfer' | 'other';
+    source: 'manual' | 'pix';
+    providerTxid?: string | null;
+    idempotencyKey: string;
+    createdBy: string;
 }
 
 export interface SaveAvailabilitySlotDTO {

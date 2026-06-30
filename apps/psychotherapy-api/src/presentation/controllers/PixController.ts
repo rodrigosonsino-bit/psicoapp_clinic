@@ -37,45 +37,71 @@ export class PixController {
     }
 
     async handleWebhook(req: Request, res: Response): Promise<Response> {
-        // Efí Bank envia POST com o pagamento confirmado
         const { pix } = req.body;
         if (!pix || !Array.isArray(pix)) {
             return res.status(200).json({ ok: true });
         }
 
-        for (const payment of pix) {
-            const txid: string = payment.txid;
-            const endToEndId: string = payment.endToEndId;
-            const valor: string = payment.valor;
-            const horario: string = payment.horario;
+        const client = await this.dbPool.connect();
+        try {
+            for (const payment of pix) {
+                const txid: string = payment.txid;
+                const endToEndId: string = payment.endToEndId;
+                const valorStr: string = payment.valor;
+                const horario: string = payment.horario;
+                const amountCents = Math.round(parseFloat(valorStr) * 100);
 
-            try {
-                const result = await this.dbPool.query(`
+                await client.query('BEGIN');
+
+                // 1. Inbox deduplicação com ON CONFLICT DO NOTHING
+                const inboxResult = await client.query(`
+                    INSERT INTO pix_webhook_inbox (end_to_end_id, txid, amount_cents, payload)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (end_to_end_id) DO NOTHING;
+                `, [endToEndId, txid, amountCents, JSON.stringify(payment)]);
+
+                if (inboxResult.rowCount === 0) {
+                    // Já inserido/processado anteriormente. Comita e pula.
+                    await client.query('COMMIT');
+                    logger.info({ endToEndId, txid }, '⏭️ Webhook Pix duplicado ignorado (inbox)');
+                    continue;
+                }
+
+                // 2. CAS update da cobrança Pix (apenas se pendente)
+                const chargeResult = await client.query(`
                     UPDATE psychotherapy_pix_charges
                     SET status = 'paid', paid_at = $2, updated_at = NOW()
                     WHERE provider_txid = $1 AND status = 'pending'
                     RETURNING id, tenant_id, monthly_record_id;
                 `, [txid, new Date(horario)]);
 
-                if (result.rows.length > 0) {
-                    const { monthly_record_id, tenant_id } = result.rows[0];
+                if (chargeResult.rowCount === 1) {
+                    const { monthly_record_id, tenant_id } = chargeResult.rows[0];
+                    logger.info({ txid, endToEndId, valor: valorStr, tenant_id }, '💸 Pix confirmado via webhook e gravado');
 
-                    logger.info({ txid, endToEndId, valor, tenant_id }, '💸 Pix confirmado via webhook');
-
-                    // Se há registro mensal vinculado, marca como pago
+                    // 3. Atualizar faturamento mensal vinculado se houver
                     if (monthly_record_id) {
-                        await this.dbPool.query(`
+                        await client.query(`
                             UPDATE psychotherapy_monthly_records
                             SET payment_status = 'paid', updated_at = NOW()
                             WHERE id = $1 AND tenant_id = $2;
                         `, [monthly_record_id, tenant_id]);
-
-                        logger.info({ monthly_record_id }, '✅ Registro mensal marcado como pago via Pix');
+                        logger.info({ monthly_record_id }, '✅ Registro mensal marcado como pago via Pix (webhook)');
                     }
+                } else {
+                    logger.warn({ txid, endToEndId }, '⚠️ Cobrança Pix correspondente não estava pendente ou não foi encontrada');
                 }
-            } catch (err) {
-                logger.error({ err, txid }, 'Erro ao processar webhook Pix');
+
+                await client.query('COMMIT');
             }
+        } catch (err) {
+            try {
+                await client.query('ROLLBACK');
+            } catch (_) {}
+            logger.error({ err }, '❌ Erro ao processar webhook Pix');
+            return res.status(500).json({ error: 'Erro interno ao processar webhook Pix' });
+        } finally {
+            client.release();
         }
 
         return res.status(200).json({ ok: true });

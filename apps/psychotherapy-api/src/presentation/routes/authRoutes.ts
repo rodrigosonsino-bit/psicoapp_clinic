@@ -8,6 +8,7 @@ import { SyncGoogleCalendarEventsUseCase } from '../../application/useCases/Sync
 import { validateBody } from '../middlewares/validationMiddleware';
 import { asyncHandler } from '../middlewares/asyncHandler';
 import { authMiddleware, AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { pending2faMiddleware } from '../middlewares/pending2faMiddleware';
 import { logger } from '../../infrastructure/logger';
 
 const registerSchema = z.object({
@@ -36,6 +37,7 @@ export function createAuthRoutes(): Router {
 
     router.post('/register', validateBody(registerSchema), asyncHandler((req, res) => controller.register(req, res)));
     router.post('/login', validateBody(loginSchema), asyncHandler((req, res) => controller.login(req, res)));
+    router.post('/2fa/login', pending2faMiddleware, validateBody(totpTokenSchema), asyncHandler((req, res) => controller.login2fa(req, res)));
     router.post('/refresh', validateBody(refreshSchema), asyncHandler((req, res) => controller.refresh(req, res)));
 
     // 2FA — requer JWT válido

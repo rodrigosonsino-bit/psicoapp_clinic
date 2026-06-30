@@ -16,10 +16,11 @@ export default function Receipts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({
+  const [confirmCancel, setConfirmCancel] = useState<{ open: boolean; id: string | null }>({
     open: false,
     id: null
   });
+  const [cancellationJustification, setCancellationJustification] = useState('');
 
   const toast = useToast();
 
@@ -64,16 +65,15 @@ export default function Receipts() {
   };
 
   const handlePrint = async (receipt: Receipt) => {
-    if (!profile) {
-      toast.error('Perfil do psicólogo não carregado. Por favor, preencha seus dados na aba "Meu Perfil" primeiro.');
-      return;
-    }
-    
-    const patient = patients.find(p => p.id === receipt.patientId);
-    if (!patient) {
-      toast.error('Paciente não encontrado.');
-      return;
-    }
+    // Usar snapshots se disponíveis, caso contrário usar dados dinâmicos como fallback para recibos legados
+    const tenantName = receipt.tenantNameSnapshot || profile?.fullName || 'Não informado';
+    const tenantDocument = receipt.tenantDocumentSnapshot || profile?.document || 'Não informado';
+    const tenantProfId = receipt.tenantProfessionalIdSnapshot || profile?.professionalId || 'Não informado';
+    const tenantAddress = receipt.tenantAddressSnapshot || profile?.address || 'Não informado';
+
+    const patientData = patients.find(p => p.id === receipt.patientId);
+    const patientName = receipt.patientNameSnapshot || patientData?.fullName || patientData?.name || 'Não informado';
+    const patientDocument = receipt.patientDocumentSnapshot || patientData?.document || 'Não informado';
 
     const { jsPDF } = await import('jspdf');
 
@@ -150,22 +150,22 @@ export default function Receipts() {
     doc.setFont('Helvetica', 'bold');
     doc.text(`Nome:`, 25, 59);
     doc.setFont('Helvetica', 'normal');
-    doc.text(`${profile.fullName || 'Não informado'}`, 55, 59);
+    doc.text(`${tenantName}`, 55, 59);
 
     doc.setFont('Helvetica', 'bold');
     doc.text(`CPF/CNPJ:`, 25, 64);
     doc.setFont('Helvetica', 'normal');
-    doc.text(`${profile.document || 'Não informado'}`, 55, 64);
+    doc.text(`${tenantDocument}`, 55, 64);
 
     doc.setFont('Helvetica', 'bold');
     doc.text(`CRP / Registro:`, 25, 69);
     doc.setFont('Helvetica', 'normal');
-    doc.text(`${profile.professionalId || 'Não informado'}`, 55, 69);
+    doc.text(`${tenantProfId}`, 55, 69);
 
     doc.setFont('Helvetica', 'bold');
     doc.text(`Endereço:`, 25, 74);
     doc.setFont('Helvetica', 'normal');
-    doc.text(`${profile.address || 'Não informado'}`, 55, 74);
+    doc.text(`${tenantAddress}`, 55, 74);
 
     // --- 4. PACIENTE PANEL ---
     doc.setFillColor(lightBg.r, lightBg.g, lightBg.b);
@@ -177,26 +177,24 @@ export default function Receipts() {
     doc.setFontSize(9);
     doc.text('PACIENTE', 25, 94);
 
-    const displayName = patient.fullName || patient.name;
-
     doc.setTextColor(darkSlate.r, darkSlate.g, darkSlate.b);
     doc.setFontSize(9);
     doc.setFont('Helvetica', 'bold');
     doc.text(`Nome:`, 25, 101);
     doc.setFont('Helvetica', 'normal');
-    doc.text(`${displayName}`, 55, 101);
+    doc.text(`${patientName}`, 55, 101);
 
     doc.setFont('Helvetica', 'bold');
     doc.text(`CPF:`, 25, 106);
     doc.setFont('Helvetica', 'normal');
-    doc.text(`${patient.document || 'Não informado'}`, 55, 106);
+    doc.text(`${patientDocument}`, 55, 106);
 
     // --- 5. DECLARATION TEXT ---
     doc.setTextColor(darkSlate.r, darkSlate.g, darkSlate.b);
     doc.setFontSize(10);
     doc.setFont('Helvetica', 'normal');
     
-    const statementText = `Declaro para os devidos fins que recebi de ${displayName}, inscrito no CPF sob o nº ${patient.document || '___________________'}, a importância de ${formatCurrency(receipt.amountCents)} referente a mentoria e desenvolvimento pessoal correspondente a: "${receipt.description}".`;
+    const statementText = `Declaro para os devidos fins que recebi de ${patientName}, inscrito no CPF sob o nº ${patientDocument || '___________________'}, a importância de ${formatCurrency(receipt.amountCents)} referente a mentoria e desenvolvimento pessoal correspondente a: "${receipt.description}".`;
     
     // Split text automatically to fit width (170mm)
     const splitText = doc.splitTextToSize(statementText, 170);
@@ -214,38 +212,47 @@ export default function Receipts() {
     doc.setTextColor(darkSlate.r, darkSlate.g, darkSlate.b);
     doc.setFont('Helvetica', 'bold');
     doc.setFontSize(10);
-    doc.text(`${profile.fullName || 'Profissional'}`, 105, 206, { align: 'center' });
+    doc.text(`${tenantName}`, 105, 206, { align: 'center' });
 
     doc.setTextColor(secondarySlate.r, secondarySlate.g, secondarySlate.b);
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(9);
     doc.text('Mentoria e Desenvolvimento Pessoal', 105, 211, { align: 'center' });
 
-    // Footer info
+    // Footer info with legal disclaimer
     doc.setFontSize(8);
     doc.setTextColor(secondarySlate.r, secondarySlate.g, secondarySlate.b);
     doc.text('Este recibo comprova a prestação de serviços de mentoria e desenvolvimento pessoal.', 105, 260, { align: 'center' });
+    doc.text('A veracidade das informações declaradas neste documento é de responsabilidade exclusiva de seu emitente.', 105, 264, { align: 'center' });
 
-    doc.save(`Recibo_${receipt.receiptNumber}_${displayName.replace(/\s+/g, '_')}.pdf`);
+    doc.save(`Recibo_${receipt.receiptNumber}_${patientName.replace(/\s+/g, '_')}.pdf`);
   };
 
-  const askDeleteReceipt = (id: string) => {
-    setConfirmDelete({ open: true, id });
+  const askCancelReceipt = (id: string) => {
+    setConfirmCancel({ open: true, id });
   };
 
-  const handleDeleteReceipt = async () => {
-    const id = confirmDelete.id;
+  const handleCancelReceipt = async () => {
+    const id = confirmCancel.id;
     if (!id) return;
+    if (!cancellationJustification.trim()) {
+      toast.error('A justificativa é obrigatória para o cancelamento.');
+      return;
+    }
 
     try {
-      await fetchApi(`/api/psychotherapy/receipts/${id}`, { method: 'DELETE' });
-      toast.success('Recibo excluído com sucesso.');
+      await fetchApi(`/api/psychotherapy/receipts/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ justification: cancellationJustification.trim() })
+      });
+      toast.success('Recibo cancelado com sucesso.');
       await loadData();
     } catch (err) {
       console.error(err);
-      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao excluir recibo.');
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao cancelar recibo.');
     } finally {
-      setConfirmDelete({ open: false, id: null });
+      setConfirmCancel({ open: false, id: null });
+      setCancellationJustification('');
     }
   };
 
@@ -271,7 +278,7 @@ export default function Receipts() {
       </div>
 
       {loading ? (
-        <SkeletonTable rows={5} cols={6} />
+        <SkeletonTable rows={5} cols={7} />
       ) : error ? (
         <ErrorState
           title="Erro ao carregar recibos"
@@ -288,27 +295,38 @@ export default function Receipts() {
                 <th>Paciente</th>
                 <th>Valor</th>
                 <th>Descrição</th>
+                <th>Status</th>
                 <th>Ações</th>
               </tr>
             </thead>
             <tbody>
               {receipts.map(r => {
                 const patient = patients.find(p => p.id === r.patientId);
+                const isCancelled = r.status === 'cancelled';
                 return (
-                  <tr key={r.id}>
+                  <tr key={r.id} style={isCancelled ? { opacity: 0.6 } : undefined}>
                     <td>#{String(r.receiptNumber).padStart(4, '0')}</td>
                     <td>{format(new Date(r.issueDate), 'dd/MM/yyyy')}</td>
                     <td>{patient?.fullName || patient?.name || 'Desconhecido'}</td>
                     <td><strong>{formatCurrency(r.amountCents)}</strong></td>
                     <td>{r.description}</td>
                     <td>
+                      {isCancelled ? (
+                        <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.85rem' }}>Cancelado</span>
+                      ) : (
+                        <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.85rem' }}>Emitido</span>
+                      )}
+                    </td>
+                    <td>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="btn-icon" onClick={() => handlePrint(r)} title="Baixar PDF">
                           <Printer size={18} />
                         </button>
-                        <button className="btn-icon btn-danger" onClick={() => askDeleteReceipt(r.id)} title="Excluir Recibo">
-                          <Trash2 size={18} />
-                        </button>
+                        {!isCancelled && (
+                          <button className="btn-icon btn-danger" onClick={() => askCancelReceipt(r.id)} title="Cancelar Recibo">
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -316,7 +334,7 @@ export default function Receipts() {
               })}
               {receipts.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
                     Nenhum recibo emitido.
                   </td>
                 </tr>
@@ -334,16 +352,49 @@ export default function Receipts() {
         />
       )}
 
-      <ConfirmDialog
-        isOpen={confirmDelete.open}
-        title="Excluir Recibo"
-        message="Esta ação irá remover permanentemente este recibo do banco de dados. Tem certeza de que deseja prosseguir?"
-        confirmLabel="Excluir"
-        cancelLabel="Cancelar"
-        variant="danger"
-        onConfirm={handleDeleteReceipt}
-        onCancel={() => setConfirmDelete({ open: false, id: null })}
-      />
+      {confirmCancel.open && (
+        <div className="modal-overlay">
+          <div className="modal-content animate-fade-in" style={{ maxWidth: '500px' }}>
+            <h2 className="text-h2 mb-4">Cancelar Recibo</h2>
+            <p className="text-body mb-4">
+              Esta ação irá marcar o recibo como <strong>Cancelado</strong> e estornar o pagamento correspondente no ledger financeiro. 
+              Esta operação é irreversível.
+            </p>
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label" style={{ fontWeight: 'bold' }}>Justificativa do Cancelamento *</label>
+              <textarea
+                required
+                className="form-control"
+                rows={3}
+                placeholder="Informe o motivo do cancelamento..."
+                value={cancellationJustification}
+                onChange={e => setCancellationJustification(e.target.value)}
+                style={{ width: '100%', marginTop: '0.5rem', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--borderColor)' }}
+              />
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setConfirmCancel({ open: false, id: null });
+                  setCancellationJustification('');
+                }}
+              >
+                Voltar
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                onClick={handleCancelReceipt}
+                disabled={!cancellationJustification.trim()}
+              >
+                Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

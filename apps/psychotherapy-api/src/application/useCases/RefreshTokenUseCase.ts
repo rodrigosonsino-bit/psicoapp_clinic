@@ -24,33 +24,46 @@ export class RefreshTokenUseCase {
 
         const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
         
-        const record = await this.repository.findRefreshToken(tokenHash);
-        if (!record) {
-            throw new AppError('Refresh token inválido ou expirado', 401);
+        const newRefreshToken = crypto.randomUUID();
+        const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
+        const newId = crypto.randomUUID();
+
+        let rotationResult: { tenantId: string; familyId: string } | null;
+        try {
+            rotationResult = await this.repository.rotateRefreshToken(
+                tokenHash,
+                newRefreshToken,
+                newRefreshTokenHash,
+                expiresAt,
+                newId
+            );
+        } catch (error: any) {
+            if (error.message === 'Refresh token expirado') {
+                throw new AppError('Refresh token expirado', 401);
+            }
+            if (error.message === 'Token já utilizado') {
+                throw new AppError('Token já utilizado. Toda a família de tokens foi revogada por segurança.', 401);
+            }
+            throw error;
         }
 
-        const tenant = await this.repository.findTenantById(record.tenantId);
+        if (!rotationResult) {
+            throw new AppError('Refresh token inválido', 401);
+        }
+
+        const tenant = await this.repository.findTenantById(rotationResult.tenantId);
         if (!tenant) {
             throw new AppError('Tenant não encontrado', 404);
         }
 
-        // Revogar o refresh token atual (rotação de token)
-        await this.repository.revokeRefreshToken(tokenHash);
-
         const accessToken = this.jwtService.generateToken({
             tenantId: tenant.id,
             email: tenant.email,
-            plan: tenant.plan
+            plan: tenant.plan,
+            tokenUse: 'session'
         }, '15m');
-
-        const newRefreshToken = crypto.randomUUID();
-        const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
-
-        // 30 dias a partir de agora
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30);
-
-        await this.repository.saveRefreshToken(tenant.id, newRefreshTokenHash, expiresAt);
 
         return {
             accessToken,

@@ -44,10 +44,23 @@ export class LoginTenantUseCase {
             throw new AppError('Credenciais inválidas', 401);
         }
 
-        // Se 2FA está ativo, retorna um token temporário de curta duração para o segundo fator
+        // Se 2FA está ativo, retorna um token temporário de curta duração para o segundo fator com jti de uso único
         if (tenant.totpEnabled) {
+            const jti = crypto.randomBytes(32).toString('hex');
+            const challengeHash = crypto.createHash('sha256').update(jti).digest('hex');
+            const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos
+
+            await this.repository.save2faChallenge(challengeHash, tenant.id, expiresAt);
+
             const tempToken = this.jwtService.generateToken(
-                { tenantId: tenant.id, email: tenant.email, plan: tenant.plan, twoFactorPending: true },
+                {
+                    tenantId: tenant.id,
+                    email: tenant.email,
+                    plan: tenant.plan,
+                    twoFactorPending: true,
+                    tokenUse: '2fa-challenge',
+                    jti
+                },
                 '5m'
             );
             return { requires2fa: true, tempToken };
@@ -59,7 +72,8 @@ export class LoginTenantUseCase {
         const accessToken = this.jwtService.generateToken({
             tenantId: tenant.id,
             email: tenant.email,
-            plan: tenant.plan
+            plan: tenant.plan,
+            tokenUse: 'session'
         }, '15m');
 
         const refreshToken = crypto.randomUUID();

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { injectable, inject } from 'tsyringe';
 import { Pool } from 'pg';
+import crypto from 'crypto';
 import { RegisterGroupSessionUseCase } from '../../application/useCases/RegisterGroupSessionUseCase';
 import { AppError } from '../../domain/errors/AppError';
 import { logger } from '../../infrastructure/logger';
@@ -274,10 +275,10 @@ export class GroupController {
 
         try {
             await this.dbPool.query(`
-                INSERT INTO therapy_group_members (group_id, patient_id)
-                VALUES ($1, $2)
-                ON CONFLICT (group_id, patient_id) DO UPDATE SET left_at = NULL
-            `, [groupId, patientId]);
+                INSERT INTO therapy_group_members (group_id, patient_id, tenant_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (group_id, patient_id) DO UPDATE SET left_at = NULL, tenant_id = EXCLUDED.tenant_id
+            `, [groupId, patientId, tenantId]);
             
             res.status(201).json({ success: true, message: 'Paciente adicionado ao grupo' });
         } catch (error: any) {
@@ -556,8 +557,7 @@ export class GroupController {
             const insertedPayments: any[] = [];
 
             if (payment_method === 'credit_card' && total_installments > 1) {
-                const crypto = require('crypto');
-                const installmentGroupId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+                const installmentGroupId = crypto.randomUUID();
 
                 for (let i = 0; i < total_installments; i++) {
                     const instNum = i + 1;

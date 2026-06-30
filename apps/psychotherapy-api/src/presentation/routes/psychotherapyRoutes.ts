@@ -12,6 +12,7 @@ import { ProntuarioController } from '../controllers/ProntuarioController';
 import { PixController } from '../controllers/PixController';
 import { AppointmentConfirmController } from '../controllers/AppointmentConfirmController';
 import { BookingController } from '../controllers/BookingController';
+import { BroadcastController } from '../controllers/BroadcastController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { validateBody, validateQuery, validateParams } from '../middlewares/validationMiddleware';
 import { asyncHandler } from '../middlewares/asyncHandler';
@@ -140,6 +141,18 @@ const toggleFixedExpenseSchema = z.object({
     active: z.boolean()
 });
 
+const broadcastMessageSchema = z.object({
+    message: z.string().trim().min(1, 'Mensagem não pode ser vazia').max(1000, 'Mensagem deve ter no máximo 1000 caracteres')
+});
+
+const listBroadcastsQuerySchema = z.object({
+    limit: z.string().regex(/^\d+$/).optional()
+});
+
+const patientOptInSchema = z.object({
+    optIn: z.boolean()
+});
+
 export function createPsychotherapyRoutes(): Router {
     const router = Router();
 
@@ -194,7 +207,7 @@ export function createPsychotherapyRoutes(): Router {
     // Receipts
     router.post('/psychotherapy/receipts', validateBody(issueReceiptSchema), asyncHandler((req, res) => receiptController.issueReceipt(req, res)));
     router.get('/psychotherapy/receipts', validateQuery(listReceiptsQuerySchema), asyncHandler((req, res) => receiptController.listReceipts(req, res)));
-    router.delete('/psychotherapy/receipts/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => receiptController.deleteReceipt(req, res)));
+    router.post('/psychotherapy/receipts/:id/cancel', validateParams(uuidParamSchema), asyncHandler((req, res) => receiptController.cancelReceipt(req, res)));
 
     // Sessions
     const sessionController = container.resolve(SessionController);
@@ -213,6 +226,15 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/fixed-expenses', validateBody(fixedExpenseSchema), asyncHandler((req, res) => expenseController.saveFixedExpense(req, res)));
     router.delete('/psychotherapy/fixed-expenses/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => expenseController.deleteFixedExpense(req, res)));
     router.patch('/psychotherapy/fixed-expenses/:id/toggle', validateParams(uuidParamSchema), validateBody(toggleFixedExpenseSchema), asyncHandler((req, res) => expenseController.toggleFixedExpense(req, res)));
+
+    // Broadcast (mensagem em massa para pacientes ativos com opt-in)
+    const broadcastController = container.resolve(BroadcastController);
+    router.get('/psychotherapy/broadcasts/preview', asyncHandler((req, res) => broadcastController.preview(req, res)));
+    router.post('/psychotherapy/broadcasts', validateBody(broadcastMessageSchema), asyncHandler((req, res) => broadcastController.create(req, res)));
+    router.get('/psychotherapy/broadcasts', validateQuery(listBroadcastsQuerySchema), asyncHandler((req, res) => broadcastController.list(req, res)));
+    router.get('/psychotherapy/broadcasts/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => broadcastController.get(req, res)));
+    router.post('/psychotherapy/broadcasts/:id/cancel', validateParams(uuidParamSchema), asyncHandler((req, res) => broadcastController.cancel(req, res)));
+    router.patch('/psychotherapy/patients/:id/broadcast-opt-in', validateParams(uuidParamSchema), validateBody(patientOptInSchema), asyncHandler((req, res) => broadcastController.setPatientOptIn(req, res)));
 
     // Appointments
     const appointmentController = container.resolve(AppointmentController);

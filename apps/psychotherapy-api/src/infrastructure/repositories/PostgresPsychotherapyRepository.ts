@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import crypto from 'crypto';
 import {
     IPsychotherapyRepository,
     PsychotherapyMonthSummary,
@@ -12,7 +13,9 @@ import {
     ListAppointmentsOptions,
     UpcomingAppointment,
     GoogleOAuthTokens,
-    SaveAvailabilitySlotDTO
+    SaveAvailabilitySlotDTO,
+    FinancialPayment,
+    RegisterPaymentDTO
 } from '../../domain/repositories/IPsychotherapyRepository';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
@@ -27,6 +30,7 @@ import { AppointmentStatus, PsychotherapyAppointment } from '../../domain/models
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
+import { encrypt, decrypt } from '../auth/cryptoHelper';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -124,7 +128,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         if (pagination) {
             const offset = (pagination.page - 1) * pagination.limit;
             const params: unknown[] = [validTenantId, PASTORAL_SENTINEL_EMAIL];
-            let whereClause = 'WHERE tenant_id = $1 AND (email IS NULL OR email != $2)';
+            let whereClause = 'WHERE tenant_id = $1 AND (email IS NULL OR email != $2) AND deleted_at IS NULL';
 
             if (pagination.search) {
                 params.push(`%${pagination.search}%`);
@@ -151,7 +155,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const result = await this.dbPool.query(`
             SELECT *
             FROM psychotherapy_patients
-            WHERE tenant_id = $1
+            WHERE tenant_id = $1 AND deleted_at IS NULL
             ORDER BY status = 'inactive', name ASC;
         `, [validTenantId]);
 
@@ -159,6 +163,21 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findPatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
+        return this.findActivePatientById(tenantId, id);
+    }
+
+    async findActivePatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT *
+            FROM psychotherapy_patients
+            WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL;
+        `, [validTenantId, id]);
+
+        return result.rows[0] ? this.mapPatient(result.rows[0]) : null;
+    }
+
+    async findPatientByIdIncludingDeleted(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
         const validTenantId = this.validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT *
@@ -172,8 +191,9 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async deletePatient(tenantId: string, id: string): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            DELETE FROM psychotherapy_patients
-            WHERE tenant_id = $1 AND id = $2;
+            UPDATE psychotherapy_patients
+            SET deleted_at = NOW(), updated_at = NOW()
+            WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL;
         `, [validTenantId, id]);
 
         if (result.rowCount === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
@@ -451,10 +471,33 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             
             const nextNumber = seqResult.rows[0].last_value;
 
-            // Insert the receipt with the sequence number
+            // Buscar snapshots do paciente e tenant
+            const patRes = await client.query(`
+                SELECT name, document FROM psychotherapy_patients
+                WHERE id = $1 AND tenant_id = $2;
+            `, [data.patientId, tenantId]);
+            if (patRes.rows.length === 0) {
+                throw new NotFoundError('Paciente não encontrado');
+            }
+            const patient = patRes.rows[0];
+
+            const tenRes = await client.query(`
+                SELECT name, full_name, document, professional_id, address FROM tenants
+                WHERE id = $1;
+            `, [tenantId]);
+            if (tenRes.rows.length === 0) {
+                throw new NotFoundError('Tenant não encontrado');
+            }
+            const tenant = tenRes.rows[0];
+
+            // Insert the receipt with the sequence number and snapshots
             const result = await client.query(`
                 INSERT INTO psychotherapy_receipts (
-                    id, tenant_id, patient_id, receipt_number, amount_cents, issue_date, description
+                    id, tenant_id, patient_id, receipt_number, amount_cents, issue_date, description,
+                    is_legacy, status,
+                    patient_name_snapshot, patient_document_snapshot,
+                    tenant_name_snapshot, tenant_document_snapshot,
+                    tenant_professional_id_snapshot, tenant_address_snapshot
                 )
                 VALUES (
                     COALESCE($1::uuid, gen_random_uuid()),
@@ -463,7 +506,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                     $4,
                     $5,
                     $6,
-                    $7
+                    $7,
+                    false,
+                    'issued',
+                    $8, $9, $10, $11, $12, $13
                 )
                 RETURNING *;
             `, [
@@ -473,11 +519,51 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 nextNumber,
                 data.amountCents,
                 data.issueDate,
-                data.description
+                data.description,
+                patient.name,
+                patient.document || null,
+                tenant.full_name || tenant.name,
+                tenant.document || null,
+                tenant.professional_id || null,
+                tenant.address || null
             ]);
 
+            const receipt = result.rows[0];
+
+            // DUAL-WRITE: Insere correspondente em financial_payments
+            const paymentId = crypto.randomUUID();
+            const monthStr = toMonthStr(new Date(data.issueDate));
+            const mrRes = await client.query(`
+                SELECT id FROM psychotherapy_monthly_records
+                WHERE tenant_id = $1 AND patient_id = $2 AND month = $3;
+            `, [tenantId, data.patientId, monthStr]);
+            const monthlyRecordId = mrRes.rows[0]?.id || null;
+
+            await client.query(`
+                INSERT INTO financial_payments (
+                    id, tenant_id, patient_id, monthly_record_id, amount_cents, currency,
+                    paid_at, method, source, status, idempotency_key, created_by
+                )
+                VALUES ($1, $2, $3, $4, $5, 'BRL', $6, 'other', 'manual', 'confirmed', $7, $2);
+            `, [
+                paymentId,
+                tenantId,
+                data.patientId,
+                monthlyRecordId,
+                data.amountCents,
+                data.issueDate,
+                `receipt_${receipt.id}`
+            ]);
+
+            // Atualiza o payment_id no recibo recém criado
+            await client.query(`
+                UPDATE psychotherapy_receipts
+                SET payment_id = $1
+                WHERE id = $2;
+            `, [paymentId, receipt.id]);
+
             await client.query('COMMIT');
-            return this.mapReceipt(result.rows[0]);
+            return this.mapReceipt(receipt);
         } catch (error: any) {
             await client.query('ROLLBACK');
             if (error.code === '23505' && typeof error.detail === 'string' && error.detail.includes('idx_receipts_tenant_number')) {
@@ -507,12 +593,40 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async deleteReceipt(tenantId: string, id: string): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            DELETE FROM psychotherapy_receipts
-            WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
 
-        if (result.rowCount === 0) throw new NotFoundError('Recibo não encontrado ou não autorizado');
+            const receiptRes = await client.query(`
+                SELECT payment_id FROM psychotherapy_receipts
+                WHERE tenant_id = $1 AND id = $2;
+            `, [validTenantId, id]);
+
+            if (receiptRes.rowCount === 0) {
+                throw new NotFoundError('Recibo não encontrado ou não autorizado');
+            }
+
+            const paymentId = receiptRes.rows[0].payment_id;
+
+            await client.query(`
+                DELETE FROM psychotherapy_receipts
+                WHERE tenant_id = $1 AND id = $2;
+            `, [validTenantId, id]);
+
+            if (paymentId) {
+                await client.query(`
+                    DELETE FROM financial_payments
+                    WHERE id = $1 AND tenant_id = $2;
+                `, [paymentId, validTenantId]);
+            }
+
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
     }
 
     async saveSession(data: SaveSessionDTO): Promise<PsychotherapySession> {
@@ -527,6 +641,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 status = EXCLUDED.status,
                 notes = EXCLUDED.notes,
                 updated_at = NOW()
+            WHERE psychotherapy_sessions.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
         `, [
             data.id || null,
@@ -537,6 +652,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.notes || null
         ]);
 
+        if (result.rows.length === 0) throw new NotFoundError('Sessão não encontrada ou não autorizada');
         return this.mapSession(result.rows[0]);
     }
 
@@ -610,6 +726,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 fixed_expense_id = EXCLUDED.fixed_expense_id,
                 reference_month = EXCLUDED.reference_month,
                 updated_at = NOW()
+            WHERE psychotherapy_expenses.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
         `, [
             data.id || null,
@@ -622,6 +739,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.referenceMonth || null
         ]);
 
+        if (result.rows.length === 0) throw new NotFoundError('Despesa não encontrada ou não autorizada');
         return this.mapExpense(result.rows[0]);
     }
 
@@ -817,7 +935,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const currentMonthNum = parseInt(month, 10);
 
         // Date range calculation (UTC to avoid timezone offsets)
-        // If currentMonth is 2026-06, range starts 2026-01-01 and ends before 2026-07-01
         const startDate = new Date(Date.UTC(currentYearNum, currentMonthNum - 6, 1));
         const endDate = new Date(Date.UTC(currentYearNum, currentMonthNum, 1));
 
@@ -829,81 +946,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             tempDate.setUTCMonth(tempDate.getUTCMonth() + 1);
         }
 
-        // Query 1: Trend of revenue and expenses for the 6 months (includes the current month)
-        // Revenue sourced from monthly_records so payments marked in Faturamento Mensal
-        // appear here — not just formally issued receipts.
-        // Formula: session_price_cents * paid_sessions for ALL payment types.
-        // Regardless of monthly vs per_session billing, each paid session represents
-        // real cash received. The distinction only matters for pending calculations.
-        const startMonthStr = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}`;
-        const endMonthStr = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}`;
-        const trendResult = await this.dbPool.query(`
-            WITH monthly_records_revenue AS (
-                SELECT month, COALESCE(SUM(
-                    COALESCE(session_price_cents, 0) * paid_sessions + previous_month_paid_cents
-                ), 0) as total
-                FROM psychotherapy_monthly_records
-                WHERE tenant_id = $1 AND month >= $4 AND month < $5
-                GROUP BY 1
-            ),
-            group_payments_revenue AS (
-                SELECT reference_month AS month, COALESCE(SUM(amount_cents), 0) AS total
-                FROM group_payments
-                WHERE tenant_id = $1 AND reference_month >= $4 AND reference_month < $5
-                GROUP BY 1
-            ),
-            combined_revenue AS (
-                SELECT month, SUM(total) AS total
-                FROM (
-                    SELECT month, total FROM monthly_records_revenue
-                    UNION ALL
-                    SELECT month, total FROM group_payments_revenue
-                ) all_revenue
-                GROUP BY 1
-            ),
-            expenses_by_month AS (
-                SELECT TO_CHAR(date, 'YYYY-MM') as month, COALESCE(SUM(amount_cents), 0) as total
-                FROM psychotherapy_expenses
-                WHERE tenant_id = $1 AND date >= $2 AND date < $3
-                GROUP BY 1
-            )
-            SELECT
-                COALESCE(r.month, e.month) as month,
-                COALESCE(r.total, 0) as revenue,
-                COALESCE(mr.total, 0) as session_revenue,
-                COALESCE(e.total, 0) as expenses
-            FROM combined_revenue r
-            LEFT JOIN monthly_records_revenue mr ON r.month = mr.month
-            FULL OUTER JOIN expenses_by_month e ON r.month = e.month
-        `, [validTenantId, startDate, endDate, startMonthStr, endMonthStr]);
+        // 1. Obter configuração de cutover
+        const cutoverRes = await this.dbPool.query(`
+            SELECT cutover_at FROM tenant_financial_cutovers
+            WHERE tenant_id = $1 AND status = 'approved';
+        `, [validTenantId]);
+        const cutoverAt = cutoverRes.rows[0]?.cutover_at ? new Date(cutoverRes.rows[0].cutover_at) : null;
 
-        // Query 2: Pending amount in cents for the current month
-        const pendingResult = await this.dbPool.query(`
-            SELECT COALESCE(SUM(
-                CASE 
-                    WHEN payment_type = 'monthly' THEN
-                        GREATEST(session_price_cents - (session_price_cents * paid_sessions / GREATEST(expected_sessions - absences, 1)), 0)
-                    ELSE
-                        GREATEST(expected_sessions - absences - paid_sessions, 0) * COALESCE(session_price_cents, 0)
-                END
-            ), 0) as pending
-            FROM psychotherapy_monthly_records
-            WHERE tenant_id = $1 AND month < $2 AND payment_status != 'paid'
-        `, [validTenantId, currentMonthStr]);
-
-        const pendingCents = parseInt(pendingResult.rows[0].pending, 10);
-
-        // Map trend results to a lookup map
-        const dbTrendMap = new Map<string, { revenue: number; sessionRevenue: number; expenses: number }>();
-        for (const row of trendResult.rows) {
-            dbTrendMap.set(row.month, {
-                revenue: parseInt(row.revenue, 10),
-                sessionRevenue: parseInt(row.session_revenue, 10),
-                expenses: parseInt(row.expenses, 10)
-            });
-        }
-
-        // Construct list of 6 months chronological
+        // Construir a lista de 6 meses cronológicos
         const monthsList: string[] = [];
         let d = new Date(Date.UTC(currentYearNum, currentMonthNum - 6, 1));
         for (let i = 0; i < 6; i++) {
@@ -913,27 +963,136 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             d.setUTCMonth(d.getUTCMonth() + 1);
         }
 
-        const sixMonthsTrend = monthsList.map(m => {
-            const data = dbTrendMap.get(m) || { revenue: 0, sessionRevenue: 0, expenses: 0 };
-            return {
-                month: m,
-                revenueCents: data.revenue,
-                expensesCents: data.expenses
-            };
-        });
+        const sixMonthsTrend: { month: string; revenueCents: number; expensesCents: number }[] = [];
+        let currentMonthRevenue = 0;
+        let currentMonthSessionRevenue = 0;
+        let currentMonthExpenses = 0;
 
-        // Current month values from trend
-        const currentMonthData = dbTrendMap.get(currentMonthStr) || { revenue: 0, sessionRevenue: 0, expenses: 0 };
-        const revenueCents = currentMonthData.revenue;
-        const sessionRevenueCents = currentMonthData.sessionRevenue;
-        const expensesCents = currentMonthData.expenses;
+        for (const m of monthsList) {
+            const [mYear, mMonth] = m.split('-');
+            const mYearNum = parseInt(mYear, 10);
+            const mMonthNum = parseInt(mMonth, 10);
+            const mStart = new Date(Date.UTC(mYearNum, mMonthNum - 1, 1));
+            const mEnd = new Date(Date.UTC(mYearNum, mMonthNum, 1));
+
+            // Calcular Despesas do mês
+            const expRes = await this.dbPool.query(`
+                SELECT COALESCE(SUM(amount_cents), 0) AS total
+                FROM psychotherapy_expenses
+                WHERE tenant_id = $1 AND date >= $2 AND date < $3;
+            `, [validTenantId, mStart, mEnd]);
+            const expenses = parseInt(expRes.rows[0].total, 10);
+
+            let revenue = 0;
+            let sessionRevenue = 0;
+
+            const isPostCutover = cutoverAt && (mStart.getTime() >= cutoverAt.getTime());
+
+            if (isPostCutover) {
+                // Modo Ledger: Soma pagamentos confirmados do ledger no período
+                const revRes = await this.dbPool.query(`
+                    SELECT COALESCE(SUM(amount_cents), 0) AS total
+                    FROM financial_payments
+                    WHERE tenant_id = $1 AND status = 'confirmed' AND paid_at >= $2 AND paid_at < $3;
+                `, [validTenantId, mStart, mEnd]);
+                revenue = parseInt(revRes.rows[0].total, 10);
+
+                // session_revenue exclui group payments
+                const sessRes = await this.dbPool.query(`
+                    SELECT COALESCE(SUM(amount_cents), 0) AS total
+                    FROM financial_payments
+                    WHERE tenant_id = $1 AND status = 'confirmed' AND paid_at >= $2 AND paid_at < $3
+                      AND monthly_record_id IS NOT NULL;
+                `, [validTenantId, mStart, mEnd]);
+                sessionRevenue = parseInt(sessRes.rows[0].total, 10);
+            } else {
+                // Modo Legado
+                // Primeiro tenta snapshots legados aprovados
+                const snapRes = await this.dbPool.query(`
+                    SELECT COALESCE(SUM(amount_cents), 0) AS total
+                    FROM legacy_financial_snapshots
+                    WHERE tenant_id = $1 AND month = $2 AND status = 'approved';
+                `, [validTenantId, m]);
+                const snapTotal = parseInt(snapRes.rows[0].total, 10);
+
+                if (snapTotal > 0) {
+                    revenue = snapTotal;
+                    sessionRevenue = snapTotal;
+                } else {
+                    // Fallback para fórmula antiga do domínio
+                    const legacyRes = await this.dbPool.query(`
+                        SELECT COALESCE(SUM(
+                            COALESCE(session_price_cents, 0) * paid_sessions + previous_month_paid_cents
+                        ), 0) as total
+                        FROM psychotherapy_monthly_records
+                        WHERE tenant_id = $1 AND month = $2;
+                    `, [validTenantId, m]);
+
+                    const groupRes = await this.dbPool.query(`
+                        SELECT COALESCE(SUM(amount_cents), 0) AS total
+                        FROM group_payments
+                        WHERE tenant_id = $1 AND reference_month = $2;
+                    `, [validTenantId, m]);
+
+                    sessionRevenue = parseInt(legacyRes.rows[0].total, 10);
+                    revenue = sessionRevenue + parseInt(groupRes.rows[0].total, 10);
+                }
+            }
+
+            sixMonthsTrend.push({
+                month: m,
+                revenueCents: revenue,
+                expensesCents: expenses
+            });
+
+            if (m === currentMonthStr) {
+                currentMonthRevenue = revenue;
+                currentMonthSessionRevenue = sessionRevenue;
+                currentMonthExpenses = expenses;
+            }
+        }
+
+        // Calcular pendências do mês corrente
+        let pendingCents = 0;
+        const currentMonthStart = new Date(Date.UTC(currentYearNum, currentMonthNum - 1, 1));
+        const isCurrentPostCutover = cutoverAt && (currentMonthStart.getTime() >= cutoverAt.getTime());
+
+        if (isCurrentPostCutover) {
+            // Pendente no ledger: expected_amount_cents - sum(payments confirmados)
+            const pendRes = await this.dbPool.query(`
+                SELECT COALESCE(SUM(
+                    GREATEST(COALESCE(expected_amount_cents, 0) - COALESCE((
+                        SELECT SUM(amount_cents) FROM financial_payments
+                        WHERE monthly_record_id = mr.id AND status = 'confirmed'
+                    ), 0), 0)
+                ), 0) AS pending
+                FROM psychotherapy_monthly_records mr
+                WHERE mr.tenant_id = $1 AND mr.month = $2;
+            `, [validTenantId, currentMonthStr]);
+            pendingCents = parseInt(pendRes.rows[0].pending, 10);
+        } else {
+            // Pendente legado
+            const pendingResult = await this.dbPool.query(`
+                SELECT COALESCE(SUM(
+                    CASE 
+                        WHEN payment_type = 'monthly' THEN
+                            GREATEST(session_price_cents - (session_price_cents * paid_sessions / GREATEST(expected_sessions - absences, 1)), 0)
+                        ELSE
+                            GREATEST(expected_sessions - absences - paid_sessions, 0) * COALESCE(session_price_cents, 0)
+                    END
+                ), 0) as pending
+                FROM psychotherapy_monthly_records
+                WHERE tenant_id = $1 AND month = $2 AND payment_status != 'paid'
+            `, [validTenantId, currentMonthStr]);
+            pendingCents = parseInt(pendingResult.rows[0].pending, 10);
+        }
 
         return {
             currentMonth: {
-                revenueCents,
-                sessionRevenueCents,
-                expensesCents,
-                netIncomeCents: revenueCents - expensesCents,
+                revenueCents: currentMonthRevenue,
+                sessionRevenueCents: currentMonthSessionRevenue,
+                expensesCents: currentMonthExpenses,
+                netIncomeCents: currentMonthRevenue - currentMonthExpenses,
                 pendingCents
             },
             sixMonthsTrend
@@ -958,47 +1117,120 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             }
         }
 
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_appointments (
-                id, tenant_id, patient_id, scheduled_at, duration_minutes,
-                status, recurrence, recurrence_end_date, notes, parent_id
-            )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (id) DO UPDATE SET
-                patient_id = EXCLUDED.patient_id,
-                scheduled_at = EXCLUDED.scheduled_at,
-                duration_minutes = EXCLUDED.duration_minutes,
-                status = EXCLUDED.status,
-                recurrence = EXCLUDED.recurrence,
-                recurrence_end_date = EXCLUDED.recurrence_end_date,
-                notes = EXCLUDED.notes,
-                parent_id = EXCLUDED.parent_id,
-                updated_at = NOW()
-            WHERE psychotherapy_appointments.tenant_id = EXCLUDED.tenant_id
-            RETURNING *;
-        `, [
-            data.id || null,
-            tenantId,
-            data.patientId,
-            data.scheduledAt,
-            data.durationMinutes ?? 50,
-            data.status ?? 'scheduled',
-            data.recurrence ?? 'none',
-            data.recurrenceEndDate ?? null,
-            data.notes ?? null,
-            data.parentId || null
-        ]);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
 
-        if (result.rows.length === 0) throw new NotFoundError('Agendamento não encontrado ou não autorizado');
-        const appointment = this.mapAppointment(result.rows[0]);
+            const id = data.id || crypto.randomUUID();
+            const duration = data.durationMinutes ?? 50;
+            const scheduledAt = data.scheduledAt;
+            const endedAt = new Date(scheduledAt.getTime() + duration * 60 * 1000);
 
-        const newMonth = toMonthStr(data.scheduledAt);
-        await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, newMonth);
-        if (oldMonth && oldMonth !== newMonth) {
-            await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, oldMonth);
+            // Determinar se é grupo ou individual
+            const isGroup = !!data.groupId;
+            const eventType = isGroup ? 'group' : 'individual';
+            let calendarEventId = data.calendarEventId;
+            const eventStatus = (data.status === 'attended' || data.status === 'no_show') ? 'completed' : (data.status ?? 'scheduled');
+
+            if (!calendarEventId) {
+                if (isGroup) {
+                    // Tenta achar evento do grupo no mesmo horário
+                    const existingRes = await client.query(`
+                        SELECT id FROM calendar_events
+                        WHERE tenant_id = $1 AND group_id = $2 AND scheduled_at = $3;
+                    `, [tenantId, data.groupId, scheduledAt]);
+                    if (existingRes.rows.length > 0) {
+                        calendarEventId = existingRes.rows[0].id;
+                    } else {
+                        calendarEventId = crypto.randomUUID();
+                        await client.query(`
+                            INSERT INTO calendar_events (id, tenant_id, scheduled_at, ended_at, duration_minutes, event_type, status, group_id)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+                        `, [calendarEventId, tenantId, scheduledAt, endedAt, duration, eventType, eventStatus, data.groupId]);
+                    }
+                } else {
+                    // Individual usa 1-para-1 correspondência
+                    calendarEventId = id;
+                    await client.query(`
+                        INSERT INTO calendar_events (id, tenant_id, scheduled_at, ended_at, duration_minutes, event_type, status, group_id)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+                        ON CONFLICT (id) DO UPDATE SET
+                            scheduled_at = EXCLUDED.scheduled_at,
+                            ended_at = EXCLUDED.ended_at,
+                            duration_minutes = EXCLUDED.duration_minutes,
+                            status = EXCLUDED.status,
+                            updated_at = NOW()
+                        WHERE calendar_events.tenant_id = EXCLUDED.tenant_id;
+                    `, [calendarEventId, tenantId, scheduledAt, endedAt, duration, eventType, eventStatus]);
+                }
+            } else {
+                // Atualiza o evento correspondente se já existir
+                await client.query(`
+                    UPDATE calendar_events
+                    SET scheduled_at = $1, ended_at = $2, duration_minutes = $3, status = $4, updated_at = NOW()
+                    WHERE id = $5 AND tenant_id = $6;
+                `, [scheduledAt, endedAt, duration, eventStatus, calendarEventId, tenantId]);
+            }
+
+            const result = await client.query(`
+                INSERT INTO psychotherapy_appointments (
+                    id, tenant_id, patient_id, scheduled_at, duration_minutes,
+                    status, recurrence, recurrence_end_date, notes, parent_id,
+                    calendar_event_id, group_id
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                ON CONFLICT (id) DO UPDATE SET
+                    patient_id = EXCLUDED.patient_id,
+                    scheduled_at = EXCLUDED.scheduled_at,
+                    duration_minutes = EXCLUDED.duration_minutes,
+                    status = EXCLUDED.status,
+                    recurrence = EXCLUDED.recurrence,
+                    recurrence_end_date = EXCLUDED.recurrence_end_date,
+                    notes = EXCLUDED.notes,
+                    parent_id = EXCLUDED.parent_id,
+                    calendar_event_id = EXCLUDED.calendar_event_id,
+                    group_id = EXCLUDED.group_id,
+                    updated_at = NOW()
+                WHERE psychotherapy_appointments.tenant_id = EXCLUDED.tenant_id
+                RETURNING *;
+            `, [
+                id,
+                tenantId,
+                data.patientId,
+                scheduledAt,
+                duration,
+                data.status ?? 'scheduled',
+                data.recurrence ?? 'none',
+                data.recurrenceEndDate ?? null,
+                data.notes ?? null,
+                data.parentId || null,
+                calendarEventId,
+                data.groupId || null
+            ]);
+
+            if (result.rows.length === 0) {
+                throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+            }
+
+            await client.query('COMMIT');
+            
+            const appointment = this.mapAppointment(result.rows[0]);
+            const newMonth = toMonthStr(data.scheduledAt);
+            await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, newMonth);
+            if (oldMonth && oldMonth !== newMonth) {
+                await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, oldMonth);
+            }
+
+            return appointment;
+        } catch (error: any) {
+            await client.query('ROLLBACK');
+            if (error.code === '23P01') {
+                throw new AppError('Este horário conflita com outro agendamento ativo.', 409);
+            }
+            throw error;
+        } finally {
+            client.release();
         }
-
-        return appointment;
     }
 
     async listAppointments(tenantId: string, options: ListAppointmentsOptions = {}): Promise<PaginatedResult<PsychotherapyAppointment>> {
@@ -1060,6 +1292,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             const appQuery = await client.query(`
                 SELECT
                     a.patient_id, a.scheduled_at, a.status,
+                    a.calendar_event_id, a.group_id,
                     p.payment_type, p.default_session_price_cents,
                     p.name AS patient_name, p.status AS patient_status
                 FROM psychotherapy_appointments a
@@ -1070,7 +1303,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             if (appQuery.rows.length === 0)
                 throw new NotFoundError('Agendamento não encontrado ou não autorizado');
 
-            const { patient_id, scheduled_at, status, payment_type } = appQuery.rows[0];
+            const { patient_id, scheduled_at, status, payment_type, calendar_event_id, group_id } = appQuery.rows[0];
 
             // 3. Remove sessão correspondente (somente se sem notas clínicas)
             await client.query(`
@@ -1091,6 +1324,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
             if (del.rowCount === 0)
                 throw new NotFoundError('Agendamento não encontrado ou não autorizado');
+
+            // 5. Remove calendar_event associado se for individual
+            if (calendar_event_id && !group_id) {
+                await client.query(`
+                    DELETE FROM calendar_events
+                    WHERE id = $1 AND tenant_id = $2
+                `, [calendar_event_id, validTenantId]);
+            }
 
             await this.syncMonthlyRecord(
                 client,
@@ -1119,6 +1360,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             const preQuery = await client.query(`
                 SELECT
                     a.patient_id, a.scheduled_at, a.status AS old_status,
+                    a.calendar_event_id, a.group_id,
                     p.name   AS patient_name,
                     p.status AS patient_status,
                     p.payment_type,
@@ -1136,6 +1378,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 old_status,
                 patient_name, patient_status,
                 payment_type, default_session_price_cents,
+                calendar_event_id, group_id
             } = preQuery.rows[0];
 
             // ── 1. Atualiza status ────────────────────────────────────────────
@@ -1147,6 +1390,16 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             `, [status, validTenantId, id]);
 
             const appointment = result.rows[0];
+
+            // ── 1.1 Atualiza status do calendar_event correspondente se for individual
+            if (calendar_event_id && !group_id) {
+                const targetEventStatus = (status === 'attended' || status === 'no_show') ? 'completed' : status;
+                await client.query(`
+                    UPDATE calendar_events
+                    SET status = $1, updated_at = NOW()
+                    WHERE id = $2 AND tenant_id = $3;
+                `, [targetEventStatus, calendar_event_id, validTenantId]);
+            }
 
             // ── 2. Sincronização com o Diário de Sessões ──────────────────────
             if (status === 'attended' || status === 'no_show' || status === 'canceled') {
@@ -1320,6 +1573,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async saveGoogleOAuthTokens(tenantId: string, accessToken: string, refreshToken: string, expiryDate: number, calendarId?: string): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
+        const encryptedAccessToken = encrypt(accessToken);
+        const encryptedRefreshToken = encrypt(refreshToken);
         await this.dbPool.query(`
             INSERT INTO google_oauth_tokens (tenant_id, access_token, refresh_token, expiry_date, calendar_id)
             VALUES ($1, $2, $3, $4, $5)
@@ -1329,7 +1584,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 expiry_date = EXCLUDED.expiry_date,
                 calendar_id = COALESCE($5, google_oauth_tokens.calendar_id),
                 updated_at = NOW();
-        `, [validTenantId, accessToken, refreshToken, expiryDate, calendarId ?? null]);
+        `, [validTenantId, encryptedAccessToken, encryptedRefreshToken, expiryDate, calendarId ?? null]);
     }
 
     async getGoogleOAuthTokens(tenantId: string): Promise<GoogleOAuthTokens | null> {
@@ -1342,8 +1597,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const row = result.rows[0];
         return {
             tenantId: row.tenant_id,
-            accessToken: row.access_token,
-            refreshToken: row.refresh_token,
+            accessToken: decrypt(row.access_token),
+            refreshToken: decrypt(row.refresh_token),
             expiryDate: row.expiry_date ? Number(row.expiry_date) : null,
             calendarId: row.calendar_id
         };
@@ -1351,10 +1606,11 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async updateGoogleAccessToken(tenantId: string, accessToken: string, expiryDate: number): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
+        const encryptedAccessToken = encrypt(accessToken);
         await this.dbPool.query(`
             UPDATE google_oauth_tokens SET access_token = $2, expiry_date = $3, updated_at = NOW()
             WHERE tenant_id = $1;
-        `, [validTenantId, accessToken, expiryDate]);
+        `, [validTenantId, encryptedAccessToken, expiryDate]);
     }
 
     async listAllGoogleOAuthTokens(): Promise<GoogleOAuthTokens[]> {
@@ -1365,8 +1621,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         `);
         return result.rows.map(row => ({
             tenantId: row.tenant_id,
-            accessToken: row.access_token,
-            refreshToken: row.refresh_token,
+            accessToken: decrypt(row.access_token),
+            refreshToken: decrypt(row.refresh_token),
             expiryDate: row.expiry_date ? Number(row.expiry_date) : null,
             calendarId: row.calendar_id
         }));
@@ -1494,6 +1750,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 start_date       = EXCLUDED.start_date,
                 modality         = EXCLUDED.modality,
                 updated_at       = NOW()
+            WHERE psychotherapy_availability_slots.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
         `, [
             data.id ?? null,
@@ -1507,6 +1764,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.startDate ?? null,
             data.modality ?? 'presencial'
         ]);
+
+        if (result.rows.length === 0) throw new NotFoundError('Horário não encontrado ou não autorizado');
         return this.mapAvailabilitySlot(result.rows[0]);
     }
 
@@ -1659,7 +1918,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             new Date(row.created_at),
             new Date(row.updated_at),
             row.reminder_channel ?? 'whatsapp',
-            row.full_name ?? null
+            row.full_name ?? null,
+            row.whatsapp_bulk_opt_in ?? false
         );
     }
 
@@ -1709,7 +1969,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             new Date(row.issue_date),
             row.description,
             new Date(row.created_at),
-            new Date(row.updated_at)
+            new Date(row.updated_at),
+            row.patient_name_snapshot,
+            row.patient_document_snapshot,
+            row.tenant_name_snapshot,
+            row.tenant_document_snapshot,
+            row.tenant_professional_id_snapshot,
+            row.tenant_address_snapshot,
+            row.status
         );
     }
 
@@ -1842,26 +2109,43 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const defaultSessions  = SESSIONS_BY_STATUS[patient.status] ?? 0;
         const expectedSessions = Math.max(defaultSessions, activeCount);
 
+        const sessionPrice = patient.default_session_price_cents ?? 0;
+        const expectedAmount = patient.payment_type === 'monthly'
+            ? sessionPrice
+            : sessionPrice * Math.max(expectedSessions - absences, 0);
+
         // Se não há sessões esperadas nem pagas, limpar o registro e sair
         if (expectedSessions === 0) {
-            await client.query(`
-                DELETE FROM psychotherapy_monthly_records
-                WHERE tenant_id = $1 AND patient_id = $2 AND month = $3
-                  AND paid_sessions = 0
+            // Verifica se há pagamentos vinculados antes de deletar
+            const hasPaymentsRes = await client.query(`
+                SELECT 1 FROM financial_payments fp
+                JOIN psychotherapy_monthly_records mr ON mr.id = fp.monthly_record_id
+                WHERE mr.tenant_id = $1 AND mr.patient_id = $2 AND mr.month = $3 AND fp.status = 'confirmed'
+                LIMIT 1;
             `, [tenantId, patientId, month]);
-            return;
+            
+            if (hasPaymentsRes.rows.length === 0) {
+                await client.query(`
+                    DELETE FROM psychotherapy_monthly_records
+                    WHERE tenant_id = $1 AND patient_id = $2 AND month = $3
+                      AND paid_sessions = 0;
+                `, [tenantId, patientId, month]);
+                return;
+            }
         }
 
-        await client.query(`
+        // Upsert inicial para garantir a existência do registro com os metadados corretos
+        const upsertRes = await client.query(`
             INSERT INTO psychotherapy_monthly_records (
                 id, tenant_id, patient_id, month,
                 patient_name_snapshot, status, payment_type,
                 session_price_cents, expected_sessions, absences,
-                paid_sessions, payment_status, previous_month_paid_cents
+                paid_sessions, payment_status, previous_month_paid_cents,
+                expected_amount_cents
             ) VALUES (
                 gen_random_uuid(), $1, $2, $3,
                 $4, $5, $6, $7, $8, $9,
-                0, 'pending', 0
+                0, 'pending', 0, $10
             )
             ON CONFLICT (tenant_id, month, patient_id) WHERE patient_id IS NOT NULL
             DO UPDATE SET
@@ -1870,20 +2154,52 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 payment_type          = EXCLUDED.payment_type,
                 expected_sessions     = EXCLUDED.expected_sessions,
                 absences              = EXCLUDED.absences,
-                payment_status = CASE
-                    WHEN psychotherapy_monthly_records.paid_sessions >=
-                         GREATEST(EXCLUDED.expected_sessions - EXCLUDED.absences, 0)
-                         AND GREATEST(EXCLUDED.expected_sessions - EXCLUDED.absences, 0) > 0
-                        THEN 'paid'
-                    WHEN psychotherapy_monthly_records.paid_sessions > 0 THEN 'partial'
-                    ELSE 'pending'
-                END,
+                expected_amount_cents = EXCLUDED.expected_amount_cents,
                 updated_at = NOW()
+            RETURNING id, paid_sessions, payment_status, expected_amount_cents;
         `, [
             tenantId, patientId, month,
             patient.name, patient.status, patient.payment_type,
-            patient.default_session_price_cents, expectedSessions, absences
+            sessionPrice, expectedSessions, absences, expectedAmount
         ]);
+
+        const record = upsertRes.rows[0];
+
+        // Verificar se há cutover aprovado para o tenant e se o mês do registro é pós-cutover
+        const cutoverRes = await client.query(`
+            SELECT cutover_at FROM tenant_financial_cutovers
+            WHERE tenant_id = $1 AND status = 'approved';
+        `, [tenantId]);
+
+        const cutoverAt = cutoverRes.rows[0]?.cutover_at;
+        const isPostCutover = cutoverAt && (monthStart.getTime() >= new Date(cutoverAt).getTime());
+
+        if (isPostCutover) {
+            // Sobrescreve o status baseado nos pagamentos confirmados do ledger
+            const payRes = await client.query(`
+                SELECT COALESCE(SUM(amount_cents), 0) AS total_paid
+                FROM financial_payments
+                WHERE monthly_record_id = $1 AND status = 'confirmed';
+            `, [record.id]);
+
+            const totalPaid = parseInt(payRes.rows[0].total_paid, 10);
+            let paymentStatus = 'pending';
+            if (totalPaid >= expectedAmount && expectedAmount > 0) {
+                paymentStatus = 'paid';
+            } else if (totalPaid > 0) {
+                paymentStatus = 'partial';
+            }
+
+            const paidSessions = patient.payment_type === 'per_session'
+                ? (sessionPrice > 0 ? Math.floor(totalPaid / sessionPrice) : expectedSessions)
+                : (totalPaid >= expectedAmount ? expectedSessions : 0);
+
+            await client.query(`
+                UPDATE psychotherapy_monthly_records
+                SET paid_sessions = $1, payment_status = $2, updated_at = NOW()
+                WHERE id = $3;
+            `, [paidSessions, paymentStatus, record.id]);
+        }
     }
 
     private mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
@@ -1915,5 +2231,182 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             [tenantId, rootId]
         );
         return result.rows.map(row => this.mapAppointment(row));
+    }
+
+    async registerPayment(data: RegisterPaymentDTO): Promise<FinancialPayment> {
+        const validTenantId = this.validateTenantId(data.tenantId);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Verificar chave de idempotência
+            const existRes = await client.query(`
+                SELECT * FROM financial_payments
+                WHERE tenant_id = $1 AND idempotency_key = $2;
+            `, [validTenantId, data.idempotencyKey]);
+
+            if (existRes.rows.length > 0) {
+                await client.query('COMMIT');
+                return this.mapFinancialPayment(existRes.rows[0]);
+            }
+
+            // 2. Lock monthly record if provided
+            let monthlyRecordId = data.monthlyRecordId || null;
+            if (monthlyRecordId) {
+                const lockRes = await client.query(`
+                    SELECT id FROM psychotherapy_monthly_records
+                    WHERE id = $1 FOR UPDATE;
+                `, [monthlyRecordId]);
+                if (lockRes.rows.length === 0) {
+                    throw new NotFoundError('Registro mensal não encontrado');
+                }
+            }
+
+            // 3. Inserir pagamento
+            const id = data.id || crypto.randomUUID();
+            const payRes = await client.query(`
+                INSERT INTO financial_payments (
+                    id, tenant_id, patient_id, monthly_record_id, amount_cents,
+                    currency, paid_at, method, source, status, provider_txid,
+                    idempotency_key, created_by
+                ) VALUES ($1, $2, $3, $4, $5, 'BRL', $6, $7, $8, 'confirmed', $9, $10, $11)
+                RETURNING *;
+            `, [
+                id, validTenantId, data.patientId, monthlyRecordId, data.amountCents,
+                data.paidAt, data.method, data.source, data.providerTxid || null,
+                data.idempotencyKey, data.createdBy
+            ]);
+
+            const payment = this.mapFinancialPayment(payRes.rows[0]);
+
+            // 4. Se houver monthlyRecordId, recalcular status do registro
+            if (monthlyRecordId) {
+                // Obter mês do registro
+                const recRes = await client.query(`
+                    SELECT month FROM psychotherapy_monthly_records WHERE id = $1;
+                `, [monthlyRecordId]);
+                if (recRes.rows.length > 0) {
+                    await this.syncMonthlyRecord(client, validTenantId, data.patientId, recRes.rows[0].month.trim());
+                }
+            }
+
+            await client.query('COMMIT');
+            return payment;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    async voidPayment(tenantId: string, paymentId: string, voidedBy: string, reason: string): Promise<FinancialPayment> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Lock payment
+            const payRes = await client.query(`
+                SELECT * FROM financial_payments
+                WHERE tenant_id = $1 AND id = $2 FOR UPDATE;
+            `, [validTenantId, paymentId]);
+
+            if (payRes.rows.length === 0) {
+                throw new NotFoundError('Pagamento não encontrado');
+            }
+
+            const oldPay = payRes.rows[0];
+            if (oldPay.status === 'voided') {
+                throw new AppError('Pagamento já foi estornado', 400);
+            }
+
+            // 2. Lock monthly record if associated
+            const monthlyRecordId = oldPay.monthly_record_id;
+            if (monthlyRecordId) {
+                await client.query(`
+                    SELECT id FROM psychotherapy_monthly_records
+                    WHERE id = $1 FOR UPDATE;
+                `, [monthlyRecordId]);
+            }
+
+            // 3. Atualizar status para voided
+            const updateRes = await client.query(`
+                UPDATE financial_payments
+                SET status = 'voided', voided_at = NOW(), voided_by = $1, void_reason = $2
+                WHERE tenant_id = $3 AND id = $4
+                RETURNING *;
+            `, [voidedBy, reason, validTenantId, paymentId]);
+
+            const payment = this.mapFinancialPayment(updateRes.rows[0]);
+
+            // 4. Se houver monthlyRecordId, recalcular status do registro
+            if (monthlyRecordId) {
+                const recRes = await client.query(`
+                    SELECT month FROM psychotherapy_monthly_records WHERE id = $1;
+                `, [monthlyRecordId]);
+                if (recRes.rows.length > 0) {
+                    await this.syncMonthlyRecord(client, validTenantId, oldPay.patient_id, recRes.rows[0].month.trim());
+                }
+            }
+
+            // 5. Registrar no log de auditoria
+            await client.query(`
+                INSERT INTO audit_logs (id, tenant_id, action, target_type, target_id, payload, created_by)
+                VALUES (gen_random_uuid(), $1, 'void_payment', 'financial_payment', $2, $3, $4);
+            `, [
+                validTenantId, paymentId,
+                JSON.stringify({ reason, oldStatus: oldPay.status, amountCents: oldPay.amount_cents }),
+                voidedBy
+            ]);
+
+            await client.query('COMMIT');
+            return payment;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    async findPaymentByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<FinancialPayment | null> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT * FROM financial_payments
+            WHERE tenant_id = $1 AND idempotency_key = $2;
+        `, [validTenantId, idempotencyKey]);
+        return result.rows[0] ? this.mapFinancialPayment(result.rows[0]) : null;
+    }
+
+    async findPaymentById(tenantId: string, id: string): Promise<FinancialPayment | null> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT * FROM financial_payments
+            WHERE tenant_id = $1 AND id = $2;
+        `, [validTenantId, id]);
+        return result.rows[0] ? this.mapFinancialPayment(result.rows[0]) : null;
+    }
+
+    private mapFinancialPayment(row: any): FinancialPayment {
+        return {
+            id: row.id,
+            tenantId: row.tenant_id,
+            patientId: row.patient_id,
+            monthlyRecordId: row.monthly_record_id,
+            amountCents: row.amount_cents,
+            currency: row.currency,
+            paidAt: new Date(row.paid_at),
+            method: row.method,
+            source: row.source,
+            status: row.status,
+            providerTxid: row.provider_txid,
+            idempotencyKey: row.idempotency_key,
+            voidedAt: row.voided_at ? new Date(row.voided_at) : null,
+            voidedBy: row.voided_by,
+            voidReason: row.void_reason,
+            createdBy: row.created_by,
+            createdAt: new Date(row.created_at)
+        };
     }
 }

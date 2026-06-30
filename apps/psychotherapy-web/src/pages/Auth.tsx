@@ -85,7 +85,7 @@ export default function Auth() {
     setError(null);
     try {
       setLoading(true);
-      const res = await fetchApi<AuthResponse>('/auth/2fa/verify', {
+      const res = await fetchApi<AuthResponse>('/auth/2fa/login', {
         method: 'POST',
         body: JSON.stringify({ token: totpCode }),
         headers: { Authorization: `Bearer ${tempToken}` }

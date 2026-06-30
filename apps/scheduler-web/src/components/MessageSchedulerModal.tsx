@@ -67,7 +67,13 @@ export function MessageSchedulerModal({
         setRecurrence(editingMessage.metadata?.recurrence || 'Única');
         setImageBase64(undefined);
         setImagePreview(undefined);
-        setDate(new Date(editingMessage.sendAt));
+        if (isResending) {
+          const futureDate = new Date();
+          futureDate.setMinutes(futureDate.getMinutes() + 5);
+          setDate(futureDate);
+        } else {
+          setDate(new Date(editingMessage.sendAt));
+        }
       } else if (isResending) {
         // Keeps recipient/platform but sets date to future 5 mins
         const futureDate = new Date();

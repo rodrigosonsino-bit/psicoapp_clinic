@@ -18,4 +18,5 @@ export interface PixChargeResult {
 export interface IPixProvider {
     createCharge(input: CreatePixChargeInput): Promise<PixChargeResult>;
     cancelCharge(txid: string): Promise<void>;
+    getChargeStatus(txid: string): Promise<'pending' | 'paid' | 'canceled'>;
 }

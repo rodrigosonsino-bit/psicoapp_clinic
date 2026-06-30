@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { injectable } from 'tsyringe';
 import { IssuePsychotherapyReceiptUseCase } from '../../application/useCases/IssuePsychotherapyReceiptUseCase';
 import { ListPsychotherapyReceiptsUseCase } from '../../application/useCases/ListPsychotherapyReceiptsUseCase';
-import { DeletePsychotherapyReceiptUseCase } from '../../application/useCases/DeletePsychotherapyReceiptUseCase';
+import { CancelPsychotherapyReceiptUseCase } from '../../application/useCases/CancelPsychotherapyReceiptUseCase';
 import { AppError } from '../../domain/errors/AppError';
 
 @injectable()
@@ -10,7 +10,7 @@ export class ReceiptController {
     constructor(
         private readonly issueReceiptUseCase: IssuePsychotherapyReceiptUseCase,
         private readonly listReceiptsUseCase: ListPsychotherapyReceiptsUseCase,
-        private readonly deleteReceiptUseCase: DeletePsychotherapyReceiptUseCase
+        private readonly cancelReceiptUseCase: CancelPsychotherapyReceiptUseCase
     ) {}
 
     issueReceipt = async (req: Request, res: Response): Promise<void> => {
@@ -41,14 +41,24 @@ export class ReceiptController {
         res.status(200).json(receipts.map(r => r.toJSON()));
     };
 
-    deleteReceipt = async (req: Request, res: Response): Promise<void> => {
+    cancelReceipt = async (req: Request, res: Response): Promise<void> => {
         const tenantId = (req as any).tenantId || (req as any).userId;
         if (!tenantId) throw new AppError('Tenant não identificado', 401);
 
         const { id } = req.params;
+        const { justification } = req.body;
 
-        await this.deleteReceiptUseCase.execute(tenantId, id);
+        if (!justification) {
+            throw new AppError('A justificativa é obrigatória para cancelar um recibo', 400);
+        }
 
-        res.status(204).send();
+        await this.cancelReceiptUseCase.execute({
+            tenantId,
+            receiptId: id,
+            cancellationReason: justification,
+            operatorId: tenantId
+        });
+
+        res.status(200).json({ message: 'Recibo cancelado com sucesso' });
     };
 }

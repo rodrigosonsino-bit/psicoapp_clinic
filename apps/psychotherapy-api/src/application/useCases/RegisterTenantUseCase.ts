@@ -62,7 +62,8 @@ export class RegisterTenantUseCase {
         const accessToken = this.jwtService.generateToken({
             tenantId: tenant.id,
             email: tenant.email,
-            plan: tenant.plan
+            plan: tenant.plan,
+            tokenUse: 'session'
         }, '15m');
 
         const refreshToken = crypto.randomUUID();
