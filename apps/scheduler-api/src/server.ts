@@ -132,7 +132,8 @@ async function bootstrap() {
         // 5. Iniciar Worker de Fila (BullMQ)
         const messageScheduler = new BullMQMessageScheduler(redisConnection);
         const usageTracker = new PostgresUsageTracker(dbPool);
-        const messageWorker = new MessageWorker(redisConnection, messageRepository, sessionManager, { telegram: telegramClient }, messageScheduler, 'whatsapp-messages', usageTracker);
+        const workerRedisConnection = redisConnection ? redisConnection.duplicate() : undefined;
+        const messageWorker = new MessageWorker(workerRedisConnection || redisConnection, messageRepository, sessionManager, { telegram: telegramClient }, messageScheduler, 'whatsapp-messages', usageTracker);
 
         // 6. Iniciar Serviço de Reconciliação (Recuperação contra quedas do Redis)
         const reconciliationJob = new ReconciliationJob(messageRepository, messageScheduler, sessionManager);
