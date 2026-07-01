@@ -566,15 +566,28 @@ export class WhatsappClient {
         }
     }
 
+    /**
+     * Gera os candidatos de número para consultar no onWhatsApp. Para celulares brasileiros
+     * (55 + DDD com 2 dígitos + 9 + 8 dígitos) inclui também a variante SEM o 9º dígito,
+     * porque muitos contatos estão registrados no WhatsApp no formato legado de 12 dígitos.
+     * Enviar para o JID de 13 dígitos quando o cadastro real é de 12 gera "sent" mas nunca
+     * entrega — era a causa das mensagens 1:1 não chegarem (grupos não passam por aqui).
+     */
+    private getBrazilianPhoneCandidates(clean: string): string[] {
+        const candidates = [clean];
+        if (/^55\d{2}9\d{8}$/.test(clean)) {
+            candidates.push(clean.slice(0, 4) + clean.slice(5));
+        }
+        return [...new Set(candidates)];
+    }
+
     public async resolveJid(recipientId: string): Promise<string> {
         if (!recipientId) {
             throw new Error('Destinatário inválido.');
         }
 
-        // Grupos e identificadores LID (recurso de privacidade do WhatsApp que esconde o
-        // número) já chegam prontos e válidos — NÃO devem ser desmontados/reconstruídos
-        // número) já chegamp prontos e válidos — NÃO devem ser desmontados/reconstruídos
-        // a partir dos dígitos, senão viram um JID de telefone inválido.
+        // Grupos e identificadores LID (recurso de privacidade do WhatsApp) já chegam prontos
+        // e válidos — NÃO devem ser desmontados/reconstruídos a partir dos dígitos.
         if (recipientId.endsWith('@g.us') || recipientId.endsWith('@lid') || recipientId.endsWith('@hosted.lid')) {
             return recipientId;
         }
@@ -584,18 +597,27 @@ export class WhatsappClient {
             cleanNumber = cleanNumber.split('@')[0];
         }
         cleanNumber = cleanNumber.replace(/\D/g, '');
-
-        if (!this.sock || !this.isReady) {
-            logger.warn({ cleanNumber }, 'WhatsApp não conectado ou pronto. Retornando JID padrão estrutural.');
-            return `${cleanNumber}@s.whatsapp.net`;
+        if (!cleanNumber) {
+            throw new Error('Destinatário inválido.');
         }
 
-        // [BYPASS DEFINITIVO]
-        // O onWhatsApp causa falhas silenciosas na entrega para números brasileiros (9º dígito)
-        // porque retorna o JID de 12 dígitos, e o Baileys tenta criptografar a mensagem
-        // para o aparelho antigo, resultando em "Enviado" mas nunca entregue.
-        // O WhatsApp aceita o JID direto (13 dígitos) e resolve internamente.
-        return `${cleanNumber}@s.whatsapp.net`;
+        if (!this.sock || !this.isReady) {
+            throw new Error('WhatsApp não conectado; não é seguro inferir o JID de um contato individual.');
+        }
+
+        // Resolução canônica: o próprio WhatsApp informa o JID real do contato (com ou sem o
+        // 9º dígito, ou um LID). Montar o JID "na mão" com 13 dígitos era a causa de mensagens
+        // 1:1 marcadas como enviadas mas nunca entregues para números brasileiros.
+        const candidates = this.getBrazilianPhoneCandidates(cleanNumber);
+        const results = await this.sock.onWhatsApp(...candidates);
+        const found = results?.find((r: any) => r?.exists && r?.jid);
+
+        if (!found?.jid) {
+            throw new Error(`Número não encontrado no WhatsApp: ${cleanNumber}`);
+        }
+
+        logger.info({ input: cleanNumber, resolvedJid: found.jid, candidates }, '[Baileys] JID individual resolvido via onWhatsApp');
+        return found.jid;
     }
 
     async sendMessage(recipientIdOrJid: string, text: string, imageUrl?: string): Promise<string | undefined> {
