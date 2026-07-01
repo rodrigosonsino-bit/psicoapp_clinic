@@ -4,6 +4,19 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { MessagePlatform, RecurrenceType, ScheduledMessage, WhatsappConnectionStatus, scheduleMessage, updateMessage, askAISecretary } from '../services/api';
 
+/**
+ * Converte um Date para o formato 'YYYY-MM-DDTHH:mm' em HORA LOCAL, que é o formato
+ * exigido pelo <input type="datetime-local">. Usar toISOString() aqui seria um bug:
+ * ela retorna em UTC, fazendo a hora exibida "pular" o offset do fuso (ex.: -3h no Brasil).
+ * Retorna '' para datas inválidas — assim o input nunca recebe um valor quebrado.
+ */
+const toLocalDatetimeInputValue = (d: Date): string => {
+  if (!d || isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = String(d.getFullYear()).padStart(4, '0');
+  return `${year}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 interface MessageSchedulerModalProps {
   visible: boolean;
   onClose: () => void;
@@ -42,6 +55,10 @@ export function MessageSchedulerModal({
   const [recipient, setRecipient] = useState('');
   const [platform, setPlatform] = useState<MessagePlatform>('whatsapp');
   const [date, setDate] = useState(new Date());
+  // Espelho em string do campo web datetime-local. Manter uma string separada evita que o
+  // input "prenda" quando o usuário apaga tudo: o React sempre reflete o que está no campo,
+  // e só convertemos para Date quando o valor é uma data completa e válida.
+  const [webDateStr, setWebDateStr] = useState(() => toLocalDatetimeInputValue(new Date()));
   const [recurrence, setRecurrence] = useState<RecurrenceType>('Única');
   const [imageBase64, setImageBase64] = useState<string | undefined>(undefined);
   const [imagePreview, setImagePreview] = useState<string | undefined>(undefined);
@@ -94,6 +111,13 @@ export function MessageSchedulerModal({
       setShowAiInput(false);
     }
   }, [visible, editingMessage, isResending]);
+
+  // Mantém o campo web em sincronia sempre que a data muda por vias externas
+  // (init, edição, reenvio, prefill, sugestão da IA). A digitação do usuário no próprio
+  // campo é tratada no onChange do input e não passa por aqui.
+  useEffect(() => {
+    setWebDateStr(toLocalDatetimeInputValue(date));
+  }, [date]);
 
   // Sync recipient selection from parent contacts/groups modals
   useEffect(() => {
@@ -165,7 +189,20 @@ export function MessageSchedulerModal({
       return;
     }
 
-    if (!editingMessage && date <= new Date()) {
+    // No web o campo (webDateStr) é a fonte de verdade; no mobile é o state `date`.
+    const effectiveDate = Platform.OS === 'web' ? new Date(webDateStr) : date;
+
+    if (!webDateStr && Platform.OS === 'web') {
+      Alert.alert('Atenção', 'Selecione a data e a hora de envio.');
+      return;
+    }
+
+    if (isNaN(effectiveDate.getTime())) {
+      Alert.alert('Atenção', 'A data/hora de envio é inválida. Selecione uma data válida.');
+      return;
+    }
+
+    if (!editingMessage && effectiveDate <= new Date()) {
       Alert.alert('Atenção', 'A data/hora de envio deve ser no futuro. Ajuste a data antes de agendar.');
       return;
     }
@@ -193,7 +230,7 @@ export function MessageSchedulerModal({
       }
     }
 
-    const utcDateStr = date.toISOString();
+    const utcDateStr = effectiveDate.toISOString();
     setSubmitting(true);
     try {
       if (editingMessage && !isResending) {
@@ -406,8 +443,19 @@ export function MessageSchedulerModal({
                     width: '100%',
                     boxSizing: 'border-box'
                   }}
-                  value={date.toISOString().slice(0, 16)}
-                  onChange={(e) => setDate(new Date(e.target.value))}
+                  value={webDateStr}
+                  onChange={(e) => {
+                    // webDateStr sempre reflete o campo (inclusive vazio durante a edição), então
+                    // o input nunca "prende". Só convertemos para Date quando o valor é uma data
+                    // completa e válida — evita o new Date('') => Invalid Date => toISOString()
+                    // que antes derrubava o app inteiro (RangeError sem error boundary).
+                    const value = e.target.value;
+                    setWebDateStr(value);
+                    if (value) {
+                      const parsed = new Date(value);
+                      if (!isNaN(parsed.getTime())) setDate(parsed);
+                    }
+                  }}
                 />
               ) : (
                 <>
