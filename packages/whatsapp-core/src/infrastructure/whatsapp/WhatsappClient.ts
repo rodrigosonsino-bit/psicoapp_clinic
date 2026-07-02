@@ -605,9 +605,8 @@ export class WhatsappClient {
             throw new Error('WhatsApp não conectado; não é seguro inferir o JID de um contato individual.');
         }
 
-        // Resolução canônica: o próprio WhatsApp informa o JID real do contato (com ou sem o
-        // 9º dígito, ou um LID). Montar o JID "na mão" com 13 dígitos era a causa de mensagens
-        // 1:1 marcadas como enviadas mas nunca entregues para números brasileiros.
+        // 1) Resolve o número de telefone (PN) canônico. O onWhatsApp confirma qual variante
+        //    (com ou sem 9º dígito) o WhatsApp realmente conhece e retorna { jid, exists }.
         const candidates = this.getBrazilianPhoneCandidates(cleanNumber);
         const results = await this.sock.onWhatsApp(...candidates);
         const found = results?.find((r: any) => r?.exists && r?.jid);
@@ -615,9 +614,22 @@ export class WhatsappClient {
         if (!found?.jid) {
             throw new Error(`Número não encontrado no WhatsApp: ${cleanNumber}`);
         }
+        const pnJid: string = found.jid;
 
-        logger.info({ input: cleanNumber, resolvedJid: found.jid, candidates }, '[Baileys] JID individual resolvido via onWhatsApp');
-        return found.jid;
+        // 2) Resolve o LID do contato via USync. Para conversas 1:1, endereçar pelo @lid faz a
+        //    rc13 usar o namespace LID correto (identidade remetente creds.me.lid, enumeração de
+        //    dispositivos e sessões Signal coerentes). Enviar pelo PN gera "sent" mas o servidor
+        //    não entrega quando o contato opera em modo LID. Essa chamada também força o USync a
+        //    popular lid-mapping-* no auth store. Se não houver LID, cai no PN (fallback seguro).
+        let lidJid: string | null = null;
+        try {
+            lidJid = await this.sock.signalRepository?.lidMapping?.getLIDForPN?.(pnJid) ?? null;
+        } catch (err) {
+            logger.warn({ err, pnJid }, '[Baileys] Falha ao resolver LID do contato via USync; usando PN.');
+        }
+
+        logger.info({ input: cleanNumber, pnJid, lidJid, candidates }, '[Baileys] JID individual resolvido (PN/LID)');
+        return lidJid || pnJid;
     }
 
     async sendMessage(recipientIdOrJid: string, text: string, imageUrl?: string): Promise<string | undefined> {
