@@ -382,8 +382,7 @@ export class GroupController {
                     END AS payment_status
                 FROM therapy_groups tg
                 LEFT JOIN group_payments gp
-                    ON  gp.group_id        = tgm.group_id
-                    AND gp.patient_id      = tgm.patient_id
+                    ON  gp.group_member_id = tgm.id
                     AND gp.reference_month = $3
                     AND gp.tenant_id       = $2
                 WHERE tg.id = tgm.group_id
@@ -684,8 +683,7 @@ export class GroupController {
             JOIN psychotherapy_patients p  ON p.id  = tgm.patient_id
             JOIN therapy_groups tg         ON tg.id = tgm.group_id
             LEFT JOIN group_payments gp
-                ON  gp.group_id        = tgm.group_id
-                AND gp.patient_id      = tgm.patient_id
+                ON  gp.group_member_id = tgm.id
                 AND gp.reference_month = $1
                 AND gp.tenant_id       = $2
                 AND gp.status != 'voided'
