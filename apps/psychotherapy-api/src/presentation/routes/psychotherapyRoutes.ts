@@ -257,6 +257,9 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/groups/:groupId/members', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.addGroupMember(req, res)));
     router.post('/psychotherapy/groups/:groupId/members-new', validateParams(groupIdParamSchema), validateBody(addGroupMemberIdempotentSchema), asyncHandler((req, res) => groupController.addGroupMemberIdempotent(req, res)));
     router.delete('/psychotherapy/groups/:groupId/members/:patientId', validateParams(groupMemberParamSchema), asyncHandler((req, res) => groupController.removeGroupMember(req, res)));
+    
+    // Pagamentos do Grupo
+    router.get('/psychotherapy/groups/:groupId/payments', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.listGroupPayments(req, res)));
 
     // Reports
     router.post('/psychotherapy/receipts', validateBody(issueReceiptSchema), asyncHandler((req, res) => receiptController.issueReceipt(req, res)));
