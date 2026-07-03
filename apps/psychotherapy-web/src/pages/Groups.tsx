@@ -675,15 +675,17 @@ export default function Groups() {
                                           + Parcela
                                         </button>
                                       )}
-                                      {hasPayments && (
                                         <button
                                           className="btn btn-secondary btn-sm"
-                                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                          style={{
+                                            padding: '0.25rem 0.5rem',
+                                            fontSize: '0.75rem',
+                                            visibility: hasPayments ? 'visible' : 'hidden'
+                                          }}
                                           onClick={() => setExpandedPatientId(isExpanded ? null : m.patient_id)}
                                         >
                                           {isExpanded ? 'Ocultar' : 'Ver'}
                                         </button>
-                                      )}
                                     </div>
                                   </td>
                                 </tr>
