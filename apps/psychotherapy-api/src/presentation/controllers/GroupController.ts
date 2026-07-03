@@ -376,8 +376,8 @@ export class GroupController {
                 SELECT
                     CASE
                         WHEN tg.monthly_fee_cents IS NULL OR tg.monthly_fee_cents = 0 THEN 'paid'
-                        WHEN COALESCE(SUM(gp.amount_cents), 0) = 0                    THEN 'pending'
-                        WHEN COALESCE(SUM(gp.amount_cents), 0) >= tg.monthly_fee_cents THEN 'paid'
+                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) = 0 THEN 'pending'
+                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) >= tg.monthly_fee_cents THEN 'paid'
                         ELSE 'partial'
                     END AS payment_status
                 FROM therapy_groups tg
