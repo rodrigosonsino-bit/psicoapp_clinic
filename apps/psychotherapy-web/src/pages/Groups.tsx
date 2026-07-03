@@ -112,12 +112,34 @@ export default function Groups() {
   const [paymentToConfirm, setPaymentToConfirm] = useState<any | null>(null);
   const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null);
 
+  // Novos estados para o modal de pacote (Upfront Payment)
+  const [showUpfrontModal, setShowUpfrontModal] = useState(false);
+  const [eligibleUpfrontMembers, setEligibleUpfrontMembers] = useState<any[]>([]);
+  const [selectedUpfrontMemberId, setSelectedUpfrontMemberId] = useState<string>('');
+  const [upfrontAmountStr, setUpfrontAmountStr] = useState<string>('');
+  const [submittingUpfront, setSubmittingUpfront] = useState(false);
 
   // Inline editing for session history
   const [editingPresenceId, setEditingPresenceId] = useState<string | null>(null);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editingNotesValue, setEditingNotesValue] = useState('');
   const [savingRecordId, setSavingRecordId] = useState<string | null>(null);
+
+  const loadUpfrontEligibleMembers = useCallback(async (groupId: string) => {
+    try {
+      const res: any = await fetchApi(`/api/psychotherapy/groups/${groupId}/eligible-upfront-payments`);
+      setEligibleUpfrontMembers(res.data || []);
+      if (res.data && res.data.length > 0) {
+        setSelectedUpfrontMemberId(res.data[0].group_member_id);
+        setUpfrontAmountStr((res.data[0].default_upfront_price_cents / 100).toFixed(2));
+      } else {
+        setSelectedUpfrontMemberId('');
+        setUpfrontAmountStr('');
+      }
+    } catch (err) {
+      toast.error('Erro ao carregar membros elegíveis para pacote.');
+    }
+  }, [toast]);
 
   const updateAttendance = useCallback(async (record: SessionRecord, newStatus: AttendanceStatus) => {
     if (!selectedGroup) return;
@@ -509,25 +531,40 @@ export default function Groups() {
                   </div>
                   
                   {subTab === 'payments' && (
-                    <button
-                      className="btn btn-primary btn-sm"
-                      style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
-                      onClick={async () => {
-                        try {
-                          await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/charges`, {
-                            method: 'POST',
-                            body: JSON.stringify({ referenceMonth: currentMonth })
-                          });
-                          toast.success('Cobranças geradas com sucesso!');
-                          loadPayments(selectedGroup.id, currentMonth);
-                        } catch (err) {
-                          toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao gerar cobranças.');
-                        }
-                      }}
-                    >
-                      <CircleDollarSign size={13} style={{ marginRight: '4px' }} />
-                      Gerar Cobranças
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
+                        onClick={() => {
+                          if (selectedGroup) {
+                            loadUpfrontEligibleMembers(selectedGroup.id);
+                            setShowUpfrontModal(true);
+                          }
+                        }}
+                      >
+                        <Wallet size={13} style={{ marginRight: '4px' }} />
+                        Receber Pacote
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
+                        onClick={async () => {
+                          try {
+                            await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/charges`, {
+                              method: 'POST',
+                              body: JSON.stringify({ referenceMonth: currentMonth })
+                            });
+                            toast.success('Cobranças geradas com sucesso!');
+                            loadPayments(selectedGroup.id, currentMonth);
+                          } catch (err) {
+                            toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao gerar cobranças.');
+                          }
+                        }}
+                      >
+                        <CircleDollarSign size={13} style={{ marginRight: '4px' }} />
+                        Gerar Cobranças
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -605,7 +642,7 @@ export default function Groups() {
                                     )}
                                   </td>
                                   <td style={{ textAlign: 'right' }}>
-                                    <div className="flex gap-2 justify-end">
+                                    <div className="flex gap-2 justify-end items-center" style={{ minWidth: '135px' }}>
                                       {m.payment_status === 'pending' && (
                                         <button
                                           className="btn btn-primary btn-sm"
@@ -927,10 +964,94 @@ export default function Groups() {
           }}
         />
       )}
+
+      {showUpfrontModal && selectedGroup && (
+        <div className="modal-overlay">
+          <div className="modal-content animate-fade-in" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>Pagamento à Vista (Pacote Completo)</h3>
+              <button className="icon-btn" onClick={() => setShowUpfrontModal(false)}>
+                <XCircle size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="text-small" style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>
+                Selecione o membro que fará o pagamento à vista de todo o grupo. Ao gerar esta cobrança, as parcelas mensais futuras serão abatidas automaticamente.
+              </p>
+              
+              <div className="form-group mb-3">
+                <label className="form-label">Membro Elegível</label>
+                <select
+                  className="form-control"
+                  value={selectedUpfrontMemberId}
+                  onChange={(e) => {
+                    setSelectedUpfrontMemberId(e.target.value);
+                    const member = eligibleUpfrontMembers.find(m => m.group_member_id === e.target.value);
+                    if (member) {
+                      setUpfrontAmountStr((member.default_upfront_price_cents / 100).toFixed(2));
+                    }
+                  }}
+                  disabled={eligibleUpfrontMembers.length === 0}
+                >
+                  {eligibleUpfrontMembers.length === 0 && <option value="">Nenhum membro elegível</option>}
+                  {eligibleUpfrontMembers.map(m => (
+                    <option key={m.group_member_id} value={m.group_member_id}>
+                      {m.patient_name} (Sugerido: {(m.default_upfront_price_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group mb-3">
+                <label className="form-label">Valor Total do Pacote (R$)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="form-control"
+                  value={upfrontAmountStr}
+                  onChange={(e) => setUpfrontAmountStr(e.target.value)}
+                  disabled={!selectedUpfrontMemberId}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2" style={{ marginTop: '1rem' }}>
+              <button className="btn btn-secondary" onClick={() => setShowUpfrontModal(false)}>
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={submittingUpfront || !selectedUpfrontMemberId || !upfrontAmountStr}
+                onClick={async () => {
+                  setSubmittingUpfront(true);
+                  try {
+                    const cents = Math.round(parseFloat(upfrontAmountStr) * 100);
+                    await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/upfront-charge`, {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        groupMemberId: selectedUpfrontMemberId,
+                        overrideTotalCents: cents
+                      })
+                    });
+                    toast.success('Cobrança de pacote gerada! Agora basta registrar o pagamento dela.');
+                    setShowUpfrontModal(false);
+                    loadPayments(selectedGroup.id, currentMonth);
+                  } catch (err) {
+                    toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao gerar pacote.');
+                  } finally {
+                    setSubmittingUpfront(false);
+                  }
+                }}
+              >
+                {submittingUpfront ? 'Gerando...' : 'Gerar Cobrança Única'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
 
 
 // ── Financial Summary ─────────────────────────────────────────────────────────
