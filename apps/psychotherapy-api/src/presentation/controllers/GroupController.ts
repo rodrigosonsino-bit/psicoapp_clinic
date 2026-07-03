@@ -346,7 +346,7 @@ export class GroupController {
                 p.id            AS patient_id,
                 p.name,
                 p.phone,
-                p.payment_type,
+                COALESCE(bp.billing_type, 'monthly') AS payment_type,
                 p.default_session_price_cents,
                 p.status        AS patient_status,
                 tgm.joined_at,
@@ -359,6 +359,8 @@ export class GroupController {
                 COALESCE(gp_status.payment_status, 'pending') AS payment_status
             FROM therapy_group_members tgm
             JOIN psychotherapy_patients p ON p.id = tgm.patient_id
+            LEFT JOIN therapy_group_member_billing_policies bp 
+              ON bp.member_id = tgm.id AND bp.status = 'active'
             -- Presença: contagem de sessões do mês para este membro neste grupo
             LEFT JOIN LATERAL (
                 SELECT
