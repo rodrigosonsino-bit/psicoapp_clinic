@@ -28,7 +28,8 @@ CREATE TABLE therapy_group_member_billing_policies (
       (billing_type = 'group_default' AND upfront_payment_id IS NULL AND exemption_reason IS NULL) OR
       (billing_type = 'upfront' AND upfront_payment_id IS NOT NULL AND exemption_reason IS NULL) OR
       (billing_type = 'exempt' AND upfront_payment_id IS NULL AND trim(exemption_reason) <> '')
-    )
+    ),
+    UNIQUE (id, tenant_id)
 );
 
 CREATE UNIQUE INDEX uq_policies_upfront_payment 
