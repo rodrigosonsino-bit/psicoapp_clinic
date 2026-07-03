@@ -6,8 +6,8 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM calendar_events
-        WHERE group_session_record_id IS NOT NULL
-        GROUP BY tenant_id, group_session_record_id
+        WHERE event_type = 'group'
+        GROUP BY tenant_id, group_id, scheduled_at
         HAVING COUNT(*) > 1
     ) THEN
         RAISE EXCEPTION 'Duplicatas em calendar_events encontradas. Reconcilie antes de prosseguir.';
