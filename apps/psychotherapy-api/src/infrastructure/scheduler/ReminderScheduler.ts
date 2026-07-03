@@ -3,10 +3,12 @@ import { IPsychotherapyRepository, UpcomingAppointment } from '../../domain/repo
 import { logger } from '../logger';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
 import { EmailService } from '../services/EmailService';
+import { IReminderMessageSender } from '../../domain/services/IReminderMessageSender';
+import { resolveWhatsAppProvider } from '../whatsappCloud/WhatsappCloudConfig';
 
 // ── Formatação ─────────────────────────────────────────────────────────────────
 
-function formatDateTimeBR(date: Date): string {
+export function formatDateTimeBR(date: Date): string {
     return date.toLocaleString('pt-BR', {
         timeZone: 'America/Sao_Paulo',
         day: '2-digit',
@@ -58,7 +60,8 @@ export class ReminderScheduler {
 
     constructor(
         private readonly repository: IPsychotherapyRepository,
-        private readonly whatsappSessionManager?: WhatsappSessionManager
+        private readonly whatsappSessionManager?: WhatsappSessionManager,
+        private readonly whatsappCloudSender?: IReminderMessageSender
     ) {}
 
     /** Inicia o cron — executa de hora em hora no minuto 0. */
@@ -173,6 +176,21 @@ export class ReminderScheduler {
         appt: UpcomingAppointment,
         result: ReminderRunResult
     ): Promise<void> {
+        const provider = resolveWhatsAppProvider();
+
+        if (provider === 'disabled') {
+            logger.warn({ appointmentId: appt.appointmentId },
+                '⚠️ WHATSAPP_PROVIDER=disabled (ou valor não reconhecido) — WhatsApp não enviado');
+            result.skipped++;
+            return;
+        }
+
+        if (provider === 'meta_cloud') {
+            await this.sendViaWhatsAppCloud(appt, result);
+            return;
+        }
+
+        // provider === 'baileys' — comportamento ORIGINAL, inalterado.
         const message = buildWhatsAppMessage(appt);
 
         if (!this.whatsappSessionManager) {
@@ -189,7 +207,7 @@ export class ReminderScheduler {
             }
 
             await client.sendMessage(appt.patientPhone!, message);
-            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'whatsapp', 'success');
+            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'whatsapp', 'success', undefined, { provider: 'baileys' });
 
             logger.info({
                 appointmentId: appt.appointmentId,
@@ -202,9 +220,67 @@ export class ReminderScheduler {
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
             await this.repository.markReminderSent(
-                appt.appointmentId, appt.tenantId, 'whatsapp', 'failed', errorMsg
+                appt.appointmentId, appt.tenantId, 'whatsapp', 'failed', errorMsg, { provider: 'baileys' }
             );
             logger.error({ err, appointmentId: appt.appointmentId }, '❌ Falha ao enviar lembrete via WhatsApp');
+            result.whatsappFailed++;
+        }
+    }
+
+    // ── Envio WhatsApp via Cloud API (Meta) ─────────────────────────────────────
+
+    private async sendViaWhatsAppCloud(
+        appt: UpcomingAppointment,
+        result: ReminderRunResult
+    ): Promise<void> {
+        if (!this.whatsappCloudSender) {
+            // Fail-closed: provider=meta_cloud mas o sender não foi inicializado (faltam
+            // credenciais/config) — falha de forma visível, NUNCA cai para o Baileys em silêncio.
+            const errorMsg = 'WHATSAPP_PROVIDER=meta_cloud, mas o WhatsappCloudSender não foi configurado (credenciais ausentes).';
+            logger.error({ appointmentId: appt.appointmentId }, `❌ ${errorMsg}`);
+            await this.repository.markReminderSent(
+                appt.appointmentId, appt.tenantId, 'whatsapp', 'failed', errorMsg,
+                { provider: 'meta_cloud', retryEligible: false }
+            );
+            result.whatsappFailed++;
+            return;
+        }
+
+        try {
+            const sendResult = await this.whatsappCloudSender.sendSessionReminder(appt);
+
+            if (sendResult.success) {
+                await this.repository.markReminderSent(
+                    appt.appointmentId, appt.tenantId, 'whatsapp', 'success', undefined, { provider: 'meta_cloud' }
+                );
+                logger.info({
+                    appointmentId: appt.appointmentId,
+                    tenantId: appt.tenantId,
+                    patientName: appt.patientName,
+                    scheduledAt: appt.scheduledAt,
+                }, '✅ Lembrete enviado via WhatsApp Cloud API');
+                result.whatsappSent++;
+                return;
+            }
+
+            await this.repository.markReminderSent(
+                appt.appointmentId, appt.tenantId, 'whatsapp', 'failed', sendResult.errorMessage,
+                { provider: 'meta_cloud', retryEligible: sendResult.retryEligible }
+            );
+            logger.error({
+                appointmentId: appt.appointmentId,
+                retryEligible: sendResult.retryEligible,
+            }, `❌ Falha ao enviar lembrete via WhatsApp Cloud API: ${sendResult.errorMessage}`);
+            result.whatsappFailed++;
+        } catch (err) {
+            // Erro inesperado (bug/exceção não tratada pelo sender) — trata como não-retentável
+            // por segurança, já que não sabemos classificar o resultado.
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            await this.repository.markReminderSent(
+                appt.appointmentId, appt.tenantId, 'whatsapp', 'failed', errorMsg,
+                { provider: 'meta_cloud', retryEligible: false }
+            );
+            logger.error({ err, appointmentId: appt.appointmentId }, '❌ Erro inesperado ao enviar lembrete via WhatsApp Cloud API');
             result.whatsappFailed++;
         }
     }

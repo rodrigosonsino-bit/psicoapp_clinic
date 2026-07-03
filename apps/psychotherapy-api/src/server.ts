@@ -27,12 +27,30 @@ import { BroadcastQueue } from './infrastructure/queue/BroadcastQueue';
 import { BroadcastWorker } from './infrastructure/queue/BroadcastWorker';
 import { closeBroadcastRedisConnection } from './infrastructure/queue/redisConnection';
 import { IBroadcastRepository } from './domain/repositories/IBroadcastRepository';
+import { createWhatsappCloudWebhookRoutes } from './presentation/routes/whatsappCloudWebhookRoutes';
+import { PostgresWhatsappCloudRepository } from './infrastructure/repositories/PostgresWhatsappCloudRepository';
+import { WhatsappCloudClient } from './infrastructure/whatsappCloud/WhatsappCloudClient';
+import { WhatsappCloudSender } from './infrastructure/whatsappCloud/WhatsappCloudSender';
+import { WhatsappCloudInboxWorker } from './infrastructure/scheduler/WhatsappCloudInboxWorker';
+import { resolveWhatsAppProvider, loadWhatsappCloudClientConfig } from './infrastructure/whatsappCloud/WhatsappCloudConfig';
+import { IReminderMessageSender } from './domain/services/IReminderMessageSender';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3333;
 
 // Confia no cabeçalho X-Forwarded-For do Railway/proxy para o rate limiter funcionar
 app.set('trust proxy', true);
+
+// ── Webhook da WhatsApp Cloud API ────────────────────────────────────────────
+// Registrado ANTES de QUALQUER middleware global (helmet/cors/rate limit/json):
+// 1) a validação de assinatura (X-Hub-Signature-256) exige os bytes brutos do corpo — o
+//    express.json() global consumiria o stream antes que a rota pudesse acessá-lo;
+// 2) o rate limit global é pensado para tráfego de usuário/frontend — aplicá-lo também à Meta
+//    arrisca 429 durante um burst legítimo de eventos, o que pode fazer a Meta desistir de
+//    reenviar e perder status de entrega definitivamente.
+// Ver whatsappCloudWebhookRoutes.ts.
+const whatsappCloudRepository = new PostgresWhatsappCloudRepository(container.resolve(Pool));
+app.use('/api', createWhatsappCloudWebhookRoutes(whatsappCloudRepository));
 
 // ── Rate Limiters ────────────────────────────────────────────────────────────
 
@@ -160,11 +178,34 @@ if (require.main === module) {
                     logger.warn('⚠️ WhatsApp desativado via ENABLE_WHATSAPP=false');
                 }
 
+                // WhatsApp Cloud API (piloto single-tenant) — só instanciado quando as
+                // credenciais estão presentes. Se WHATSAPP_PROVIDER=meta_cloud mas faltar
+                // config, o sender fica undefined e o ReminderScheduler falha de forma visível
+                // (fail-closed) em vez de cair silenciosamente para o Baileys.
+                let whatsappCloudSender: IReminderMessageSender | undefined;
+                const cloudClientConfig = loadWhatsappCloudClientConfig();
+                if (cloudClientConfig) {
+                    const cloudClient = new WhatsappCloudClient(cloudClientConfig);
+                    whatsappCloudSender = new WhatsappCloudSender(cloudClient, whatsappCloudRepository);
+                    logger.info('☁️ WhatsappCloudSender inicializado (WhatsApp Cloud API configurada).');
+                } else if (resolveWhatsAppProvider() === 'meta_cloud') {
+                    logger.error('❌ WHATSAPP_PROVIDER=meta_cloud, mas WHATSAPP_CLOUD_API_VERSION/PHONE_NUMBER_ID/TOKEN não estão todos configurados. Lembretes de WhatsApp vão falhar de forma visível até isso ser corrigido.');
+                }
+
+                // Worker durável da inbox do webhook — inicia sempre que houver alguma config de
+                // Cloud API presente (mesmo que o provider ativo ainda seja 'baileys'), para não
+                // perder eventos que a Meta já possa estar enviando durante a configuração inicial.
+                if (cloudClientConfig) {
+                    const inboxWorker = new WhatsappCloudInboxWorker(whatsappCloudRepository);
+                    inboxWorker.start();
+                }
+
                 if (process.env.ENABLE_REMINDERS !== 'false') {
                     const repository = container.resolve<IPsychotherapyRepository>('IPsychotherapyRepository');
                     const scheduler = new ReminderScheduler(
                         repository,
-                        isWhatsappEnabled ? sessionManager : undefined
+                        isWhatsappEnabled ? sessionManager : undefined,
+                        whatsappCloudSender
                     );
                     scheduler.start();
                 }

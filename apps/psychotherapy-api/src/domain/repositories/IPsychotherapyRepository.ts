@@ -147,6 +147,19 @@ export interface UpcomingAppointment {
 export type ReminderLogStatus = 'success' | 'failed';
 export type ReminderLogChannel = 'whatsapp' | 'email';
 
+/**
+ * Metadados adicionais opcionais do envio — usados pelo provedor Cloud API (Meta) para
+ * distinguir de qual implementação técnica o log veio e se um resultado 'failed' é elegível
+ * para o retry automático do próximo ciclo do cron. Omitidos (undefined), o comportamento é
+ * idêntico ao anterior: provider fica NULL e retry_eligible assume o default TRUE do banco —
+ * ou seja, nenhuma chamada existente (Baileys/email) precisa mudar.
+ */
+export interface MarkReminderSentOptions {
+    provider?: 'baileys' | 'meta_cloud';
+    /** false para resultados ambíguos (timeout/5xx pós-envio) — evita reenvio automático cego. */
+    retryEligible?: boolean;
+}
+
 export interface SaveClinicalNoteDTO {
     id?: string;
     tenantId: string;
@@ -220,7 +233,7 @@ export interface IPsychotherapyRepository {
     findUpcomingAppointments(windowStart: Date, windowEnd: Date): Promise<UpcomingAppointment[]>;
     /** Agendamentos futuros cuja janela normal já passou mas que têm tentativa de WhatsApp falhada e nenhum sucesso ainda (retry). */
     findFailedWhatsappReminders(now: Date, windowStart: Date, maxAttempts: number): Promise<UpcomingAppointment[]>;
-    markReminderSent(appointmentId: string, tenantId: string, channelUsed: ReminderLogChannel, status: ReminderLogStatus, errorMessage?: string): Promise<void>;
+    markReminderSent(appointmentId: string, tenantId: string, channelUsed: ReminderLogChannel, status: ReminderLogStatus, errorMessage?: string, options?: MarkReminderSentOptions): Promise<void>;
     hasReminderBeenSent(appointmentId: string, channelUsed: ReminderLogChannel): Promise<boolean>;
     countScheduledSessionsByPatient(tenantId: string, month: string): Promise<Map<string, number>>;
     saveClinicalNote(data: SaveClinicalNoteDTO): Promise<ClinicalNote>;

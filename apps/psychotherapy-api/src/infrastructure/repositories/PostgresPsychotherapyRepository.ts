@@ -15,7 +15,8 @@ import {
     GoogleOAuthTokens,
     SaveAvailabilitySlotDTO,
     FinancialPayment,
-    RegisterPaymentDTO
+    RegisterPaymentDTO,
+    MarkReminderSentOptions
 } from '../../domain/repositories/IPsychotherapyRepository';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
@@ -1526,6 +1527,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                   SELECT COUNT(*) FROM psychotherapy_reminders_log rl3
                   WHERE rl3.appointment_id = a.id AND rl3.channel_used = 'whatsapp' AND rl3.status = 'failed'
               ) < $3
+              -- A TENTATIVA MAIS RECENTE (não "alguma") precisa ser elegível para retry —
+              -- se o último resultado foi ambíguo (timeout/5xx da Cloud API), a mensagem pode já
+              -- ter sido entregue, então não reenviamos automaticamente mesmo que uma tentativa
+              -- anterior tenha sido uma rejeição comum e elegível.
+              AND COALESCE((
+                  SELECT rl4.retry_eligible FROM psychotherapy_reminders_log rl4
+                  WHERE rl4.appointment_id = a.id AND rl4.channel_used = 'whatsapp'
+                  ORDER BY rl4.sent_at DESC, rl4.id DESC LIMIT 1
+              ), TRUE) = TRUE
             ORDER BY a.scheduled_at ASC;
         `, [now, windowStart, maxAttempts]);
 
@@ -1549,13 +1559,18 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         tenantId: string,
         channelUsed: 'whatsapp' | 'email',
         status: 'success' | 'failed',
-        errorMessage?: string
+        errorMessage?: string,
+        options?: MarkReminderSentOptions
     ): Promise<void> {
         await this.dbPool.query(`
             INSERT INTO psychotherapy_reminders_log
-                (tenant_id, appointment_id, channel_used, status, error_message)
-            VALUES ($1, $2, $3, $4, $5);
-        `, [tenantId, appointmentId, channelUsed, status, errorMessage ?? null]);
+                (tenant_id, appointment_id, channel_used, status, error_message, provider, retry_eligible)
+            VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, TRUE));
+        `, [
+            tenantId, appointmentId, channelUsed, status, errorMessage ?? null,
+            options?.provider ?? null,
+            options?.retryEligible,
+        ]);
     }
 
     async hasReminderBeenSent(appointmentId: string, channelUsed: 'whatsapp' | 'email'): Promise<boolean> {
