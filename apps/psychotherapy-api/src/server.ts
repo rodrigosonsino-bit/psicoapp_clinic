@@ -156,7 +156,12 @@ let broadcastWorker: BroadcastWorker | null = null;
 // Bootstrap process: Only connect to the DB and listen to the port when run directly
 if (require.main === module) {
     const dbPool = container.resolve(Pool);
-    const isWhatsappEnabled = process.env.ENABLE_WHATSAPP !== 'false';
+    // DISABLE_WHATSAPP_BOOT=true é o bypass de emergência documentado em .env.example
+    // (mesma variável usada pelo scheduler-api para não competir pela sessão Baileys) —
+    // precisa ter prioridade sobre ENABLE_WHATSAPP mesmo que este não esteja setado como 'false'.
+    const isWhatsappEnabled =
+        process.env.ENABLE_WHATSAPP !== 'false' &&
+        process.env.DISABLE_WHATSAPP_BOOT !== 'true';
     
     logger.info('⏳ Testando conexão com o banco de dados...');
     dbPool.query('SELECT 1')
@@ -175,7 +180,10 @@ if (require.main === module) {
                     });
                     logger.info('📱 WhatsApp Session Manager inicializado');
                 } else {
-                    logger.warn('⚠️ WhatsApp desativado via ENABLE_WHATSAPP=false');
+                    const reason = process.env.DISABLE_WHATSAPP_BOOT === 'true'
+                        ? 'DISABLE_WHATSAPP_BOOT=true'
+                        : 'ENABLE_WHATSAPP=false';
+                    logger.warn(`⚠️ WhatsApp desativado via ${reason}`);
                 }
 
                 // WhatsApp Cloud API (piloto single-tenant) — só instanciado quando as
