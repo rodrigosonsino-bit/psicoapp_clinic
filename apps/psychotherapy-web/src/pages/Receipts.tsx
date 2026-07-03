@@ -7,7 +7,6 @@ import { useToast } from '../context/ToastContext';
 import { SkeletonTable } from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
 import { formatCurrency } from '../utils/formatters';
-import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Receipts() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);

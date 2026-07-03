@@ -8,7 +8,7 @@ import { logger } from '../../infrastructure/logger';
 // ── DTOs públicos ────────────────────────────────────────────────────────────
 
 export interface GroupMemberAttendance {
-    patientId: string;
+    groupMemberId: string;
     status: GroupAttendanceStatus; // 'present' | 'absent' | 'excused'
     notes?: string | null;
     /** Override de preço para este paciente nesta sessão. Null = usa o padrão do grupo. */
@@ -32,8 +32,6 @@ export interface RegisterGroupSessionResult {
     records: GroupSessionRecord[];
     /** Agendamentos criados/atualizados */
     appointmentsProcessed: number;
-    /** Registros mensais de faturamento atualizados */
-    monthlyRecordsUpdated: number;
 }
 
 // ── Helper: mês no fuso America/Sao_Paulo ────────────────────────────────────
@@ -70,8 +68,8 @@ export class RegisterGroupSessionUseCase {
         if (!attendances || attendances.length === 0) {
             throw new AppError('É necessário informar a presença de ao menos um membro.', 400);
         }
-        if (attendances.some(a => !a.patientId)) {
-            throw new AppError('Cada presença deve ter um patientId válido.', 400);
+        if (attendances.some(a => !a.groupMemberId)) {
+            throw new AppError('Cada presença deve ter um groupMemberId válido.', 400);
         }
         const validStatuses: GroupAttendanceStatus[] = ['present', 'absent', 'excused'];
         if (attendances.some(a => !validStatuses.includes(a.status))) {
@@ -105,41 +103,49 @@ export class RegisterGroupSessionUseCase {
             const durationMinutes: number = group.duration_minutes;
 
             // ── 2. Construir o TIMESTAMPTZ correto (BRT -03:00) ──────────────
-            // "2025-06-10" + "14:00" → new Date("2025-06-10T14:00:00-03:00")
-            // Garante que em servidor UTC, o horário seja preservado corretamente.
             const scheduledAt = groupSessionDatetime(sessionDate, startTimeHHMM);
 
-            // ── 3. Verificar que todos os pacientes são membros ativos do grupo ─
-            const patientIds = attendances.map(a => a.patientId);
+            // ── 3. Verificar que todos os pacientes são membros ativos do grupo e buscar políticas ─
+            const groupMemberIds = attendances.map(a => a.groupMemberId);
             const membersResult = await client.query(`
-                SELECT gm.patient_id, p.name, p.status, p.payment_type, p.default_session_price_cents
+                SELECT gm.id as group_member_id, gm.patient_id, p.name, p.status, p.payment_type, p.default_session_price_cents,
+                       bp.billing_type
                 FROM therapy_group_members gm
                 JOIN psychotherapy_patients p ON p.id = gm.patient_id
+                LEFT JOIN therapy_group_member_billing_policies bp 
+                  ON bp.member_id = gm.id 
+                 AND bp.status = 'active'
+                 AND bp.valid_from <= $4::date
+                 AND (bp.valid_until IS NULL OR bp.valid_until >= $4::date)
                 WHERE gm.group_id = $1
-                  AND gm.patient_id = ANY($2::uuid[])
+                  AND gm.id = ANY($2::uuid[])
                   AND gm.left_at IS NULL
                   AND p.tenant_id = $3;
-            `, [groupId, patientIds, tenantId]);
+            `, [groupId, groupMemberIds, tenantId, sessionDate]);
 
             const memberMap = new Map<string, {
+                patientId: string;
                 name: string;
                 status: string;
                 paymentType: string | null;
                 defaultPriceCents: number | null;
+                billingType: string | null;
             }>();
             for (const row of membersResult.rows) {
-                memberMap.set(row.patient_id, {
+                memberMap.set(row.group_member_id, {
+                    patientId: row.patient_id,
                     name: row.name,
                     status: row.status,
                     paymentType: row.payment_type,
                     defaultPriceCents: row.default_session_price_cents,
+                    billingType: row.billing_type,
                 });
             }
 
-            const nonMembers = patientIds.filter(id => !memberMap.has(id));
+            const nonMembers = groupMemberIds.filter(id => !memberMap.has(id));
             if (nonMembers.length > 0) {
                 throw new AppError(
-                    `Os seguintes pacientes não são membros ativos do grupo: ${nonMembers.join(', ')}`,
+                    `As seguintes matrículas não são ativas ou não foram encontradas: ${nonMembers.join(', ')}`,
                     400
                 );
             }
@@ -147,35 +153,44 @@ export class RegisterGroupSessionUseCase {
             // ── 4. Processar cada membro na transação ─────────────────────────
             const records: GroupSessionRecord[] = [];
             let appointmentsProcessed = 0;
-            let monthlyRecordsUpdated = 0;
+
+            const calendarEventId = await this.upsertGroupCalendarEvent(client, {
+                tenantId,
+                groupId,
+                scheduledAt,
+                durationMinutes,
+            });
 
             for (const attendance of attendances) {
-                const member = memberMap.get(attendance.patientId)!;
+                const member = memberMap.get(attendance.groupMemberId)!;
+                if (!member.billingType) {
+                    throw new AppError(`Matrícula ${attendance.groupMemberId} não possui política de faturamento na data da sessão.`, 500);
+                }
+
                 const effectivePriceCents =
                     attendance.sessionPriceCentsOverride ?? member.defaultPriceCents ?? groupPriceCents;
 
-                // 4a. Criar ou atualizar appointment individual do paciente
                 const appointmentId = await this.upsertGroupAppointment(client, {
                     tenantId,
-                    patientId: attendance.patientId,
+                    patientId: member.patientId,
                     groupId,
                     scheduledAt,
                     durationMinutes,
                     attendanceStatus: attendance.status,
                     notes: attendance.notes ?? sessionNotes ?? null,
+                    calendarEventId,
                 });
                 appointmentsProcessed++;
 
-                // 4b. Registrar presença com idempotência (ON CONFLICT DO UPDATE)
                 const recordResult = await client.query(`
                     INSERT INTO group_session_records (
                         id, tenant_id, group_id, session_date,
                         patient_id, appointment_id, attendance_status,
-                        notes, session_price_cents
+                        notes, session_price_cents, group_member_id
                     ) VALUES (
                         gen_random_uuid(), $1, $2, $3::date,
                         $4, $5, $6,
-                        $7, $8
+                        $7, $8, $9
                     )
                     ON CONFLICT ON CONSTRAINT uq_group_session_patient
                     DO UPDATE SET
@@ -183,43 +198,49 @@ export class RegisterGroupSessionUseCase {
                         appointment_id     = COALESCE(EXCLUDED.appointment_id, group_session_records.appointment_id),
                         notes              = EXCLUDED.notes,
                         session_price_cents = EXCLUDED.session_price_cents,
+                        group_member_id    = EXCLUDED.group_member_id,
                         updated_at         = NOW()
                     RETURNING *;
                 `, [
                     tenantId, groupId, sessionDate,
-                    attendance.patientId, appointmentId, attendance.status,
+                    member.patientId, appointmentId, attendance.status,
                     attendance.notes ?? sessionNotes ?? null,
                     attendance.sessionPriceCentsOverride ?? null,
+                    attendance.groupMemberId
                 ]);
 
                 const row = recordResult.rows[0];
+                const sessionRecordId = row.id;
                 records.push(new GroupSessionRecord(
-                    row.id, row.tenant_id, row.group_id,
+                    sessionRecordId, row.tenant_id, row.group_id,
                     row.session_date, row.patient_id,
                     row.appointment_id, row.attendance_status,
                     row.notes, row.session_price_cents,
-                    row.created_at, row.updated_at
+                    row.created_at, row.updated_at,
+                    row.group_member_id
                 ));
 
-                // 4c. Atualizar monthly_record de faturamento
-                // presente ou falta-não-justificada = sessão cobrada
                 const isBillable = attendance.status === 'present' || attendance.status === 'absent';
                 const hasMonthlyFee = group.monthly_fee_cents !== null && group.monthly_fee_cents > 0;
                 
-                if (!hasMonthlyFee) {
-                    await this.upsertMonthlyRecord(client, {
-                        tenantId,
-                        patientId: attendance.patientId,
-                        patientName: member.name,
-                        patientStatus: member.status,
-                        paymentType: member.paymentType,
-                        sessionDate,
-                        scheduledAt,
-                        sessionPriceCents: effectivePriceCents,
-                        isBillable,
-                        isAbsence: attendance.status === 'absent',
-                    });
-                    monthlyRecordsUpdated++;
+                // Se a política é 'group_default' E o grupo não cobra mensalidade, cobramos por sessão.
+                if (!hasMonthlyFee && member.billingType === 'group_default') {
+                    if (isBillable) {
+                        await this.upsertPendingGroupCharge(client, {
+                            tenantId,
+                            groupId,
+                            patientId: member.patientId,
+                            groupMemberId: attendance.groupMemberId,
+                            sessionRecordId,
+                            amountCents: effectivePriceCents,
+                            sessionDate,
+                        });
+                    } else if (attendance.status === 'excused') {
+                        await this.voidPendingGroupCharge(client, {
+                            tenantId,
+                            sessionRecordId,
+                        });
+                    }
                 }
             }
 
@@ -235,7 +256,6 @@ export class RegisterGroupSessionUseCase {
                 sessionDate,
                 records,
                 appointmentsProcessed,
-                monthlyRecordsUpdated,
             };
 
         } catch (error) {
@@ -249,13 +269,53 @@ export class RegisterGroupSessionUseCase {
 
     // ── Helpers privados ──────────────────────────────────────────────────────
 
-    /**
-     * Cria ou atualiza o appointment individual do paciente para esta sessão de grupo.
-     * Usa ON CONFLICT na chave (tenant_id, patient_id, scheduled_at) implícita via
-     * verificação prévia + upsert, garantindo idempotência.
-     *
-     * Retorna o UUID do appointment.
-     */
+    private async upsertGroupCalendarEvent(
+        client: PoolClient,
+        params: {
+            tenantId: string;
+            groupId: string;
+            scheduledAt: Date;
+            durationMinutes: number;
+        }
+    ): Promise<string> {
+        const endedAt = new Date(params.scheduledAt.getTime() + params.durationMinutes * 60_000);
+
+        const insertResult = await client.query(`
+            INSERT INTO calendar_events (
+                id, tenant_id, scheduled_at, ended_at, duration_minutes,
+                event_type, status, group_id
+            ) VALUES (
+                gen_random_uuid(), $1, $2, $3, $4,
+                'group', 'completed', $5
+            )
+            ON CONFLICT (tenant_id, group_id, scheduled_at)
+            WHERE event_type = 'group'
+            DO NOTHING
+            RETURNING id;
+        `, [params.tenantId, params.scheduledAt, endedAt, params.durationMinutes, params.groupId]);
+
+        if (insertResult.rows.length > 0) {
+            return insertResult.rows[0].id;
+        }
+
+        const selectResult = await client.query(`
+            SELECT id FROM calendar_events
+            WHERE tenant_id  = $1
+              AND group_id   = $2
+              AND scheduled_at = $3
+              AND event_type = 'group'
+            LIMIT 1;
+        `, [params.tenantId, params.groupId, params.scheduledAt]);
+
+        if (selectResult.rows.length === 0) {
+            throw new AppError(
+                'Falha interna: não foi possível criar nem localizar o evento de calendário da sessão.',
+                500
+            );
+        }
+        return selectResult.rows[0].id;
+    }
+
     private async upsertGroupAppointment(
         client: PoolClient,
         params: {
@@ -266,119 +326,118 @@ export class RegisterGroupSessionUseCase {
             durationMinutes: number;
             attendanceStatus: GroupAttendanceStatus;
             notes: string | null;
+            calendarEventId: string;
         }
     ): Promise<string> {
         const appointmentStatus =
             params.attendanceStatus === 'present' ? 'attended' :
             params.attendanceStatus === 'absent'  ? 'no_show' :
-            'canceled'; // excused → canceled (não gera cobrança)
+            'canceled'; 
 
-        // Verificar se já existe um appointment para este paciente neste horário (grupo)
-        const existing = await client.query(`
-            SELECT id FROM psychotherapy_appointments
-            WHERE tenant_id = $1
-              AND patient_id = $2
-              AND group_id   = $3
-              AND scheduled_at = $4
-            LIMIT 1;
-        `, [params.tenantId, params.patientId, params.groupId, params.scheduledAt]);
-
-        if (existing.rows.length > 0) {
-            // Atualizar status do existente
-            await client.query(`
-                UPDATE psychotherapy_appointments
-                SET status = $1, notes = COALESCE($2, notes), updated_at = NOW()
-                WHERE id = $3;
-            `, [appointmentStatus, params.notes, existing.rows[0].id]);
-            return existing.rows[0].id;
-        }
-
-        // Inserir novo appointment
         const result = await client.query(`
             INSERT INTO psychotherapy_appointments (
                 id, tenant_id, patient_id, group_id,
                 scheduled_at, duration_minutes,
-                status, recurrence, notes
+                status, recurrence, notes, calendar_event_id
             ) VALUES (
                 gen_random_uuid(), $1, $2, $3,
                 $4, $5,
-                $6, 'none', $7
+                $6, 'none', $7, $8
             )
+            ON CONFLICT (tenant_id, patient_id, group_id, scheduled_at)
+            WHERE group_id IS NOT NULL
+            DO UPDATE SET
+                status     = EXCLUDED.status,
+                notes      = COALESCE(EXCLUDED.notes, psychotherapy_appointments.notes),
+                updated_at = NOW()
             RETURNING id;
         `, [
             params.tenantId, params.patientId, params.groupId,
             params.scheduledAt, params.durationMinutes,
-            appointmentStatus, params.notes,
+            appointmentStatus, params.notes, params.calendarEventId,
         ]);
 
         return result.rows[0].id;
     }
 
-    /**
-     * Insere ou atualiza o registro mensal de faturamento do paciente.
-     * Reutiliza exatamente o mesmo padrão de ON CONFLICT do updateAppointmentStatus
-     * do repositório — garante consistência total com o faturamento individual.
-     */
-    private async upsertMonthlyRecord(
+    private async upsertPendingGroupCharge(
         client: PoolClient,
         params: {
             tenantId: string;
+            groupId: string;
             patientId: string;
-            patientName: string;
-            patientStatus: string;
-            paymentType: string | null;
+            groupMemberId: string;
+            sessionRecordId: string;
+            amountCents: number;
             sessionDate: string;
-            scheduledAt: Date;
-            sessionPriceCents: number;
-            isBillable: boolean;
-            isAbsence: boolean;
         }
     ): Promise<void> {
-        const monthStr = toMonthStrBRT(params.scheduledAt);
+        const existing = await client.query(`
+            SELECT id, status FROM group_payments
+            WHERE tenant_id = $1 AND group_session_record_id = $2
+            LIMIT 1;
+        `, [params.tenantId, params.sessionRecordId]);
 
-        // Para pacientes mensais, não incrementamos expected_sessions (já está fixo no gerador do mês)
-        const deltaExpected = params.paymentType === 'monthly' ? 0 : (params.isBillable ? 1 : 0);
-        const deltaAbsences = params.isAbsence ? 1 : 0;
-
-        // Só dispara se houver impacto real no faturamento
-        if (deltaExpected === 0 && deltaAbsences === 0 && !params.isBillable) return;
-
-        const initExpected = params.paymentType === 'monthly' ? 0 : (params.isBillable ? 1 : 0);
-        const initAbsences = params.isAbsence ? 1 : 0;
+        if (existing.rows.length > 0) {
+            const row = existing.rows[0];
+            if (row.status === 'paid') {
+                throw new AppError(`A sessão da matrícula já foi paga e não pode ser re-criada automaticamente. Use estorno manual.`, 409);
+            }
+            if (row.status === 'voided') {
+                // não faz nada
+            } else {
+                await client.query(`
+                    UPDATE group_payments
+                    SET amount_cents = $1, updated_at = NOW()
+                    WHERE id = $2 AND status = 'pending';
+                `, [params.amountCents, row.id]);
+                return;
+            }
+        }
 
         await client.query(`
-            INSERT INTO psychotherapy_monthly_records (
-                id, tenant_id, patient_id, month,
-                patient_name_snapshot, status, payment_type,
-                session_price_cents, expected_sessions, absences,
-                paid_sessions, payment_status, previous_month_paid_cents
+            INSERT INTO group_payments (
+                id, tenant_id, group_id, patient_id, group_member_id,
+                charge_type, reference_month, amount_cents, original_amount_cents,
+                status, due_date, group_session_record_id
             ) VALUES (
-                gen_random_uuid(), $1, $2, $3,
-                $4, $5, $6,
-                $7, $8, $9,
-                0, 'pending', 0
+                gen_random_uuid(), $1, $2, $3, $4,
+                'session', $5, $6, $6,
+                'pending', $7::date, $8
             )
-            ON CONFLICT (tenant_id, month, patient_id)
-            WHERE patient_id IS NOT NULL
-            DO UPDATE SET
-                expected_sessions = GREATEST(
-                    psychotherapy_monthly_records.expected_sessions + $10, 0),
-                absences = GREATEST(
-                    psychotherapy_monthly_records.absences + $11, 0),
-                payment_status = CASE
-                    WHEN psychotherapy_monthly_records.paid_sessions >= GREATEST(
-                        psychotherapy_monthly_records.expected_sessions + $10
-                        - GREATEST(psychotherapy_monthly_records.absences + $11, 0), 0)
-                    THEN 'paid'
-                    WHEN psychotherapy_monthly_records.paid_sessions > 0 THEN 'partial'
-                    ELSE 'pending'
-                END,
-                updated_at = NOW();
         `, [
-            params.tenantId, params.patientId, monthStr,
-            params.patientName, params.patientStatus, params.paymentType,
-            params.sessionPriceCents, initExpected, initAbsences,
-            deltaExpected, deltaAbsences,
+            params.tenantId, params.groupId, params.patientId, params.groupMemberId,
+            params.sessionDate.slice(0, 7), 
+            params.amountCents,
+            params.sessionDate, 
+            params.sessionRecordId
         ]);
+    }
+
+    private async voidPendingGroupCharge(
+        client: PoolClient,
+        params: {
+            tenantId: string;
+            sessionRecordId: string;
+        }
+    ): Promise<void> {
+        const existing = await client.query(`
+            SELECT id, status FROM group_payments
+            WHERE tenant_id = $1 AND group_session_record_id = $2
+            LIMIT 1;
+        `, [params.tenantId, params.sessionRecordId]);
+
+        if (existing.rows.length > 0) {
+            const row = existing.rows[0];
+            if (row.status === 'paid') {
+                throw new AppError(`A sessão justificada já possui pagamento registrado. É necessário estorná-lo manualmente.`, 409);
+            }
+            
+            await client.query(`
+                UPDATE group_payments
+                SET status = 'voided', voided_at = NOW(), void_reason = 'Falta justificada na sessão', updated_at = NOW()
+                WHERE id = $1;
+            `, [row.id]);
+        }
     }
 }

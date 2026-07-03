@@ -63,6 +63,47 @@ const analyticsQuerySchema = z.object({
 });
 
 // Body Validation schemas
+const changePatientModalitySchema = z.object({
+    individualTherapyEnabled: z.boolean(),
+    status: z.enum(['weekly', 'biweekly', 'one_off', 'inactive']).optional()
+});
+
+const groupIdParamSchema = z.object({
+    groupId: z.string().uuid('groupId inválido')
+});
+
+const groupMemberParamSchema = z.object({
+    groupId: z.string().uuid('groupId inválido'),
+    patientId: z.string().uuid('patientId inválido')
+});
+
+const generateGroupChargesSchema = z.object({
+    referenceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Formato YYYY-MM'),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'),
+});
+
+const confirmGroupPaymentSchema = z.object({
+    paymentMethod: z.enum(['pix', 'cash', 'debit_card', 'credit_card']),
+    amountPaidCents: z.number().int().positive().optional(),
+});
+
+const voidGroupPaymentSchema = z.object({
+    reason: z.string().min(1, 'Razão é obrigatória')
+});
+
+const replaceGroupChargeSchema = z.object({
+    amountCents: z.number().int().positive('O valor deve ser maior que zero'),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'),
+});
+
+const addGroupMemberIdempotentSchema = z.object({
+    requestId: z.string().uuid('requestId deve ser um UUID válido'),
+    name: z.string().min(1, 'Nome é obrigatório'),
+    phone: z.string().optional(),
+    document: z.string().optional(),
+    email: z.string().email('Email inválido').optional().or(z.literal('')),
+});
+
 const patientSchema = z.object({
     id: z.string().uuid().optional(),
     name: z.string().min(1, 'Nome do paciente é obrigatório'),
@@ -195,6 +236,7 @@ export function createPsychotherapyRoutes(): Router {
     // Patients & Months
     router.get('/psychotherapy/patients', validateQuery(listPatientsQuerySchema), asyncHandler((req, res) => controller.listPatients(req, res)));
     router.post('/psychotherapy/patients', validateBody(patientSchema), asyncHandler((req, res) => controller.savePatient(req, res)));
+    router.patch('/psychotherapy/patients/:id/individual-modality', validateParams(uuidParamSchema), validateBody(changePatientModalitySchema), asyncHandler((req, res) => controller.changeModality(req, res)));
     router.delete('/psychotherapy/patients/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => controller.deletePatient(req, res)));
     router.get('/psychotherapy/months/:month', validateParams(monthParamSchema), asyncHandler((req, res) => controller.getMonth(req, res)));
     router.post('/psychotherapy/months/:month/generate', validateParams(monthParamSchema), asyncHandler((req, res) => controller.generateMonth(req, res)));
@@ -204,7 +246,19 @@ export function createPsychotherapyRoutes(): Router {
     router.get('/profile', asyncHandler((req, res) => profileController.getProfile(req, res)));
     router.put('/profile', validateBody(updateProfileSchema), asyncHandler((req, res) => profileController.updateProfile(req, res)));
 
-    // Receipts
+    // Payments (Financial Lifecycle)
+    router.post('/psychotherapy/groups/:groupId/charges', validateParams(groupIdParamSchema), validateBody(generateGroupChargesSchema), asyncHandler((req, res) => groupController.generateCharges(req, res)));
+    router.post('/psychotherapy/group-payments/:id/confirm', validateParams(uuidParamSchema), validateBody(confirmGroupPaymentSchema), asyncHandler((req, res) => groupController.confirmPayment(req, res)));
+    router.post('/psychotherapy/group-payments/:id/void', validateParams(uuidParamSchema), validateBody(voidGroupPaymentSchema), asyncHandler((req, res) => groupController.voidPayment(req, res)));
+    router.post('/psychotherapy/group-payments/:id/replace', validateParams(uuidParamSchema), validateBody(replaceGroupChargeSchema), asyncHandler((req, res) => groupController.replaceCharge(req, res)));
+
+    // Group Members
+    router.get('/psychotherapy/groups/:groupId/members', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.listGroupMembers(req, res)));
+    router.post('/psychotherapy/groups/:groupId/members', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.addGroupMember(req, res)));
+    router.post('/psychotherapy/groups/:groupId/members-new', validateParams(groupIdParamSchema), validateBody(addGroupMemberIdempotentSchema), asyncHandler((req, res) => groupController.addGroupMemberIdempotent(req, res)));
+    router.delete('/psychotherapy/groups/:groupId/members/:patientId', validateParams(groupMemberParamSchema), asyncHandler((req, res) => groupController.removeGroupMember(req, res)));
+
+    // Reports
     router.post('/psychotherapy/receipts', validateBody(issueReceiptSchema), asyncHandler((req, res) => receiptController.issueReceipt(req, res)));
     router.get('/psychotherapy/receipts', validateQuery(listReceiptsQuerySchema), asyncHandler((req, res) => receiptController.listReceipts(req, res)));
     router.post('/psychotherapy/receipts/:id/cancel', validateParams(uuidParamSchema), asyncHandler((req, res) => receiptController.cancelReceipt(req, res)));
@@ -412,19 +466,30 @@ export function createPsychotherapyRoutes(): Router {
     const { GroupController } = require('../controllers/GroupController');
     const groupController: InstanceType<typeof GroupController> = container.resolve(GroupController);
 
-    const groupIdParamSchema = z.object({
-        groupId: z.string().uuid('groupId inválido (esperado UUID)')
-    });
+
 
     const groupSessionSchema = z.object({
         sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'sessionDate deve estar no formato YYYY-MM-DD'),
         sessionNotes: z.string().nullable().optional(),
         attendances: z.array(z.object({
-            patientId: z.string().uuid('patientId inválido'),
+            groupMemberId: z.string().uuid('groupMemberId inválido'),
             status: z.enum(['present', 'absent', 'excused']),
             notes: z.string().nullable().optional(),
             sessionPriceCentsOverride: z.number().int().nonnegative().nullable().optional(),
         })).min(1, 'Informe a presença de ao menos um membro'),
+    });
+
+    const createUpfrontChargeSchema = z.object({
+        groupMemberId: z.string().uuid('groupMemberId inválido'),
+        overrideTotalCents: z.number().int().positive().optional()
+    });
+
+    const refundPolicySchema = z.object({
+        reason: z.string().min(1)
+    });
+
+    const cancelPolicySchema = z.object({
+        reason: z.string().min(1)
     });
 
     const listGroupSessionsQuerySchema = z.object({
@@ -439,10 +504,7 @@ export function createPsychotherapyRoutes(): Router {
         patientId: z.string().uuid('patientId inválido (esperado UUID)'),
     });
 
-    const groupMemberParamSchema = z.object({
-        groupId: z.string().uuid('groupId inválido (esperado UUID)'),
-        patientId: z.string().uuid('patientId inválido (esperado UUID)'),
-    });
+
 
     const listGroupsQuerySchema = z.object({
         includeInactive: z.enum(['true', 'false']).optional(),
@@ -463,34 +525,6 @@ export function createPsychotherapyRoutes(): Router {
         is_active:          z.boolean().optional(),
     });
 
-    const registerGroupPaymentSchema = z.object({
-        patient_id:         z.string().uuid('patient_id inválido'),
-        reference_month:    z.string().regex(/^\d{4}-\d{2}$/, 'Formato YYYY-MM'),
-        amount_cents:       z.number().int().positive('Valor inválido'),
-        payment_method:     z.enum(['pix', 'cash', 'debit_card', 'credit_card']),
-        total_installments: z.number().int().min(1).optional().default(1),
-        installment_number: z.number().int().min(1).optional().default(1),
-        notes:              z.string().nullable().optional(),
-    });
-
-    const deletePaymentParamSchema = z.object({
-        groupId:   z.string().uuid(),
-        paymentId: z.string().uuid(),
-    });
-
-    const updateGroupPaymentSchema = z.object({
-        amount_cents:   z.number().int().positive('Valor inválido'),
-        payment_method: z.enum(['pix', 'cash', 'debit_card', 'credit_card']),
-        notes:          z.string().nullable().optional(),
-    });
-
-    const deletePaymentQuerySchema = z.object({
-        mode: z.enum(['single', 'all']).optional().default('single'),
-    });
-
-    const listGroupPaymentsQuerySchema = z.object({
-        month: z.string().regex(/^\d{4}-\d{2}$/, 'Formato de mês inválido (esperado YYYY-MM)').optional(),
-    });
 
     // Listar grupos do paciente
     router.get('/psychotherapy/patients/:patientId/groups',
@@ -525,6 +559,27 @@ export function createPsychotherapyRoutes(): Router {
         validateBody(groupSessionSchema),
         asyncHandler((req, res) => groupController.registerGroupSession(req, res)));
 
+    // Criar cobrança de curso à vista
+    router.post('/psychotherapy/groups/:groupId/upfront-charge',
+        validateParams(groupIdParamSchema),
+        validateBody(createUpfrontChargeSchema),
+        asyncHandler((req, res) => groupController.createUpfrontCharge(req, res)));
+
+    // Reembolsar curso à vista
+    router.post('/psychotherapy/group-payments/:id/refund-upfront',
+        validateBody(refundPolicySchema),
+        asyncHandler((req, res) => groupController.refundUpfrontCharge(req, res)));
+
+    // Cancelar política
+    router.post('/psychotherapy/billing-policies/:id/cancel',
+        validateBody(cancelPolicySchema),
+        asyncHandler((req, res) => groupController.cancelBillingPolicy(req, res)));
+
+    // Buscar pagamentos upfront elegíveis
+    router.get('/psychotherapy/groups/:groupId/eligible-upfront-payments',
+        validateParams(groupIdParamSchema),
+        asyncHandler((req, res) => groupController.listEligibleUpfrontPayments(req, res)));
+
     // Histórico de sessões de um grupo
     router.get('/psychotherapy/groups/:groupId/sessions',
         validateParams(groupIdParamSchema),
@@ -546,30 +601,6 @@ export function createPsychotherapyRoutes(): Router {
     router.delete('/psychotherapy/groups/:groupId',
         validateParams(groupIdParamSchema),
         asyncHandler((req, res) => groupController.deleteGroup(req, res)));
-
-    // Listar pagamentos de grupo
-    router.get('/psychotherapy/groups/:groupId/payments',
-        validateParams(groupIdParamSchema),
-        validateQuery(listGroupPaymentsQuerySchema),
-        asyncHandler((req, res) => groupController.listGroupPayments(req, res)));
-
-    // Registrar pagamento de grupo
-    router.post('/psychotherapy/groups/:groupId/payments',
-        validateParams(groupIdParamSchema),
-        validateBody(registerGroupPaymentSchema),
-        asyncHandler((req, res) => groupController.registerPayment(req, res)));
-
-    // Editar pagamento de grupo (valor, método, notas)
-    router.put('/psychotherapy/groups/:groupId/payments/:paymentId',
-        validateParams(deletePaymentParamSchema),
-        validateBody(updateGroupPaymentSchema),
-        asyncHandler((req, res) => groupController.updatePayment(req, res)));
-
-    // Estornar pagamento de grupo
-    router.delete('/psychotherapy/groups/:groupId/payments/:paymentId',
-        validateParams(deletePaymentParamSchema),
-        validateQuery(deletePaymentQuerySchema),
-        asyncHandler((req, res) => groupController.deletePayment(req, res)));
 
     // ── Lembretes automáticos ─────────────────────────────────────────────────
     // Trigger manual para teste / diagnóstico

@@ -1,0 +1,1000 @@
+﻿[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Presbíteros/Diáconos/Líderes_MFV" | ID p/ Agendar: 120363218858375707@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Zóio na Fé🙌🏻🙏🏻" | ID p/ Agendar: 120363423484495203@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Skycenter Mission 🎧📍🌏" | ID p/ Agendar: 120363039217395354@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ADOLECRENTES_MFV" | ID p/ Agendar: 120363303012279750@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Ministério Infantil" | ID p/ Agendar: 5518991275061-1431959752@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Tour dos véios O Retorno🚴‍♂️🚴‍♂️" | ID p/ Agendar: 120363197693635825@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_05" | ID p/ Agendar: 120363238856439685@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "*ACÃO BENEFICIÁRIA 🙏🏻🥰" | ID p/ Agendar: 120363418833451353@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SEEKERS MFV" | ID p/ Agendar: 120363293659951633@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "COPEP" | ID p/ Agendar: 5518996004225-1582296494@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_01" | ID p/ Agendar: 120363239140883624@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "." | ID p/ Agendar: 120363272703254737@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG Jovens Adultos MFV" | ID p/ Agendar: 120363399592436206@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Tour dos velhos🚴🚴🚴🏿🚴🏽🌪💨💨" | ID p/ Agendar: 5518998176623-1433261670@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Moradores de Vila Fátima 70, 80 e 90" | ID p/ Agendar: 120363363215907967@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Curso - Ministério pela Graça (Português)" | ID p/ Agendar: 120363150714561734@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_07 (Seekers)" | ID p/ Agendar: 120363293297409557@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "CONEXÃO JOVEM" | ID p/ Agendar: 5518991136733-1506199344@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Hotel coroados Business Partner/Coroados" | ID p/ Agendar: 120363301733058915@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Instruções para Amanhã #156" | ID p/ Agendar: 120363324195928006@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "DIÁLOGO TEOLÓGICO #01" | ID p/ Agendar: 120363346702925785@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Missões na Europa SP Past" | ID p/ Agendar: 12013758386-1571405677@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "EBD_PRESENCIAL" | ID p/ Agendar: 120363319104220971@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PANGARÉ 2026" | ID p/ Agendar: 120363039997914022@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Reunião COPEP" | ID p/ Agendar: 120363285645154309@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PANGARÉ RESENHA" | ID p/ Agendar: 5518991231545-1570737444@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "FACILITADORES_PGs" | ID p/ Agendar: 120363238586170894@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Palestra Hábitos Saudáveis e Suplementação " | ID p/ Agendar: 120363197315693155@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🔴 ENCERRADO" | ID p/ Agendar: 120363398242148821@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Neuroplasticidade #42" | ID p/ Agendar: 120363420433531643@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MITOLOGIA BRASILEIRA Escada da Vida" | ID p/ Agendar: 120363296144034734@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Psicanálise na Educação #7" | ID p/ Agendar: 120363313311805561@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "[NOVO EU - 8 Virtudes Fundamentais] Transtorno por Uso de Substâncias" | ID p/ Agendar: 120363422846366101@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Inf outros curso" | ID p/ Agendar: 120363409137578167@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "EBD_Online" | ID p/ Agendar: 120363219805748975@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Estudo Bíblico: Pentateuco" | ID p/ Agendar: 120363220249610248@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JESUSCOPY #233" | ID p/ Agendar: 120363172852723981@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Winnicot e suas obras " | ID p/ Agendar: 120363375181643681@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Estudo Bíblico: Evangelhos 👑" | ID p/ Agendar: 120363206347413980@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Programa 2R" | ID p/ Agendar: 120363425527250219@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Psicanálise / Neuropsicoterapia  /  e Saúde Mental" | ID p/ Agendar: 120363404820682514@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JESUSCOPY #192" | ID p/ Agendar: 120363280775599153@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Geral" | ID p/ Agendar: 120363408884084822@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#10 Oferta especial | Neurociências na Prática clínica" | ID p/ Agendar: 120363421376263287@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JESUSCOPY #210" | ID p/ Agendar: 120363324121840559@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🙏🏻🙏🏻 JANDER (VEJA DESCRIÇÃO/Msg Fixada)" | ID p/ Agendar: 120363425088982937@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ORIGEM DOS SONHOS" | ID p/ Agendar: 120363197329724739@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "⚡CLUBE DA PERMISSÃO #140" | ID p/ Agendar: 120363317514638665@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Alquimia das Virtudes | Hub" | ID p/ Agendar: 120363427916854898@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ESTÁGIO - Formação em Virtologia (turma de segunda-feira, ago/25)" | ID p/ Agendar: 120363406651174223@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PSICOPATOLOGIA - bem vindos ao puro suco do caos" | ID p/ Agendar: 120363421462244389@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo Descomplicando a Terapia com “Aulões”  ✨🧠" | ID p/ Agendar: 120363424460120433@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MEMBROS_MFV " | ID p/ Agendar: 120363216015278662@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "RODAS DE CONVERSAS" | ID p/ Agendar: 120363347203458956@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "B. dos Casados #11" | ID p/ Agendar: 120363114844114394@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Mentoria Marilia Fontes #18" | ID p/ Agendar: 120363369236664538@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "O Mundo Perdido dos Profetas" | ID p/ Agendar: 120363419174834379@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MFV" | ID p/ Agendar: 5518981420344-1619099320@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "INF. NEUROPSICANÁLISE CLÍNICA" | ID p/ Agendar: 120363314575093205@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MENTES  PSICANÁLITICAS" | ID p/ Agendar: 120363030041213363@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#1 ⚠️ ÚLTIMO DIA" | ID p/ Agendar: 120363165678991890@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "COMUNIDADE_MFV" | ID p/ Agendar: 120363234198999922@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Formação em Neurociência Afetiva" | ID p/ Agendar: 120363402418030423@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#3 Masterclass Idolatria Familiar" | ID p/ Agendar: 120363283380100023@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Conteúdo & Avisos - Casa de Discípulos #025" | ID p/ Agendar: 120363276769045220@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🌻 GRUPO DE ESTUDOS DO TRAUMA 🌻" | ID p/ Agendar: 120363411522185680@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "4. Família ESPE - Psicanálise com Crianças e Adolescentes" | ID p/ Agendar: 120363170512917532@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo Estudo Virtologia | TODAS AS TURMAS" | ID p/ Agendar: 120363401480200785@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Formação em Psicanálise - Info" | ID p/ Agendar: 120363151584547441@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🔵 GRUPO DE AVISOS @guaracaixa #4" | ID p/ Agendar: 120363373174680706@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PERGUNTAS" | ID p/ Agendar: 120363419607175886@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "CONVERSA" | ID p/ Agendar: 120363417524817933@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Winnicott " O Brincar e a Realidade"" | ID p/ Agendar: 120363191676854006@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🇵🇹 AME Portugal 1" | ID p/ Agendar: 12013758386-1522758232@g.us[39m
+[2026-06-28 14:47:44.358 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "NOVIDADES" | ID p/ Agendar: 120363418120112458@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SOCIEDADE PSICANALÍTICA" | ID p/ Agendar: 120363373327503849@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Formação em Virtologia - agosto 2025 (turma de segunda-feira)" | ID p/ Agendar: 120363420251519559@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MATERIAIS" | ID p/ Agendar: 120363399707626469@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "3. Comunidade ESPEcast" | ID p/ Agendar: 120363050959029422@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Semana da Clínica Contemporânea #27" | ID p/ Agendar: 120363311548391969@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SAYONICOS" | ID p/ Agendar: 120363402344281285@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Clientes House Mix " | ID p/ Agendar: 120363137883856274@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "3. Família ESPE - Psicanálise: Teoria e Clínica" | ID p/ Agendar: 120363059769585649@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "1️⃣ Info Produtos p/ Igrejas - promoções e lançamentos" | ID p/ Agendar: 120363156247169206@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "13. Família ESPE - Psicanálise: Teoria e Clínica" | ID p/ Agendar: 120363164213722900@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Promoções Gramado @chapeudeviagem #12" | ID p/ Agendar: 120363420153805337@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "1. Família ESPE - Psicanálise com Crianças e Adolescentes" | ID p/ Agendar: 120363149744790816@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "6. Família ESPE - Psicanálise com Crianças e Adolescentes" | ID p/ Agendar: 120363161104416039@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🇵🇹 AME Portugal" | ID p/ Agendar: 120363189229725988@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Comunidade Thrive - Lista de Espera 03" | ID p/ Agendar: 120363424800827575@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Supervisão - Instituto Virtudes" | ID p/ Agendar: 120363027227516212@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ANÚNCIO JARDIM DO LAGO" | ID p/ Agendar: 120363040155459450@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ROTEIROS @matheustiburtino ✈️ #15" | ID p/ Agendar: 120363426983035272@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🧠 Desvendando a Neuroplasticidade na Terapia -4" | ID p/ Agendar: 120363296637595920@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "𝕻𝖗𝖆𝖙𝖎𝖈𝖆𝖓𝖉𝖔 𝕿𝖊𝖔𝖑𝖔𝖌𝖎𝖆 ✍️📚" | ID p/ Agendar: 120363355579390455@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "@RoteiroGramado NEWS #9" | ID p/ Agendar: 120363298406042251@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Cursos e Leituras em Psicanálise" | ID p/ Agendar: 120363163757759556@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#17 Amigos Tassos Lycurgo" | ID p/ Agendar: 120363404947552551@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JARDIM DO LAGO" | ID p/ Agendar: 5518991176254-1621265011@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "[grupo 4] Ciência & Religião - Academia ABC²" | ID p/ Agendar: 120363374442721496@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo 2 – P. Lander ®️" | ID p/ Agendar: 120363041352787770@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Psicologia, Psicanálise, Saúde Mental e companhia" | ID p/ Agendar: 120363371892796077@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Troca de PDFs de Psicanálise" | ID p/ Agendar: 120363148749756123@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Semana da Psicopatologia 2026 #26" | ID p/ Agendar: 120363406490946280@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Teteh Mayeda & Cia" | ID p/ Agendar: 120363340001738318@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "AME Europa Ocidental" | ID p/ Agendar: 120363199629083015@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "AME Missões na Europa" | ID p/ Agendar: 120363200566317725@g.us[39m
+[2026-06-28 14:47:44.359 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Comunidade Base Cursos" | ID p/ Agendar: 120363253987101967@g.us[39m
+[2026-06-28 14:47:47.768 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 14:47:47.768 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 299).[39m
+[2026-06-28 14:48:01.905 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 34518685716608@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 14:48:13.017 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 150418646683730@lid. Desativando IA para este contato (cooldown 15 min).[39m
+Closing open session in favor of incoming prekey bundle
+Closing session: SessionEntry {
+  _chains: {
+    'BS7kfVRZG5z8f6942g9GToItC6/MyR67xOMp9YlrnBlj': { chainKey: [Object], chainType: 2, messageKeys: {} },
+    Bffe6ryjF1Ps0yV3bQkCIFlQDEwPN4DCGtJ84I7I8XYR: { chainKey: [Object], chainType: 1, messageKeys: {} }
+  },
+  registrationId: 1768606191,
+  currentRatchet: {
+    ephemeralKeyPair: {
+      pubKey: <Buffer 05 f7 de ea bc a3 17 53 ec d3 25 77 6d 09 02 20 59 50 0c 4c 0f 37 80 c2 1a d2 7c e0 8e c8 f1 76 11>,
+      privKey: <Buffer 28 1b 34 4a cb 71 3f 7b 00 21 df 18 5d b4 b0 2d ac a9 b8 a6 91 09 6f 12 68 16 95 9e 21 ba b5 54>
+    },
+    lastRemoteEphemeralKey: <Buffer 05 2e e4 7d 54 59 1b 9c fc 7f af 78 da 0f 46 4e 82 2d 0b af cc c9 1e bb c4 e3 29 f5 89 6b 9c 19 63>,
+    previousCounter: 0,
+    rootKey: <Buffer 48 e0 fe 11 f9 18 c1 a3 36 c6 4b 76 05 05 7c 99 1f 78 cd 0c 95 cf cb 08 1c 0e ce ab fe c1 0f 43>
+  },
+  indexInfo: {
+    baseKey: <Buffer 05 24 8f a2 3b ba 0b e5 7c c5 55 38 af 54 93 61 6b dc 89 37 2a b7 e4 f2 8c 92 ad 24 23 d4 71 fe 02>,
+    baseKeyType: 2,
+    closed: -1,
+    used: 1782657995752,
+    created: 1782657995752,
+    remoteIdentityKey: <Buffer 05 6f 5a e3 60 56 37 ca cf 81 47 3c 5e f1 65 0e f4 46 7e 2c 4b d8 90 ae dc 94 ec b6 43 1c dd 9a 61>
+  }
+}
+[2026-06-28 14:48:14.276 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 34518685716608@lid | Tipo: Texto[39m
+[2026-06-28 14:48:14.277 +0000] [32mINFO[39m (1): [36m⏭️ Ignorando auto-resposta para Desconhecido (34518685716608@lid) — cooldown ativo (15 min restantes).[39m
+[2026-06-28 14:48:30.595 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 34518685716608@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 14:48:38.713 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 150418646683730@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 14:50:00.017 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 14:50:00.017 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 14:50:00.018 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 14:50:00.183 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 14:50:00.186 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 14:50:00.294 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 14:50:42.155 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Áudio[39m
+[2026-06-28 14:51:39.481 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:52:47.775 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 14:52:47.775 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 300).[39m
+[2026-06-28 14:52:55.027 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:53:15.253 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Armando Neto] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:54:04.809 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:54:09.105 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:54:13.744 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:54:58.781 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:55:00.018 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 14:55:00.018 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 14:55:00.018 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 14:55:00.023 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 14:55:00.164 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 14:55:00.266 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 14:55:18.975 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:56:22.400 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Áudio[39m
+[2026-06-28 14:56:45.999 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Flavio 🧠] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 14:57:47.798 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 14:57:47.798 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 301).[39m
+[2026-06-28 14:58:20.316 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Áudio[39m
+[2026-06-28 14:58:59.216 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Maria C Gomes] | ID para Agendamento: 120363148749756123@g.us | Tipo: Imagem/Comprovante[39m
+[2026-06-28 14:59:15.677 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363169319669622@newsletter | Tipo: Texto[39m
+[2026-06-28 14:59:15.679 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363169319669622@newsletter) com timer de 2.5s.[39m
+[2026-06-28 14:59:18.180 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363169319669622@newsletter). Processando mensagens acumuladas:
+The extreme heat that gripped Western Europe over the past week was easing on Sunday. But in Central and Eastern Europe, countries like Poland and the Czech Republic braced for more dangerous days to come. https://trib.al/cH6M8FR[39m
+[2026-06-28 15:00:00.034 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:00:00.034 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:00:00.035 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:00:00.346 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:00:00.361 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:00:00.458 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:02:47.829 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:02:47.829 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 302).[39m
+[2026-06-28 15:03:53.560 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Armando Neto] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:03:54.281 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Áudio[39m
+[2026-06-28 15:03:55.442 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363380007795805@newsletter | Tipo: Texto[39m
+[2026-06-28 15:03:55.444 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363380007795805@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:03:57.946 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363380007795805@newsletter). Processando mensagens acumuladas:
+https://youtu.be/GJ9C351vszI?is=8_H6oz9OYL740z17[39m
+[2026-06-28 15:04:00.016 +0000] [32mINFO[39m (1): [36m♻️ [Cleanup] 2 bloqueio(s) de AI expirado(s) reabilitado(s) automaticamente.[39m
+[2026-06-28 15:05:00.013 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:05:00.013 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:05:00.013 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:05:00.016 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:05:00.129 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:05:00.232 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:05:49.608 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363172867223601@newsletter | Tipo: Texto[39m
+[2026-06-28 15:05:49.632 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363172867223601@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:05:52.132 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363172867223601@newsletter). Processando mensagens acumuladas:
+🇺🇸 Texas avança para tornar obrigatório estudo da Bíblia nas escolas
+
+*Leia mais:* https://cnnbr.app/short/c4112819412/
+
+*Pense bem, pense CNN*[39m
+[2026-06-28 15:06:20.398 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 98019961753639@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 15:06:33.438 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Áudio[39m
+[2026-06-28 15:07:47.841 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+        "ok": false,
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+        "error_code": 401,
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+        "description": "Unauthorized"
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+      },
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:07:47.841 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 303).[39m
+[2026-06-28 15:08:08.884 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Suporte Roteirogramado] | ID para Agendamento: 120363298406042251@g.us | Tipo: Texto[39m
+[2026-06-28 15:08:30.290 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Adm RG] | ID para Agendamento: 120363298406042251@g.us | Tipo: Texto[39m
+[2026-06-28 15:08:50.691 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Sublime Art Martha] | ID para Agendamento: 120363298406042251@g.us | Tipo: Texto[39m
+[2026-06-28 15:09:27.908 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Erika Crisóstomo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:10:00.020 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:10:00.020 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:10:00.021 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:10:00.173 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:10:00.199 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:10:00.299 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:10:19.290 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363169319669622@newsletter | Tipo: Texto[39m
+[2026-06-28 15:10:19.293 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363169319669622@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:10:21.793 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363169319669622@newsletter). Processando mensagens acumuladas:
+More than three days after earthquakes devastated the Venezuelan coast, the rescue effort faced chaos and delays as the region continues to be rattled by aftershocks and the chances of finding survivors diminishes. Follow live updates. https://trib.al/qsdU4Wf[39m
+[2026-06-28 15:10:54.630 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Flavio 🧠] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:11:09.082 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 15788417241149@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 15:12:47.847 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:12:47.847 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 304).[39m
+[2026-06-28 15:13:01.425 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363169319669622@newsletter | Tipo: Texto[39m
+[2026-06-28 15:13:01.428 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363169319669622@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:13:03.929 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363169319669622@newsletter). Processando mensagens acumuladas:
+Eleven people were killed when a skydiving plane crashed soon after takeoff from an airport in northeastern France on Sunday, the local authorities said. https://trib.al/6s1wtWn[39m
+[2026-06-28 15:15:00.028 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:15:00.028 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:15:00.029 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:15:00.255 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:15:00.257 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:15:00.353 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:15:21.469 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Mi Sgrancio 😉] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:16:49.675 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Cristina Duarte Psicanalista] | ID para Agendamento: 120363148749756123@g.us | Tipo: Documento/Comprovante[39m
+[2026-06-28 15:16:51.982 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Cristina Duarte Psicanalista] | ID para Agendamento: 120363148749756123@g.us | Tipo: Texto[39m
+Saving message with metadata: { recurrence: 'Única', imageUrl: undefined }
+Saved message has metadata: { recurrence: 'Única' }
+[2026-06-28 15:17:24.273 +0000] [32mINFO[39m (1): [36mIniciando processamento do Job[39m
+    [35mjobId[39m: "msg-ab6fad8b-bfe8-4c46-bac6-41fd20cdf730"
+    [35mmessageId[39m: "ab6fad8b-bfe8-4c46-bac6-41fd20cdf730"
+    [35mtentativa[39m: 1
+[2026-06-28 15:17:30.284 +0000] [32mINFO[39m (1): [36mJID resolvido com sucesso via onWhatsApp[39m
+    [35moriginal[39m: "+5518991498750"
+    [35mresolved[39m: "5518991498750@s.whatsapp.net"
+[2026-06-28 15:17:30.474 +0000] [32mINFO[39m (1): [36mSUCESSO na entrega[39m
+    [35mmessageId[39m: "ab6fad8b-bfe8-4c46-bac6-41fd20cdf730"
+    [35mrecipientJid[39m: "+5518991498750"
+    [35mplatform[39m: "whatsapp"
+[2026-06-28 15:17:38.096 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 5518991498750@s.whatsapp.net. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 15:17:39.006 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Maria C Gomes] | ID para Agendamento: 120363148749756123@g.us | Tipo: Texto[39m
+        "ok": false,
+[2026-06-28 15:17:49.399 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+        "error_code": 401,
+    err: {
+        "description": "Unauthorized"
+      "type": "TelegramError",
+      },
+      "message": "401: Unauthorized",
+      "on": {
+      "stack":
+        "method": "getMe",
+          Error: 401: Unauthorized
+        "payload": {}
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+      }
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    }
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+[2026-06-28 15:17:49.399 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 305).[39m
+      "response": {
+[2026-06-28 15:18:10.939 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 15:18:10.941 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Marcela (150418646683730@lid) com timer de 2.5s.[39m
+[2026-06-28 15:18:13.441 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Marcela (150418646683730@lid). Processando mensagens acumuladas:
+Boa tarde! O João topou! 🥰[39m
+[2026-06-28 15:18:17.879 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 219429996626125@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 15:20:05.143 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 15:20:05.145 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Marcela (150418646683730@lid) com timer de 2.5s.[39m
+[2026-06-28 15:20:00.020 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:20:07.648 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Marcela (150418646683730@lid). Processando mensagens acumuladas:
+[2026-06-28 15:20:00.020 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+Será que o hotel posso pagar dia 1? E a passagem vc vai olhar? O João teve uma ideia da gente ir de carro até Campinas guardar o carro lá pois ele tem família e pegarmos o fretado para o aeroporto. Uma ideia. Mas vamos sentar e pensar em tudo certinho. Daí vamos no mesmo voo. Se e o valor estiver bom também kkk.[39m
+[2026-06-28 15:20:00.020 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:20:00.196 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:20:00.196 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:20:00.300 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:21:50.875 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 150418646683730@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 15:22:00.100 +0000] [32mINFO[39m (1): [36m♻️ [Cleanup] 1 bloqueio(s) de AI expirado(s) reabilitado(s) automaticamente.[39m
+[2026-06-28 15:22:49.415 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:22:49.416 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 306).[39m
+[2026-06-28 15:22:50.420 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363169319669622@newsletter | Tipo: Texto[39m
+[2026-06-28 15:22:50.444 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363169319669622@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:22:52.944 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363169319669622@newsletter). Processando mensagens acumuladas:
+South Korea president Lee Jae Myung says he is “utterly baffled” at the national team’s World Cup group-stage exit and called for the country’s sports ministry to investigate. https://trib.al/upYatOO[39m
+[2026-06-28 15:24:38.779 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 15:24:38.782 +0000] [32mINFO[39m (1): [36m⏭️ Ignorando auto-resposta para Marcela (150418646683730@lid) — cooldown ativo (12 min restantes).[39m
+[2026-06-28 15:24:43.147 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 15:24:43.150 +0000] [32mINFO[39m (1): [36m⏭️ Ignorando auto-resposta para Marcela (150418646683730@lid) — cooldown ativo (12 min restantes).[39m
+[2026-06-28 15:25:00.015 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:25:00.015 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:25:00.015 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:25:00.020 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:25:00.173 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:25:00.271 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:27:49.421 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:27:49.421 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 307).[39m
+[2026-06-28 15:27:59.003 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Viviane Almeida] | ID para Agendamento: 120363040155459450@g.us | Tipo: Imagem/Comprovante[39m
+[2026-06-28 15:28:00.021 +0000] [32mINFO[39m (1): [36m♻️ [Cleanup] 1 bloqueio(s) de AI expirado(s) reabilitado(s) automaticamente.[39m
+[2026-06-28 15:30:00.017 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:30:00.017 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:30:00.018 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:30:00.322 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:30:00.337 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:30:00.431 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:32:49.430 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:32:49.431 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 308).[39m
+[2026-06-28 15:34:00.105 +0000] [32mINFO[39m (1): [36m♻️ [Cleanup] 2 bloqueio(s) de AI expirado(s) reabilitado(s) automaticamente.[39m
+[2026-06-28 15:35:00.016 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:35:00.016 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:35:00.017 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:35:00.166 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:35:00.168 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:35:00.259 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:37:27.026 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363172867223601@newsletter | Tipo: Texto[39m
+[2026-06-28 15:37:27.031 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363172867223601@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:37:29.532 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363172867223601@newsletter). Processando mensagens acumuladas:
+Lua Cheia de Morango ilumina o céu nesta segunda-feira (29)
+
+*Leia mais:* https://cnnbr.app/short/c3305131533/
+
+*Pense bem, pense CNN*[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Viva mais paisagens! - Cupons Exclusivos Vitaggi" | ID p/ Agendar: 120363379836830205@g.us[39m
+[2026-06-28 15:37:42.834 +0000] [33mWARN[39m (1): [36m🔄 Queda detectada. Auto-reconectando WhatsApp em 1 segundos...[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SOCIEDADE PSICANALÍTICA" | ID p/ Agendar: 120363370656934596@g.us[39m
+    [35mstatusCode[39m: 500
+    [35mreason[39m: "Stream Errored (ack)"
+    [35mreattempt[39m: 1
+    [35mdelayMs[39m: 1000
+[2026-06-28 15:37:43.841 +0000] [32mINFO[39m (1): [36mUsando versão do WhatsApp: 2.3000.1035194821 (Latest: true)[39m
+[2026-06-28 15:37:44.773 +0000] [32mINFO[39m (1): [36m✅ Conexão com WhatsApp ESTÁVEL e ATIVA para tenant a89aa3b8-e406-44a8-8e20-4ba67c8d00c1.[39m
+[2026-06-28 15:37:44.773 +0000] [32mINFO[39m (1): [36m📱 Iniciando busca de grupos do WhatsApp...[39m
+[2026-06-28 15:37:47.142 +0000] [32mINFO[39m (1): [36m📱 BUSCA DE GRUPOS CONCLUÍDA:[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Semana da Psicopatologia 2026 #26" | ID p/ Agendar: 120363424332492744@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SAYONICOS" | ID p/ Agendar: 120363400311785067@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🌻 GRUPO DE ESTUDOS DO TRAUMA 🌻" | ID p/ Agendar: 120363394584109469@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🔵 GRUPO DE AVISOS @guaracaixa #4" | ID p/ Agendar: 120363355689590639@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Leitura Bíblica_MFV" | ID p/ Agendar: 120363027555400048@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Teteh Mayeda & Cia" | ID p/ Agendar: 120363325789038590@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Instruções para Amanhã #156" | ID p/ Agendar: 120363324277738816@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Salvos_Neurociencia" | ID p/ Agendar: 120363406609011488@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Reunião COPEP" | ID p/ Agendar: 120363285931554153@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Comunidade Base Cursos" | ID p/ Agendar: 120363274894078010@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "AME Europa Ocidental" | ID p/ Agendar: 120363194803994443@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🇵🇹 AME Portugal" | ID p/ Agendar: 120363188002665198@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "AME Missões na Europa" | ID p/ Agendar: 120363180360091250@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Concluíram_Integracao" | ID p/ Agendar: 120363424551736454@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "COMUNIDADE_MFV" | ID p/ Agendar: 120363213738493795@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Aula de Violão" | ID p/ Agendar: 120363313113499887@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "LISTA DE ESPERA _ Terapia" | ID p/ Agendar: 120363424819546946@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "DEVOCIONAIS_reserva" | ID p/ Agendar: 120363408541299726@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo do Beach Tênis " | ID p/ Agendar: 120363147272183977@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "CLASSE DE BATISMO_MFV" | ID p/ Agendar: 120363276768713079@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Treino segunda e quarta" | ID p/ Agendar: 120363190622522515@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "GP Port. Minist. da Graça " | ID p/ Agendar: 120363170429669298@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "26/09 a 28/09 - Evento saúde shopping" | ID p/ Agendar: 120363419228425856@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "USA_CursoTerapia" | ID p/ Agendar: 120363427131222256@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MFV_Reunião.De.Oracão" | ID p/ Agendar: 120363425764390019@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Pais e filhos 🥰" | ID p/ Agendar: 120363029543881492@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Jesus Day" | ID p/ Agendar: 120363320815586783@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "DECORAÇÃO_MFV" | ID p/ Agendar: 120363369699238073@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_09 (Meninas)" | ID p/ Agendar: 120363419409167513@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Tropa dos Calvos" | ID p/ Agendar: 120363425930154581@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: ""Diretoria" Conexão Jovem" | ID p/ Agendar: 120363373372020921@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Teatro DIP 15/06" | ID p/ Agendar: 120363400011982761@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Passeio Campos" | ID p/ Agendar: 120363315772844314@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Comissão Seekers" | ID p/ Agendar: 120363146873266492@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Casais Jovens MFV" | ID p/ Agendar: 120363346297823947@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ESTACIONAMENTO_voluntários_MFV" | ID p/ Agendar: 120363299480791478@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Formação TERAPEUTAS_PLIS" | ID p/ Agendar: 120363139050067714@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Conselheiros_PGs" | ID p/ Agendar: 120363422909282882@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "M. Adolescentes 🛐 MFV 💟" | ID p/ Agendar: 5518981420344-1498246407@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Viva mais paisagens! - Cupons Exclusivos Vitaggi" | ID p/ Agendar: 120363397934566052@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Feirantes da FONTE" | ID p/ Agendar: 120363407216921365@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Ceia Ano Novo" | ID p/ Agendar: 120363422706790844@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_11 (Marco Guerreiro)" | ID p/ Agendar: 120363399400755647@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Apoiadores Futebol Fruto da Fonte" | ID p/ Agendar: 120363386479924220@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_08" | ID p/ Agendar: 120363219996622495@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "APP_Rodrigo/Vitologia" | ID p/ Agendar: 120363425629825357@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Evangelismo nas Ruas " | ID p/ Agendar: 120363418757355386@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Mídia.Arte_MFV" | ID p/ Agendar: 120363261370072546@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Rota Franciscana 1 dia " | ID p/ Agendar: 120363217702132095@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_02" | ID p/ Agendar: 120363237229462544@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Luz e fonte" | ID p/ Agendar: 120363276989227403@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Ester Eunice - 3°C Manhã" | ID p/ Agendar: 120363020607052722@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_04#" | ID p/ Agendar: 120363218935749830@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Ministério de LIBRAS_MFV" | ID p/ Agendar: 120363269302366307@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "EVANGELIZAÇÃO_MFV" | ID p/ Agendar: 120363361543381210@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "BANDA COPEP" | ID p/ Agendar: 120363224810537428@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Esquenta Acampamento Tupã 💉" | ID p/ Agendar: 120363405460429700@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JOVENS/adultos_MFV" | ID p/ Agendar: 120363215338236868@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MATURIDADE _MFV" | ID p/ Agendar: 120363370168824166@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_10 (Jardim do Lago)" | ID p/ Agendar: 120363400424119108@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "CURSOTERAPIA_quinta-feira" | ID p/ Agendar: 120363422810978836@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Curso/Terapia_lista.de.espera" | ID p/ Agendar: 120363422642400118@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Time MFV" | ID p/ Agendar: 120363334498294396@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ACOLHIMENTO_MFV" | ID p/ Agendar: 120363218767342338@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_03" | ID p/ Agendar: 120363221895645296@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo PSICOTERAPIA_MFV" | ID p/ Agendar: 120363418494869249@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Estudar_TEOLOGIA_MFV" | ID p/ Agendar: 120363427420960487@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_06 (mulheres)#" | ID p/ Agendar: 120363221439223658@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "CLASSE INTEGRAÇÃO (MFV)" | ID p/ Agendar: 120363296709479216@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Presbíteros/Diáconos/Líderes_MFV" | ID p/ Agendar: 120363218858375707@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Zóio na Fé🙌🏻🙏🏻" | ID p/ Agendar: 120363423484495203@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Skycenter Mission 🎧📍🌏" | ID p/ Agendar: 120363039217395354@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ADOLECRENTES_MFV" | ID p/ Agendar: 120363303012279750@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Ministério Infantil" | ID p/ Agendar: 5518991275061-1431959752@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_05" | ID p/ Agendar: 120363238856439685@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_01" | ID p/ Agendar: 120363239140883624@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG Jovens Adultos MFV" | ID p/ Agendar: 120363399592436206@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Tour dos velhos🚴🚴🚴🏿🚴🏽🌪💨💨" | ID p/ Agendar: 5518998176623-1433261670@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Moradores de Vila Fátima 70, 80 e 90" | ID p/ Agendar: 120363363215907967@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Curso - Ministério pela Graça (Português)" | ID p/ Agendar: 120363150714561734@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PG_07 (Seekers)" | ID p/ Agendar: 120363293297409557@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SEEKERS MFV" | ID p/ Agendar: 120363293659951633@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "COPEP" | ID p/ Agendar: 5518996004225-1582296494@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "." | ID p/ Agendar: 120363272703254737@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Tour dos véios O Retorno🚴‍♂️🚴‍♂️" | ID p/ Agendar: 120363197693635825@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "*ACÃO BENEFICIÁRIA 🙏🏻🥰" | ID p/ Agendar: 120363418833451353@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "CONEXÃO JOVEM" | ID p/ Agendar: 5518991136733-1506199344@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Hotel coroados Business Partner/Coroados" | ID p/ Agendar: 120363301733058915@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Instruções para Amanhã #156" | ID p/ Agendar: 120363324195928006@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "DIÁLOGO TEOLÓGICO #01" | ID p/ Agendar: 120363346702925785@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Missões na Europa SP Past" | ID p/ Agendar: 12013758386-1571405677@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "EBD_PRESENCIAL" | ID p/ Agendar: 120363319104220971@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PANGARÉ 2026" | ID p/ Agendar: 120363039997914022@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Reunião COPEP" | ID p/ Agendar: 120363285645154309@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PANGARÉ RESENHA" | ID p/ Agendar: 5518991231545-1570737444@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "FACILITADORES_PGs" | ID p/ Agendar: 120363238586170894@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Palestra Hábitos Saudáveis e Suplementação " | ID p/ Agendar: 120363197315693155@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🔴 ENCERRADO" | ID p/ Agendar: 120363398242148821@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Neuroplasticidade #42" | ID p/ Agendar: 120363420433531643@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MITOLOGIA BRASILEIRA Escada da Vida" | ID p/ Agendar: 120363296144034734@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Psicanálise na Educação #7" | ID p/ Agendar: 120363313311805561@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "[NOVO EU - 8 Virtudes Fundamentais] Transtorno por Uso de Substâncias" | ID p/ Agendar: 120363422846366101@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Inf outros curso" | ID p/ Agendar: 120363409137578167@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "EBD_Online" | ID p/ Agendar: 120363219805748975@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Estudo Bíblico: Pentateuco" | ID p/ Agendar: 120363220249610248@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JESUSCOPY #233" | ID p/ Agendar: 120363172852723981@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Winnicot e suas obras " | ID p/ Agendar: 120363375181643681@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Estudo Bíblico: Evangelhos 👑" | ID p/ Agendar: 120363206347413980@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Alquimia das Virtudes | Hub" | ID p/ Agendar: 120363427916854898@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Programa 2R" | ID p/ Agendar: 120363425527250219@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ESTÁGIO - Formação em Virtologia (turma de segunda-feira, ago/25)" | ID p/ Agendar: 120363406651174223@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Psicanálise / Neuropsicoterapia  /  e Saúde Mental" | ID p/ Agendar: 120363404820682514@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JESUSCOPY #192" | ID p/ Agendar: 120363280775599153@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Geral" | ID p/ Agendar: 120363408884084822@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#10 Oferta especial | Neurociências na Prática clínica" | ID p/ Agendar: 120363421376263287@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JESUSCOPY #210" | ID p/ Agendar: 120363324121840559@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🙏🏻🙏🏻 JANDER (VEJA DESCRIÇÃO/Msg Fixada)" | ID p/ Agendar: 120363425088982937@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ORIGEM DOS SONHOS" | ID p/ Agendar: 120363197329724739@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "⚡CLUBE DA PERMISSÃO #140" | ID p/ Agendar: 120363317514638665@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PSICOPATOLOGIA - bem vindos ao puro suco do caos" | ID p/ Agendar: 120363421462244389@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo Descomplicando a Terapia com “Aulões”  ✨🧠" | ID p/ Agendar: 120363424460120433@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MEMBROS_MFV " | ID p/ Agendar: 120363216015278662@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "RODAS DE CONVERSAS" | ID p/ Agendar: 120363347203458956@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "B. dos Casados #11" | ID p/ Agendar: 120363114844114394@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Mentoria Marilia Fontes #18" | ID p/ Agendar: 120363369236664538@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "O Mundo Perdido dos Profetas" | ID p/ Agendar: 120363419174834379@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MFV" | ID p/ Agendar: 5518981420344-1619099320@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "INF. NEUROPSICANÁLISE CLÍNICA" | ID p/ Agendar: 120363314575093205@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MENTES  PSICANÁLITICAS" | ID p/ Agendar: 120363030041213363@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#1 ⚠️ ÚLTIMO DIA" | ID p/ Agendar: 120363165678991890@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "COMUNIDADE_MFV" | ID p/ Agendar: 120363234198999922@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Formação em Neurociência Afetiva" | ID p/ Agendar: 120363402418030423@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#3 Masterclass Idolatria Familiar" | ID p/ Agendar: 120363283380100023@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Conteúdo & Avisos - Casa de Discípulos #025" | ID p/ Agendar: 120363276769045220@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🌻 GRUPO DE ESTUDOS DO TRAUMA 🌻" | ID p/ Agendar: 120363411522185680@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "4. Família ESPE - Psicanálise com Crianças e Adolescentes" | ID p/ Agendar: 120363170512917532@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo Estudo Virtologia | TODAS AS TURMAS" | ID p/ Agendar: 120363401480200785@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Formação em Psicanálise - Info" | ID p/ Agendar: 120363151584547441@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🔵 GRUPO DE AVISOS @guaracaixa #4" | ID p/ Agendar: 120363373174680706@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "PERGUNTAS" | ID p/ Agendar: 120363419607175886@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "CONVERSA" | ID p/ Agendar: 120363417524817933@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "3. Família ESPE - Psicanálise: Teoria e Clínica" | ID p/ Agendar: 120363059769585649@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Winnicott " O Brincar e a Realidade"" | ID p/ Agendar: 120363191676854006@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🇵🇹 AME Portugal 1" | ID p/ Agendar: 12013758386-1522758232@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "NOVIDADES" | ID p/ Agendar: 120363418120112458@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SOCIEDADE PSICANALÍTICA" | ID p/ Agendar: 120363373327503849@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Formação em Virtologia - agosto 2025 (turma de segunda-feira)" | ID p/ Agendar: 120363420251519559@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "MATERIAIS" | ID p/ Agendar: 120363399707626469@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "3. Comunidade ESPEcast" | ID p/ Agendar: 120363050959029422@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Semana da Clínica Contemporânea #27" | ID p/ Agendar: 120363311548391969@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "SAYONICOS" | ID p/ Agendar: 120363402344281285@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Clientes House Mix " | ID p/ Agendar: 120363137883856274@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "1️⃣ Info Produtos p/ Igrejas - promoções e lançamentos" | ID p/ Agendar: 120363156247169206@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "13. Família ESPE - Psicanálise: Teoria e Clínica" | ID p/ Agendar: 120363164213722900@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Promoções Gramado @chapeudeviagem #12" | ID p/ Agendar: 120363420153805337@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "1. Família ESPE - Psicanálise com Crianças e Adolescentes" | ID p/ Agendar: 120363149744790816@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "6. Família ESPE - Psicanálise com Crianças e Adolescentes" | ID p/ Agendar: 120363161104416039@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🇵🇹 AME Portugal" | ID p/ Agendar: 120363189229725988@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Comunidade Thrive - Lista de Espera 03" | ID p/ Agendar: 120363424800827575@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Supervisão - Instituto Virtudes" | ID p/ Agendar: 120363027227516212@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ANÚNCIO JARDIM DO LAGO" | ID p/ Agendar: 120363040155459450@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "ROTEIROS @matheustiburtino ✈️ #15" | ID p/ Agendar: 120363426983035272@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "🧠 Desvendando a Neuroplasticidade na Terapia -4" | ID p/ Agendar: 120363296637595920@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "𝕻𝖗𝖆𝖙𝖎𝖈𝖆𝖓𝖉𝖔 𝕿𝖊𝖔𝖑𝖔𝖌𝖎𝖆 ✍️📚" | ID p/ Agendar: 120363355579390455@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "@RoteiroGramado NEWS #9" | ID p/ Agendar: 120363298406042251@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Cursos e Leituras em Psicanálise" | ID p/ Agendar: 120363163757759556@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "#17 Amigos Tassos Lycurgo" | ID p/ Agendar: 120363404947552551@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "JARDIM DO LAGO" | ID p/ Agendar: 5518991176254-1621265011@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "[grupo 4] Ciência & Religião - Academia ABC²" | ID p/ Agendar: 120363374442721496@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Grupo 2 – P. Lander ®️" | ID p/ Agendar: 120363041352787770@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Psicologia, Psicanálise, Saúde Mental e companhia" | ID p/ Agendar: 120363371892796077@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "IB - Troca de PDFs de Psicanálise" | ID p/ Agendar: 120363148749756123@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Semana da Psicopatologia 2026 #26" | ID p/ Agendar: 120363406490946280@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Teteh Mayeda & Cia" | ID p/ Agendar: 120363340001738318@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "AME Europa Ocidental" | ID p/ Agendar: 120363199629083015@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "AME Missões na Europa" | ID p/ Agendar: 120363200566317725@g.us[39m
+[2026-06-28 15:37:47.143 +0000] [32mINFO[39m (1): [36m👥 GRUPO: "Comunidade Base Cursos" | ID p/ Agendar: 120363253987101967@g.us[39m
+[2026-06-28 15:37:49.435 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:37:49.435 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 309).[39m
+[2026-06-28 15:38:00.030 +0000] [32mINFO[39m (1): [36m♻️ [Cleanup] 1 bloqueio(s) de AI expirado(s) reabilitado(s) automaticamente.[39m
+[2026-06-28 15:38:32.644 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Áudio[39m
+[2026-06-28 15:39:12.627 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:40:00.027 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:40:00.027 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:40:00.028 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:40:00.202 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:40:00.212 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:40:00.309 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:41:06.625 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Imagem/Comprovante[39m
+[2026-06-28 15:41:34.174 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Juliana Cristina Balbo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:42:49.448 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:42:49.448 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 310).[39m
+[2026-06-28 15:43:23.710 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363169319669622@newsletter | Tipo: Texto[39m
+[2026-06-28 15:43:23.714 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363169319669622@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:43:26.214 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363169319669622@newsletter). Processando mensagens acumuladas:
+In the World Cup, Colombia ended Saturday in a 0-0 draw with Portugal. It looked like Colombia would be victorious after Davinson Sánchez appeared to score in second-half stoppage time, but the goal was quickly ruled offside. Here is a closer look at why. https://trib.al/qaHMx8N[39m
+[2026-06-28 15:45:00.015 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:45:00.015 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:45:00.016 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:45:00.018 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:45:00.159 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:45:00.252 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:45:29.074 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Dirceu Jordão] | ID para Agendamento: 120363040155459450@g.us | Tipo: Imagem/Comprovante[39m
+[2026-06-28 15:47:49.454 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:47:49.454 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 311).[39m
+[2026-06-28 15:48:00.097 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Camila Barbosa Damaceno] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:49:26.683 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Camila Barbosa Damaceno] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:49:52.984 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Camila Barbosa Damaceno] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 15:50:00.024 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:50:00.024 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:50:00.025 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:50:00.027 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:50:00.175 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:50:00.273 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 15:51:44.717 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363171769248504@newsletter | Tipo: Texto[39m
+[2026-06-28 15:51:44.740 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363171769248504@newsletter) com timer de 2.5s.[39m
+[2026-06-28 15:51:47.243 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363171769248504@newsletter). Processando mensagens acumuladas:
+Biden told a crowd at a Democratic Party gala the Reflecting Pool saga was indicative of the Trump administration’s “corruption.” https://go.forbes.com/992IvB[39m
+[2026-06-28 15:52:51.044 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:52:51.044 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 312).[39m
+[2026-06-28 15:55:00.016 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 15:55:00.016 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 15:55:00.017 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 15:55:00.173 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 15:55:00.176 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 15:55:00.278 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+    [35moriginal[39m: "5518991328426"
+    [35mresolved[39m: "5518991328426@s.whatsapp.net"
+[2026-06-28 15:56:10.265 +0000] [32mINFO[39m (1): [36mSUCESSO na entrega[39m
+Saving message with metadata: { recurrence: 'Única', imageUrl: undefined }
+    [35mmessageId[39m: "952612d5-8934-40e1-b0a3-7c5b22742b3a"
+Saved message has metadata: { recurrence: 'Única' }
+    [35mrecipientJid[39m: "5518991328426"
+[2026-06-28 15:56:02.332 +0000] [32mINFO[39m (1): [36mIniciando processamento do Job[39m
+    [35mplatform[39m: "whatsapp"
+    [35mjobId[39m: "msg-952612d5-8934-40e1-b0a3-7c5b22742b3a"
+    [35mmessageId[39m: "952612d5-8934-40e1-b0a3-7c5b22742b3a"
+    [35mtentativa[39m: 1
+[2026-06-28 15:56:10.111 +0000] [32mINFO[39m (1): [36mJID resolvido com sucesso via onWhatsApp[39m
+[2026-06-28 15:56:44.909 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 5518991328426@s.whatsapp.net. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 15:57:51.049 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 15:57:51.049 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 313).[39m
+[2026-06-28 15:59:46.016 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Sérgio Ferreira Virtólogo] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 16:00:00.039 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 16:00:00.039 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 16:00:00.040 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 16:00:00.043 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 16:00:00.405 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 16:00:00.501 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 16:00:34.912 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363380007795805@newsletter | Tipo: Texto[39m
+[2026-06-28 16:00:34.915 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363380007795805@newsletter) com timer de 2.5s.[39m
+[2026-06-28 16:00:37.416 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363380007795805@newsletter). Processando mensagens acumuladas:
+http://youtube.com/post/UgkxO_fH6_e9i3wvwAl9gR78wkIQu4IMBncH?si=Ei8J8A9hX9GZfxtM[39m
+[2026-06-28 16:00:42.435 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Chapéu De Viagem] | ID para Agendamento: 120363420153805337@g.us | Tipo: Texto[39m
+[2026-06-28 16:01:00.521 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 150418646683730@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 16:02:51.063 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 16:02:51.063 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 314).[39m
+[2026-06-28 16:03:05.736 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 150418646683730@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 16:05:00.019 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 16:05:00.019 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 16:05:00.019 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 16:05:00.109 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 16:05:00.122 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 16:05:00.220 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 16:05:43.300 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 16:05:43.302 +0000] [32mINFO[39m (1): [36m⏭️ Ignorando auto-resposta para Marcela (150418646683730@lid) — cooldown ativo (12 min restantes).[39m
+[2026-06-28 16:06:17.945 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 16:06:17.950 +0000] [32mINFO[39m (1): [36m⏭️ Ignorando auto-resposta para Marcela (150418646683730@lid) — cooldown ativo (12 min restantes).[39m
+[2026-06-28 16:06:44.947 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 16:06:44.949 +0000] [32mINFO[39m (1): [36m⏭️ Ignorando auto-resposta para Marcela (150418646683730@lid) — cooldown ativo (11 min restantes).[39m
+[2026-06-28 16:06:46.401 +0000] [32mINFO[39m (1): [36m👤 Enviou mensagem para 150418646683730@lid. Desativando IA para este contato (cooldown 15 min).[39m
+[2026-06-28 16:07:51.069 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 16:07:51.069 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 315).[39m
+[2026-06-28 16:08:39.770 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Marcela] | ID para Agendamento: 150418646683730@lid | Tipo: Texto[39m
+[2026-06-28 16:08:39.774 +0000] [32mINFO[39m (1): [36m⏭️ Ignorando auto-resposta para Marcela (150418646683730@lid) — cooldown ativo (13 min restantes).[39m
+[2026-06-28 16:09:54.298 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 16:10:00.018 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 16:10:00.018 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 16:10:00.019 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 16:10:00.024 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 16:10:00.209 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 16:10:00.308 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 16:10:44.556 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Imagem/Comprovante[39m
+[2026-06-28 16:11:05.881 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 16:12:00.109 +0000] [32mINFO[39m (1): [36m♻️ [Cleanup] 1 bloqueio(s) de AI expirado(s) reabilitado(s) automaticamente.[39m
+[2026-06-28 16:12:51.080 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 16:12:51.080 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 316).[39m
+[2026-06-28 16:13:32.836 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Carol Guedes] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 16:13:53.514 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Desconhecido] | ID para Agendamento: 120363172867223601@newsletter | Tipo: Texto[39m
+*Pense bem, pense CNN*[39m
+[2026-06-28 16:13:53.518 +0000] [32mINFO[39m (1): [36m⏳ Iniciando buffer de debounce para Desconhecido (120363172867223601@newsletter) com timer de 2.5s.[39m
+[2026-06-28 16:13:56.018 +0000] [32mINFO[39m (1): [36m⏳ Debounce expirado para Desconhecido (120363172867223601@newsletter). Processando mensagens acumuladas:
+Arraiá da Anitta reúne famosos e cantora proíbe uso de celular; veja fotos
+
+*Leia mais:* https://cnnbr.app/short/c2793978862/
+
+[2026-06-28 16:15:00.016 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 16:15:00.017 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 16:15:00.017 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 16:15:00.210 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 16:15:00.212 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 16:15:00.310 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 16:17:16.633 +0000] [32mINFO[39m (1): [36m📩 Mensagem recebida de [Alcilene Cavalcante] | ID para Agendamento: 120363401480200785@g.us | Tipo: Texto[39m
+[2026-06-28 16:17:51.086 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 16:17:51.087 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 317).[39m
+[2026-06-28 16:20:00.018 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo cron de sincronização do Google Calendar...[39m
+[2026-06-28 16:20:00.018 +0000] [32mINFO[39m (1): [36mIniciando sincronização de Google Calendars...[39m
+[2026-06-28 16:20:00.019 +0000] [32mINFO[39m (1): [36m⚙️ Iniciando ciclo de reconciliacao de mensagens pendentes...[39m
+[2026-06-28 16:20:00.252 +0000] [32mINFO[39m (1): [36m✨ Ciclo cron de sincronização do Google Calendar finalizado.[39m
+[2026-06-28 16:20:00.253 +0000] [33mWARN[39m (1): [36m⚠️ Forçando re-injeção de 19 mensagens na fila do Redis para consistência.[39m
+[2026-06-28 16:20:00.351 +0000] [32mINFO[39m (1): [36m✨ Reconciliacao de pendentes concluída com sucesso.[39m
+[2026-06-28 16:22:00.026 +0000] [32mINFO[39m (1): [36m♻️ [Cleanup] 1 bloqueio(s) de AI expirado(s) reabilitado(s) automaticamente.[39m
+[2026-06-28 16:22:51.092 +0000] [31mERROR[39m (1): [36m🔑 Telegram 401 Unauthorized ao inicializar: o TELEGRAM_BOT_TOKEN está inválido ou foi revogado/rotacionado no @BotFather. Atualize a variável de ambiente e faça redeploy. Tentando novamente com backoff por precaução.[39m
+    err: {
+      "type": "TelegramError",
+      "message": "401: Unauthorized",
+      "stack":
+          Error: 401: Unauthorized
+              at Telegram.callApi (/monorepo/node_modules/telegraf/lib/core/network/client.js:315:19)
+              at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+              at async TelegramClient.initialize (/monorepo/apps/scheduler-api/dist/infrastructure/telegram/TelegramClient.js:36:29)
+      "response": {
+        "ok": false,
+        "error_code": 401,
+        "description": "Unauthorized"
+      },
+      "on": {
+        "method": "getMe",
+        "payload": {}
+      }
+    }
+[2026-06-28 16:22:51.092 +0000] [33mWARN[39m (1): [36mTelegram: tentando reconectar em 300000ms (tentativa 318).[39m

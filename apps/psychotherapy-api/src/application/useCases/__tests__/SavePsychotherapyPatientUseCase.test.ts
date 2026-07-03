@@ -44,6 +44,7 @@ describe('SavePsychotherapyPatientUseCase', () => {
             reminderChannel: 'whatsapp',
             fullName: null,
             whatsappBulkOptIn: false,
+            individualTherapyEnabled: true,
             createdAt: expect.any(Date),
             updatedAt: expect.any(Date)
         };

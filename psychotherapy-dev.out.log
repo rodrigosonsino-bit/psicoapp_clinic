@@ -1,0 +1,129 @@
+
+> psychotherapy-api@1.0.0 dev
+> ts-node src/server.ts
+
+[2026-06-25 19:07:39.396 -0300] [32mINFO[39m: [36m⏳ Testando conexão com o banco de dados...[39m
+[2026-06-25 19:07:41.238 -0300] [32mINFO[39m: [36m✅ Banco de dados conectado com sucesso.[39m
+[2026-06-25 19:07:41.249 -0300] [32mINFO[39m: [36m🚀 Psychotherapy Backend rodando em http://localhost:3001[39m
+[2026-06-25 19:07:41.250 -0300] [33mWARN[39m: [36m⚠️ WhatsApp boot desativado via ENABLE_WHATSAPP=false ou DISABLE_WHATSAPP_BOOT=true[39m
+[2026-06-25 19:07:41.552 -0300] [32mINFO[39m: [36m🔔 Scheduler de lembretes iniciado (executa de hora em hora)[39m
+[2026-06-25 20:00:10.862 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-25 21:00:01.961 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-25 22:00:02.518 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 00:00:02.142 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 01:00:02.033 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 02:00:02.025 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 03:00:01.992 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 04:00:02.036 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 05:00:02.113 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 06:00:02.084 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 07:00:01.957 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 08:00:02.371 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 0
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 0
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 09:00:01.917 -0300] [32mINFO[39m: [36m🔔 Processando lembretes de agendamentos[39m
+    [35mcount[39m: 1
+[2026-06-26 09:00:02.213 -0300] [33mWARN[39m: [36m⚠️ WhatsappSessionManager não disponível — WhatsApp não enviado[39m
+    [35mappointmentId[39m: "dd36cb5a-a5c6-4e1a-b58b-66858d2a8d40"
+[2026-06-26 09:00:02.459 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 1
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 1
+    [35mwhatsappRetried[39m: 0
+[2026-06-26 10:00:03.971 -0300] [32mINFO[39m: [36m🔔 Processando lembretes de agendamentos[39m
+    [35mcount[39m: 1
+[2026-06-26 10:00:04.223 -0300] [33mWARN[39m: [36m⚠️ WhatsappSessionManager não disponível — WhatsApp não enviado[39m
+    [35mappointmentId[39m: "dd36cb5a-a5c6-4e1a-b58b-66858d2a8d40"
+[2026-06-26 10:00:04.456 -0300] [32mINFO[39m: [36m🔔 Ciclo de lembretes concluído[39m
+    [35mtotalAppointments[39m: 1
+    [35mwhatsappSent[39m: 0
+    [35mwhatsappFailed[39m: 0
+    [35memailSent[39m: 0
+    [35memailFailed[39m: 0
+    [35mskipped[39m: 1
+    [35mwhatsappRetried[39m: 0

@@ -18,6 +18,7 @@ export class PsychotherapyPatient {
         public readonly updatedAt: Date,
         public readonly reminderChannel: ReminderChannel = 'whatsapp',
         public readonly fullName: string | null = null,
-        public readonly whatsappBulkOptIn: boolean = false
+        public readonly whatsappBulkOptIn: boolean = false,
+        public readonly individualTherapyEnabled: boolean = true
     ) {}
 }

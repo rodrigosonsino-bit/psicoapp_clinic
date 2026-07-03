@@ -109,10 +109,9 @@ export default function Groups() {
   const [payments, setPayments] = useState<any[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentPatient, setPaymentPatient] = useState<{ patient_id: string; name: string } | null>(null);
+  const [paymentToConfirm, setPaymentToConfirm] = useState<any | null>(null);
   const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null);
-  const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
-  const [paymentToEdit, setPaymentToEdit] = useState<any | null>(null);
+
 
   // Inline editing for session history
   const [editingPresenceId, setEditingPresenceId] = useState<string | null>(null);
@@ -281,28 +280,23 @@ export default function Groups() {
     }
   };
 
-  const handleDeletePayment = async (groupId: string, payment: any) => {
-    let mode: 'single' | 'all' = 'single';
-    
-    if (payment.installment_group_id && payment.total_installments > 1) {
-      const confirmAll = window.confirm(
-        `Este pagamento faz parte de um parcelamento de ${payment.total_installments}x.\n\n` +
-        `Clique em OK para excluir TODAS as parcelas deste parcelamento.\n` +
-        `Clique em Cancelar para excluir APENAS esta parcela.`
-      );
-      mode = confirmAll ? 'all' : 'single';
-    } else {
-      if (!window.confirm('Tem certeza que deseja excluir este pagamento?')) return;
+  const handleVoidPayment = async (payment: any) => {
+    const reason = window.prompt('Qual o motivo do estorno / cancelamento desta cobrança?');
+    if (!reason || !reason.trim()) {
+      return;
     }
 
     try {
-      await fetchApi(`/api/psychotherapy/groups/${groupId}/payments/${payment.id}?mode=${mode}`, {
-        method: 'DELETE'
+      await fetchApi(`/api/psychotherapy/group-payments/${payment.id}/void`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim() })
       });
-      toast.success('Pagamento estornado com sucesso!');
-      loadPayments(groupId, currentMonth);
+      toast.success('Cobrança cancelada/estornada com sucesso!');
+      if (selectedGroup) {
+        loadPayments(selectedGroup.id, currentMonth);
+      }
     } catch (err) {
-      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao estornar pagamento.');
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao estornar cobrança.');
     }
   };
 
@@ -498,19 +492,43 @@ export default function Groups() {
                 />
 
                 {/* Sub-Abas: Membros | Pagamentos */}
-                <div className="groups-subtabs">
-                  <button
-                    className={`groups-subtab ${subTab === 'members' ? 'active' : ''}`}
-                    onClick={() => setSubTab('members')}
-                  >
-                    Membros
-                  </button>
-                  <button
-                    className={`groups-subtab ${subTab === 'payments' ? 'active' : ''}`}
-                    onClick={() => setSubTab('payments')}
-                  >
-                    Pagamentos
-                  </button>
+                <div className="groups-subtabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <button
+                      className={`groups-subtab ${subTab === 'members' ? 'active' : ''}`}
+                      onClick={() => setSubTab('members')}
+                    >
+                      Membros
+                    </button>
+                    <button
+                      className={`groups-subtab ${subTab === 'payments' ? 'active' : ''}`}
+                      onClick={() => setSubTab('payments')}
+                    >
+                      Pagamentos
+                    </button>
+                  </div>
+                  
+                  {subTab === 'payments' && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      style={{ padding: '0.375rem 0.75rem', fontSize: '0.8rem' }}
+                      onClick={async () => {
+                        try {
+                          await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/charges`, {
+                            method: 'POST',
+                            body: JSON.stringify({ referenceMonth: currentMonth })
+                          });
+                          toast.success('Cobranças geradas com sucesso!');
+                          loadPayments(selectedGroup.id, currentMonth);
+                        } catch (err) {
+                          toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao gerar cobranças.');
+                        }
+                      }}
+                    >
+                      <CircleDollarSign size={13} style={{ marginRight: '4px' }} />
+                      Gerar Cobranças
+                    </button>
+                  )}
                 </div>
 
                 {subTab === 'payments' ? (
@@ -548,26 +566,24 @@ export default function Groups() {
                                         {m.payments.map((p: any) => (
                                           <div key={p.id} className="payment-history-item">
                                             <span>
-                                              Parc. {p.installment_number}/{p.total_installments}: {formatCurrency(p.amount_cents)} ({p.payment_method === 'pix' ? 'PIX' : p.payment_method === 'cash' ? 'Dinheiro' : p.payment_method === 'debit_card' ? 'Débito' : 'Crédito'})
-                                              {p.notes && <span className="text-muted" style={{ marginLeft: '0.25rem' }}>({p.notes})</span>}
+                                              {formatCurrency(p.amount_cents)} 
+                                              {p.status === 'paid' && p.payment_method && ` (${p.payment_method === 'pix' ? 'PIX' : p.payment_method === 'cash' ? 'Dinheiro' : p.payment_method === 'debit_card' ? 'Débito' : 'Crédito'})`}
+                                              <span className={`payment-pill ${p.status}`} style={{ display: 'inline-flex', padding: '0.1rem 0.4rem', fontSize: '0.65rem', marginLeft: '0.5rem' }}>
+                                                {p.status === 'paid' ? 'Pago' : p.status === 'pending' ? 'Pendente' : 'Cancelado'}
+                                              </span>
                                             </span>
                                             <div className="flex gap-1">
-                                              <button
-                                                className="icon-btn"
-                                                style={{ padding: '2px' }}
-                                                onClick={() => { setPaymentToEdit({ ...p, groupId: selectedGroup.id, patientName: m.name }); setShowEditPaymentModal(true); }}
-                                                title="Editar este pagamento"
-                                              >
-                                                <Pencil size={12} />
-                                              </button>
-                                              <button
-                                                className="icon-btn danger"
-                                                style={{ padding: '2px' }}
-                                                onClick={() => handleDeletePayment(selectedGroup.id, p)}
-                                                title="Estornar esta parcela"
-                                              >
-                                                <Trash2 size={12} />
-                                              </button>
+
+                                              {p.status !== 'voided' && (
+                                                <button
+                                                  className="icon-btn danger"
+                                                  style={{ padding: '2px' }}
+                                                  onClick={() => handleVoidPayment(p)}
+                                                  title="Estornar/Cancelar esta cobrança"
+                                                >
+                                                  <Trash2 size={12} />
+                                                </button>
+                                              )}
                                             </div>
                                           </div>
                                         ))}
@@ -595,8 +611,13 @@ export default function Groups() {
                                           className="btn btn-primary btn-sm"
                                           style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                                           onClick={() => {
-                                            setPaymentPatient({ patient_id: m.patient_id, name: m.name });
-                                            setShowPaymentModal(true);
+                                            const pending = m.payments?.find((p: any) => p.status === 'pending');
+                                            if (pending) {
+                                              setPaymentToConfirm(pending);
+                                              setShowPaymentModal(true);
+                                            } else {
+                                              toast.error('Nenhuma cobrança pendente gerada. Clique em Gerar Cobranças.');
+                                            }
                                           }}
                                         >
                                           Registrar
@@ -607,8 +628,11 @@ export default function Groups() {
                                           className="btn btn-secondary btn-sm"
                                           style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                                           onClick={() => {
-                                            setPaymentPatient({ patient_id: m.patient_id, name: m.name });
-                                            setShowPaymentModal(true);
+                                            const pending = m.payments?.find((p: any) => p.status === 'pending' || p.status === 'partial');
+                                            if (pending) {
+                                              setPaymentToConfirm(pending);
+                                              setShowPaymentModal(true);
+                                            }
                                           }}
                                         >
                                           + Parcela
@@ -885,34 +909,19 @@ export default function Groups() {
         />
       )}
 
-      {/* Edit Payment Modal */}
-      {showEditPaymentModal && selectedGroup && paymentToEdit && (
-        <EditPaymentModal
-          groupId={selectedGroup.id}
-          payment={paymentToEdit}
-          onClose={() => { setShowEditPaymentModal(false); setPaymentToEdit(null); }}
-          onSuccess={() => {
-            setShowEditPaymentModal(false);
-            setPaymentToEdit(null);
-            toast.success('Pagamento atualizado com sucesso!');
-            loadPayments(selectedGroup.id, currentMonth);
-          }}
-        />
-      )}
+
 
       {/* Payment Modal */}
-      {showPaymentModal && selectedGroup && paymentPatient && (
-        <PaymentModal
-          group={selectedGroup}
-          patient={paymentPatient}
-          referenceMonth={currentMonth}
+      {showPaymentModal && selectedGroup && paymentToConfirm && (
+        <ConfirmPaymentModal
+          payment={paymentToConfirm}
           onClose={() => {
             setShowPaymentModal(false);
-            setPaymentPatient(null);
+            setPaymentToConfirm(null);
           }}
           onSuccess={() => {
             setShowPaymentModal(false);
-            setPaymentPatient(null);
+            setPaymentToConfirm(null);
             toast.success('Pagamento registrado com sucesso!');
             loadPayments(selectedGroup.id, currentMonth);
           }}
@@ -922,126 +931,7 @@ export default function Groups() {
   );
 }
 
-// ── Edit Payment Modal ────────────────────────────────────────────────────────
 
-function EditPaymentModal({
-  groupId, payment, onClose, onSuccess
-}: {
-  groupId: string;
-  payment: any;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const toast = useToast();
-  const [submitting, setSubmitting] = useState(false);
-  const [amount, setAmount] = useState(String(payment.amount_cents / 100));
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'debit_card' | 'credit_card'>(payment.payment_method);
-  const [notes, setNotes] = useState(payment.notes ?? '');
-
-  const isInstallment = payment.total_installments > 1;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amountCents = Math.round(parseFloat(amount) * 100);
-    if (isNaN(amountCents) || amountCents <= 0) {
-      toast.error('Valor inválido');
-      return;
-    }
-    try {
-      setSubmitting(true);
-      const url = `/api/psychotherapy/groups/${groupId}/payments/${payment.id}`;
-      console.log('[EditPayment] URL:', url);
-      console.log('[EditPayment] payload:', { amount_cents: amountCents, payment_method: paymentMethod, notes: notes || null });
-      await fetchApi(url, {
-        method: 'PUT',
-        body: JSON.stringify({
-          amount_cents: amountCents,
-          payment_method: paymentMethod,
-          notes: notes || null,
-        }),
-      });
-      onSuccess();
-    } catch (err) {
-      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao atualizar pagamento.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content animate-fade-in" style={{ maxWidth: '440px' }}>
-        <h2 className="text-h2 mb-1">Editar Pagamento</h2>
-        <p className="text-body mb-4" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          {payment.patientName}
-          {isInstallment && (
-            <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>
-              · Parcela {payment.installment_number}/{payment.total_installments}
-            </span>
-          )}
-        </p>
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group mb-4">
-            <label className="form-label">Forma de Pagamento</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              {(['pix', 'cash', 'debit_card', 'credit_card'] as const).map(method => (
-                <button
-                  key={method}
-                  type="button"
-                  className={`btn ${paymentMethod === method ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', padding: '0.5rem' }}
-                  onClick={() => setPaymentMethod(method)}
-                >
-                  {method === 'pix' && <><Wallet size={14} /> PIX</>}
-                  {method === 'cash' && <><Banknote size={14} /> Dinheiro</>}
-                  {method === 'debit_card' && <><CreditCard size={14} /> Débito</>}
-                  {method === 'credit_card' && <><CreditCard size={14} /> Crédito</>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="form-group mb-3">
-            <label className="form-label">Valor (R$)</label>
-            <input
-              type="number"
-              className="form-control"
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              min="0.01"
-              step="0.01"
-              required
-              disabled={submitting}
-              autoFocus
-            />
-          </div>
-
-          <div className="form-group mb-4">
-            <label className="form-label">Observações</label>
-            <textarea
-              className="form-control"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Opcional"
-              disabled={submitting}
-            />
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Salvando...' : 'Salvar alterações'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 // ── Financial Summary ─────────────────────────────────────────────────────────
 
@@ -1318,10 +1208,19 @@ function AddMemberModal({
   onSuccess: () => void;
 }) {
   const toast = useToast();
+  const [tab, setTab] = useState<'search' | 'create'>('search');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Formulário para novo paciente
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [document] = useState('');
+  const [email, setEmail] = useState('');
+  const [paymentType, setPaymentType] = useState('none');
+  const [requestId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     let active = true;
@@ -1347,22 +1246,21 @@ function AddMemberModal({
       }
     }
 
-    const timer = setTimeout(() => {
-      load();
-    }, 300);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [search, toast]);
+    if (tab === 'search') {
+      const timer = setTimeout(() => {
+        load();
+      }, 300);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
+    }
+  }, [search, tab, toast]);
 
   const currentIds = new Set(currentMembers.map(m => m.patient_id));
-  
   const availablePatients = patients.filter(p => !currentIds.has(p.id));
-  const filteredPatients = availablePatients;
 
-  const handleAdd = async (patientId: string) => {
+  const handleAddExisting = async (patientId: string) => {
     try {
       setSubmitting(true);
       await fetchApi(`/api/psychotherapy/groups/${group.id}/members`, {
@@ -1376,76 +1274,187 @@ function AddMemberModal({
     }
   };
 
+  const handleCreateNew = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      toast.error('O nome é obrigatório.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await fetchApi(`/api/psychotherapy/groups/${group.id}/members-new`, {
+        method: 'POST',
+        body: JSON.stringify({
+          requestId,
+          name,
+          phone,
+          document,
+          email,
+          paymentType
+        })
+      });
+      toast.success('Membro criado e adicionado com sucesso!');
+      onSuccess();
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao criar novo membro.');
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="modal-overlay">
       <div className="modal-content animate-fade-in" style={{ maxWidth: '480px' }}>
         <h2 className="text-h2 mb-4">Adicionar Membro — {group.name}</h2>
 
-        <div className="search-bar" style={{ marginBottom: '1rem', position: 'relative' }}>
-          <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: '#999' }} />
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Buscar paciente..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ paddingLeft: '36px' }}
-            autoFocus
-          />
+        <div className="tabs mb-4">
+          <button
+            className={`tab ${tab === 'search' ? 'active' : ''}`}
+            onClick={() => setTab('search')}
+          >
+            Buscar Existente
+          </button>
+          <button
+            className={`tab ${tab === 'create' ? 'active' : ''}`}
+            onClick={() => setTab('create')}
+          >
+            Criar Novo
+          </button>
         </div>
 
-        <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--border-light)', borderRadius: '6px' }}>
-          {loading ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Carregando...</div>
-          ) : patients.length === 0 ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              {search ? 'Nenhum paciente encontrado na busca.' : 'Nenhum paciente cadastrado.'}
+        {tab === 'search' && (
+          <>
+            <div className="search-bar" style={{ marginBottom: '1rem', position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: '#999' }} />
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Buscar paciente..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ paddingLeft: '36px' }}
+                autoFocus
+              />
             </div>
-          ) : availablePatients.length === 0 ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              Todos os pacientes correspondentes já estão neste grupo.
-            </div>
-          ) : (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {filteredPatients.map(p => (
-                <li 
-                  key={p.id} 
-                  style={{ 
-                    padding: '0.75rem 1rem', 
-                    borderBottom: '1px solid var(--border-light)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div>
-                    <strong>{p.name}</strong>
-                    <div className="text-small" style={{ color: 'var(--text-secondary)' }}>
-                      {p.status === 'inactive' ? 'Inativo' : 'Ativo'}
-                    </div>
-                  </div>
-                  <button 
-                    className="btn btn-primary"
-                    style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                    onClick={() => handleAdd(p.id)}
-                    disabled={submitting}
-                  >
-                    Adicionar
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
 
-        <div className="flex justify-end mt-4">
+            <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--border-light)', borderRadius: '6px' }}>
+              {loading ? (
+                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Carregando...</div>
+              ) : patients.length === 0 ? (
+                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  {search ? 'Nenhum paciente encontrado na busca.' : 'Nenhum paciente cadastrado.'}
+                </div>
+              ) : availablePatients.length === 0 ? (
+                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  Todos os pacientes correspondentes já estão neste grupo.
+                </div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {availablePatients.map(p => (
+                    <li 
+                      key={p.id} 
+                      style={{ 
+                        padding: '0.75rem 1rem', 
+                        borderBottom: '1px solid var(--border-light)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>
+                        <strong>{p.name}</strong>
+                        <div className="text-small" style={{ color: 'var(--text-secondary)' }}>
+                          {p.status === 'inactive' ? 'Inativo' : 'Ativo'}
+                        </div>
+                      </div>
+                      <button 
+                        className="btn btn-primary"
+                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                        onClick={() => handleAddExisting(p.id)}
+                        disabled={submitting}
+                      >
+                        Adicionar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+
+        {tab === 'create' && (
+          <form onSubmit={handleCreateNew} id="create-member-form">
+            <div className="form-group">
+              <label className="form-label">Nome Completo *</label>
+              <input
+                type="text"
+                className="form-control"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                required
+                disabled={submitting}
+                autoFocus
+              />
+            </div>
+            <div className="form-group mt-3">
+              <label className="form-label">Celular</label>
+              <input
+                type="text"
+                className="form-control"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="Ex: (11) 99999-9999"
+                disabled={submitting}
+              />
+            </div>
+            <div className="form-group mt-3">
+              <label className="form-label">E-mail</label>
+              <input
+                type="email"
+                className="form-control"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+            <div className="form-group mt-3">
+              <label className="form-label">Forma de Pagamento Base</label>
+              <select
+                className="form-control"
+                value={paymentType}
+                onChange={e => setPaymentType(e.target.value)}
+                disabled={submitting}
+              >
+                <option value="none">Paga pelo Grupo (Recomendado)</option>
+                <option value="session">Por Sessão</option>
+                <option value="monthly">Mensalidade</option>
+              </select>
+              <span className="text-small text-secondary mt-1 block">
+                Pacientes exclusivos de grupo não devem gerar faturamento na aba Pacientes.
+              </span>
+            </div>
+          </form>
+        )}
+
+        <div className="flex justify-end gap-2 mt-6">
           <button
             className="btn btn-secondary"
             onClick={onClose}
             disabled={submitting}
+            type="button"
           >
-            Fechar
+            Cancelar
           </button>
+          {tab === 'create' && (
+            <button
+              className="btn btn-primary"
+              type="submit"
+              form="create-member-form"
+              disabled={submitting || !name.trim()}
+            >
+              {submitting ? 'Criando...' : 'Criar e Adicionar'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1662,12 +1671,10 @@ function GroupFormModal({
 
 // ── Payment Modal (Registrar Pagamento de Grupo) ──────────────────────────────────
 
-function PaymentModal({
-  group, patient, referenceMonth, onClose, onSuccess
+function ConfirmPaymentModal({
+  payment, onClose, onSuccess
 }: {
-  group: TherapyGroup;
-  patient: { patient_id: string; name: string };
-  referenceMonth: string;
+  payment: any;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -1675,35 +1682,7 @@ function PaymentModal({
   const [submitting, setSubmitting] = useState(false);
 
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'debit_card' | 'credit_card'>('pix');
-  const [isInstallment, setIsInstallment] = useState(false);
-  const [totalInstallments, setTotalInstallments] = useState(2);
-  
-  const feeCents = group.monthly_fee_cents ?? 0;
-  
-  const defaultAmountCents = isInstallment && paymentMethod === 'credit_card'
-    ? Math.round(feeCents / totalInstallments)
-    : feeCents;
-
-  const [amount, setAmount] = useState(String(defaultAmountCents / 100));
-  const [notes, setNotes] = useState('');
-
-  useEffect(() => {
-    const defaultValCents = isInstallment && paymentMethod === 'credit_card'
-      ? Math.round(feeCents / totalInstallments)
-      : feeCents;
-    setAmount(String(defaultValCents / 100));
-  }, [isInstallment, totalInstallments, paymentMethod, feeCents]);
-
-  const getMonthsPreview = (startMonth: string, count: number): string => {
-    const [year, month] = startMonth.split('-').map(Number);
-    const monthsNamesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    const results = [];
-    for (let i = 0; i < count; i++) {
-      const d = new Date(year, month - 1 + i, 1);
-      results.push(monthsNamesShort[d.getMonth()]);
-    }
-    return results.join(' · ');
-  };
+  const [amount, setAmount] = useState(String((payment.amount_cents || 0) / 100));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1716,35 +1695,28 @@ function PaymentModal({
 
     try {
       setSubmitting(true);
-      await fetchApi(`/api/psychotherapy/groups/${group.id}/payments`, {
+      await fetchApi(`/api/psychotherapy/group-payments/${payment.id}/confirm`, {
         method: 'POST',
         body: JSON.stringify({
-          patient_id: patient.patient_id,
-          reference_month: referenceMonth,
-          amount_cents: amountCents,
-          payment_method: paymentMethod,
-          total_installments: isInstallment && paymentMethod === 'credit_card' ? totalInstallments : 1,
-          notes: notes || null
+          paymentMethod,
+          amountPaidCents: amountCents
         })
       });
       onSuccess();
     } catch (err) {
-      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao registrar pagamento.');
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao confirmar pagamento.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const parsedAmount = parseFloat(amount) || 0;
-  const showInstallments = paymentMethod === 'credit_card';
-
   return (
     <div className="modal-overlay">
       <div className="modal-content animate-fade-in" style={{ maxWidth: '480px' }}>
-        <h2 className="text-h2 mb-2">Registrar Pagamento</h2>
+        <h2 className="text-h2 mb-2">Confirmar Pagamento</h2>
         <p className="text-body mb-4" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-          Paciente: <strong>{patient.name}</strong><br />
-          Mês de referência: <span style={{ textTransform: 'capitalize' }}>{monthLabel(referenceMonth)}</span>
+          Mês de referência: <span style={{ textTransform: 'capitalize' }}>{monthLabel(payment.reference_month)}</span><br />
+          Valor Original: <strong>{formatCurrency(payment.amount_cents)}</strong>
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -1755,7 +1727,7 @@ function PaymentModal({
                 type="button"
                 className={`btn ${paymentMethod === 'pix' ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', padding: '0.5rem' }}
-                onClick={() => { setPaymentMethod('pix'); setIsInstallment(false); }}
+                onClick={() => setPaymentMethod('pix')}
               >
                 <Wallet size={14} /> PIX
               </button>
@@ -1763,7 +1735,7 @@ function PaymentModal({
                 type="button"
                 className={`btn ${paymentMethod === 'cash' ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', padding: '0.5rem' }}
-                onClick={() => { setPaymentMethod('cash'); setIsInstallment(false); }}
+                onClick={() => setPaymentMethod('cash')}
               >
                 <Banknote size={14} /> Dinheiro
               </button>
@@ -1771,7 +1743,7 @@ function PaymentModal({
                 type="button"
                 className={`btn ${paymentMethod === 'debit_card' ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', padding: '0.5rem' }}
-                onClick={() => { setPaymentMethod('debit_card'); setIsInstallment(false); }}
+                onClick={() => setPaymentMethod('debit_card')}
               >
                 <CreditCard size={14} /> Débito
               </button>
@@ -1786,42 +1758,8 @@ function PaymentModal({
             </div>
           </div>
 
-          {showInstallments && (
-            <div className="mb-4" style={{ padding: '0.75rem', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
-              <label className="flex items-center gap-2" style={{ fontSize: '0.85rem', cursor: 'pointer', fontWeight: 500 }}>
-                <input
-                  type="checkbox"
-                  checked={isInstallment}
-                  onChange={e => setIsInstallment(e.target.checked)}
-                />
-                Deseja parcelar o pagamento?
-              </label>
-              
-              {isInstallment && (
-                <div className="mt-3">
-                  <label className="form-label text-small">Número de parcelas</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={totalInstallments}
-                    onChange={e => setTotalInstallments(Math.max(2, parseInt(e.target.value, 10) || 2))}
-                    min="2"
-                    max="12"
-                    required
-                    disabled={submitting}
-                  />
-                  <div className="text-small text-muted mt-2">
-                    📅 Cobre: {getMonthsPreview(referenceMonth, totalInstallments)}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           <div className="form-group mb-3">
-            <label className="form-label">
-              {isInstallment && paymentMethod === 'credit_card' ? 'Valor por Parcela (R$)' : 'Valor Pago (R$)'}
-            </label>
+            <label className="form-label">Valor Efetivamente Pago (R$)</label>
             <input
               type="number"
               className="form-control"
@@ -1830,23 +1768,6 @@ function PaymentModal({
               min="0.01"
               step="0.01"
               required
-              disabled={submitting}
-            />
-            {isInstallment && paymentMethod === 'credit_card' && (
-              <div className="text-small text-muted mt-1">
-                R$ {parsedAmount.toFixed(2)} por parcela • Total: R$ {(parsedAmount * totalInstallments).toFixed(2)}
-              </div>
-            )}
-          </div>
-
-          <div className="form-group mb-4">
-            <label className="form-label">Observações</label>
-            <textarea
-              className="form-control"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Opcional"
               disabled={submitting}
             />
           </div>

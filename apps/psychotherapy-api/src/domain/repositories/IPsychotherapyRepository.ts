@@ -23,6 +23,7 @@ export interface SavePatientDTO {
     email?: string | null;
     reminderChannel?: ReminderChannel;
     fullName?: string | null;
+    individualTherapyEnabled?: boolean;
 }
 
 export interface SaveMonthlyRecordDTO {
@@ -189,6 +190,7 @@ export interface PaginationOptions {
     page: number;
     limit: number;
     search?: string;
+    scope?: 'individual' | 'all';
 }
 
 export interface PaginatedResult<T> {
@@ -198,8 +200,8 @@ export interface PaginatedResult<T> {
 
 export interface IPsychotherapyRepository {
     savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient>;
-    listPatients(tenantId: string): Promise<PsychotherapyPatient[]>;
-    listPatients(tenantId: string, pagination: PaginationOptions): Promise<PaginatedResult<PsychotherapyPatient>>;
+    listPatients(tenantId: string, pagination?: PaginationOptions): Promise<PsychotherapyPatient[] | PaginatedResult<PsychotherapyPatient>>;
+    listIndividualPatientsForBilling(tenantId: string): Promise<PsychotherapyPatient[]>;
     findPatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;
     findActivePatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;
     findPatientByIdIncludingDeleted(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;

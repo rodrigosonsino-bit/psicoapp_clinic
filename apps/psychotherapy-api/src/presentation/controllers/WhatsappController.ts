@@ -25,7 +25,7 @@ export class WhatsappController {
             res.json({
                 success: true,
                 message: 'Inicializando conexão do WhatsApp...',
-                connected: client.isConnected()
+                connected: client ? client.isConnected() : false
             });
         } catch (error: any) {
             logger.error({ err: error, tenantId }, 'Erro ao conectar WhatsApp para tenant');
@@ -155,6 +155,10 @@ export class WhatsappController {
             let client = await this.sessionManager.getSession(tenantId);
             if (!client) {
                 client = await this.sessionManager.createSession(tenantId);
+            }
+            if (!client) {
+                res.status(500).json({ error: 'Falha ao inicializar o cliente do WhatsApp' });
+                return;
             }
 
             const code = await client.getPairingCode(phoneNumber);

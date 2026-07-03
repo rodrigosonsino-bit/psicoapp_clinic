@@ -9,6 +9,8 @@ import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { AppError } from '../../domain/errors/AppError';
 import { injectable } from 'tsyringe';
 
+import { ChangePatientModalityUseCase } from '../../application/useCases/ChangePatientModalityUseCase';
+
 @injectable()
 export class PsychotherapyController {
     constructor(
@@ -17,14 +19,15 @@ export class PsychotherapyController {
         private readonly deletePatientUseCase: DeletePsychotherapyPatientUseCase,
         private readonly listMonthUseCase: ListPsychotherapyMonthUseCase,
         private readonly saveMonthlyRecordUseCase: SavePsychotherapyMonthlyRecordUseCase,
-        private readonly generateMonthUseCase: GeneratePsychotherapyMonthUseCase
+        private readonly generateMonthUseCase: GeneratePsychotherapyMonthUseCase,
+        private readonly changeModalityUseCase: ChangePatientModalityUseCase
     ) {}
 
     async listPatients(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);
-        const { page, limit, search } = req.query as any;
+        const { page, limit, search, scope } = req.query as any;
 
-        const result = await this.listPatientsUseCase.execute(tenantId, page, limit, search);
+        const result = await this.listPatientsUseCase.execute(tenantId, page, limit, search, scope);
 
         return res.status(200).json({
             data: result.data,
@@ -47,6 +50,18 @@ export class PsychotherapyController {
         const tenantId = this.getTenantId(req);
         await this.deletePatientUseCase.execute(tenantId, req.params.id);
         return res.status(204).send();
+    }
+
+    async changeModality(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const { individualTherapyEnabled, status } = req.body;
+        const patient = await this.changeModalityUseCase.execute({
+            tenantId,
+            patientId: req.params.id,
+            individualTherapyEnabled,
+            status
+        });
+        return res.status(200).json({ data: patient });
     }
 
     async getMonth(req: Request, res: Response): Promise<Response> {

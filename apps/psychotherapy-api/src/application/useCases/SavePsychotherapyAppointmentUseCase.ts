@@ -4,6 +4,7 @@ import { IPsychotherapyRepository, SaveAppointmentDTO } from '../../domain/repos
 import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalendarService';
 import { DeletePsychotherapyAppointmentUseCase } from './DeletePsychotherapyAppointmentUseCase';
 import { AppError } from '../../domain/errors/AppError';
+import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { logger } from '../../infrastructure/logger';
 import { PASTORAL_SENTINEL_EMAIL, PASTORAL_SUMMARY_PREFIX } from '../../domain/constants/pastoral';
 
@@ -221,7 +222,7 @@ export class SavePsychotherapyAppointmentUseCase {
     }
 
     private async findOrCreatePastoralPatient(tenantId: string): Promise<any> {
-        const patients = await this.repository.listPatients(tenantId);
+        const patients = await this.repository.listPatients(tenantId) as PsychotherapyPatient[];
         let patient = patients.find(p => p.email === PASTORAL_SENTINEL_EMAIL);
         if (!patient) {
             patient = await this.repository.savePatient({

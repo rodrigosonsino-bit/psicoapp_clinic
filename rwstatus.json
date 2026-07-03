@@ -1,0 +1,337 @@
+{
+  "buckets": {
+    "edges": []
+  },
+  "deletedAt": null,
+  "environments": {
+    "edges": [
+      {
+        "node": {
+          "canAccess": true,
+          "deletedAt": null,
+          "id": "600a84bc-88cb-4ef9-a308-332fbebe3803",
+          "name": "production",
+          "serviceInstances": {
+            "edges": [
+              {
+                "node": {
+                  "activeDeployments": [
+                    {
+                      "createdAt": "2026-06-25T22:33:44.472Z",
+                      "deploymentStopped": true,
+                      "id": "b9e64aac-8c5a-44eb-8565-5e9dda461ec4",
+                      "instances": [
+                        {
+                          "id": "4d20d6e7-d76b-4af5-9478-195f81a18037",
+                          "status": "CRASHED"
+                        }
+                      ],
+                      "meta": {
+                        "buildOnly": false,
+                        "fileServiceManifest": {},
+                        "ignoreWatchPatterns": true,
+                        "imageDigest": "sha256:11c6f0814bab81f4df5e54833588979d8e6b8cc2dbdd6de1189036c77831f037",
+                        "logsV2": true,
+                        "nixpacksProviders": [],
+                        "propertyFileMapping": {},
+                        "reason": "redeploy",
+                        "rootDirectory": null,
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": null,
+                            "buildEnvironment": "V3",
+                            "builder": "DOCKERFILE",
+                            "dockerfilePath": "Dockerfile.psychotherapy",
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": null,
+                            "healthcheckTimeout": null,
+                            "ipv6EgressEnabled": false,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "europe-west4-drams3a": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": "npm start -w apps/psychotherapy-api",
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "skipBuildCache": true,
+                        "volumeMounts": []
+                      },
+                      "status": "CRASHED"
+                    }
+                  ],
+                  "cronSchedule": null,
+                  "domains": {
+                    "customDomains": [],
+                    "serviceDomains": [
+                      {
+                        "domain": "backend-production-7b2ea.up.railway.app",
+                        "id": "23fb73bf-1664-4a55-97be-d260008411c4",
+                        "targetPort": null
+                      }
+                    ]
+                  },
+                  "environmentId": "600a84bc-88cb-4ef9-a308-332fbebe3803",
+                  "id": "928abfbc-55ee-4512-ac2c-9232e005b51e",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "createdAt": "2026-06-25T22:35:37.592Z",
+                    "deploymentStopped": true,
+                    "id": "26d4c2f9-10b4-46db-a6d7-5b6017972e3d",
+                    "instances": [
+                      {
+                        "id": "9fff96f5-6440-435b-be50-eb2bd878a2c6",
+                        "status": "REMOVED"
+                      }
+                    ],
+                    "meta": {
+                      "buildOnly": false,
+                      "fileServiceManifest": {},
+                      "ignoreWatchPatterns": true,
+                      "imageDigest": "sha256:11c6f0814bab81f4df5e54833588979d8e6b8cc2dbdd6de1189036c77831f037",
+                      "logsV2": true,
+                      "nixpacksProviders": [],
+                      "propertyFileMapping": {},
+                      "reason": "redeploy",
+                      "rootDirectory": null,
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": null,
+                          "buildEnvironment": "V3",
+                          "builder": "DOCKERFILE",
+                          "dockerfilePath": "Dockerfile.psychotherapy",
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": null,
+                          "healthcheckTimeout": null,
+                          "ipv6EgressEnabled": false,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "europe-west4-drams3a": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": [
+                            "cd apps/psychotherapy-api && npm start"
+                          ],
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": "npm start -w apps/psychotherapy-api",
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "skipBuildCache": true,
+                      "volumeMounts": []
+                    },
+                    "status": "FAILED"
+                  },
+                  "nextCronRunAt": null,
+                  "numReplicas": null,
+                  "serviceId": "89e3db89-aef1-49ed-8edf-5f6ad278589d",
+                  "serviceName": "backend",
+                  "source": {
+                    "image": null,
+                    "repo": null
+                  },
+                  "startCommand": "npm start -w apps/psychotherapy-api"
+                }
+              },
+              {
+                "node": {
+                  "activeDeployments": [
+                    {
+                      "createdAt": "2026-06-05T00:48:32.240Z",
+                      "deploymentStopped": false,
+                      "id": "82991aad-d2ea-4b47-9efc-9a234a62e81b",
+                      "instances": [
+                        {
+                          "id": "142d5ac0-2653-4ac3-881e-f4d283d93fbf",
+                          "status": "RUNNING"
+                        }
+                      ],
+                      "meta": {
+                        "image": "ghcr.io/railwayapp-templates/postgres-ssl:16",
+                        "imageDigest": "sha256:6ad06ede31ac78f74f4f0410d06dff95d71b2bec9fd96fb742d8e14e1478f875",
+                        "logsV2": true,
+                        "reason": "deploy",
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": null,
+                            "buildEnvironment": "V3",
+                            "builder": "RAILPACK",
+                            "dockerfilePath": null,
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": null,
+                            "healthcheckTimeout": null,
+                            "ipv6EgressEnabled": false,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "europe-west4-drams3a": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": null,
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": []
+                      },
+                      "status": "SUCCESS"
+                    }
+                  ],
+                  "cronSchedule": null,
+                  "domains": {
+                    "customDomains": [],
+                    "serviceDomains": []
+                  },
+                  "environmentId": "600a84bc-88cb-4ef9-a308-332fbebe3803",
+                  "id": "a3a2e48c-5d3c-4577-8442-37534401df1a",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "createdAt": "2026-06-05T00:48:32.240Z",
+                    "deploymentStopped": false,
+                    "id": "82991aad-d2ea-4b47-9efc-9a234a62e81b",
+                    "instances": [
+                      {
+                        "id": "142d5ac0-2653-4ac3-881e-f4d283d93fbf",
+                        "status": "RUNNING"
+                      }
+                    ],
+                    "meta": {
+                      "image": "ghcr.io/railwayapp-templates/postgres-ssl:16",
+                      "imageDigest": "sha256:6ad06ede31ac78f74f4f0410d06dff95d71b2bec9fd96fb742d8e14e1478f875",
+                      "logsV2": true,
+                      "reason": "deploy",
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": null,
+                          "buildEnvironment": "V3",
+                          "builder": "RAILPACK",
+                          "dockerfilePath": null,
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": null,
+                          "healthcheckTimeout": null,
+                          "ipv6EgressEnabled": false,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "europe-west4-drams3a": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": null,
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": []
+                    },
+                    "status": "SUCCESS"
+                  },
+                  "nextCronRunAt": null,
+                  "numReplicas": null,
+                  "serviceId": "d44fb8f8-756a-49dd-89fa-ed97c18c90c2",
+                  "serviceName": "postgres",
+                  "source": {
+                    "image": "ghcr.io/railwayapp-templates/postgres-ssl:16",
+                    "repo": null
+                  },
+                  "startCommand": null
+                }
+              }
+            ]
+          },
+          "unmergedChangesCount": null,
+          "volumeInstances": {
+            "edges": []
+          }
+        }
+      }
+    ]
+  },
+  "id": "1904c2b7-0f2f-4a96-ae5d-20105f0eefdd",
+  "name": "psicoapp-backend",
+  "services": {
+    "edges": [
+      {
+        "node": {
+          "id": "89e3db89-aef1-49ed-8edf-5f6ad278589d",
+          "name": "backend"
+        }
+      },
+      {
+        "node": {
+          "id": "d44fb8f8-756a-49dd-89fa-ed97c18c90c2",
+          "name": "postgres"
+        }
+      }
+    ]
+  },
+  "workspace": {
+    "name": "Rodrigo Sonsino's Projects"
+  }
+}

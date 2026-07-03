@@ -78,9 +78,9 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_patients (
                 id, tenant_id, name, status, payment_type, default_session_price_cents,
-                notes, document, phone, email, reminder_channel, full_name
+                notes, document, phone, email, reminder_channel, full_name, individual_therapy_enabled
             )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 status = EXCLUDED.status,
@@ -92,6 +92,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 email = EXCLUDED.email,
                 reminder_channel = EXCLUDED.reminder_channel,
                 full_name = EXCLUDED.full_name,
+                individual_therapy_enabled = EXCLUDED.individual_therapy_enabled,
                 updated_at = NOW()
             WHERE psychotherapy_patients.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
@@ -107,7 +108,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.phone || null,
             data.email || null,
             data.reminderChannel ?? 'whatsapp',
-            data.fullName ?? null
+            data.fullName ?? null,
+            data.individualTherapyEnabled ?? true
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
@@ -136,6 +138,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 whereClause += ` AND name ILIKE $${params.length}`;
             }
 
+            if (pagination.scope === 'individual') {
+                whereClause += ` AND individual_therapy_enabled = TRUE`;
+            }
+
             params.push(pagination.limit, offset);
             const result = await this.dbPool.query(`
                 SELECT *, COUNT(*) OVER() AS total_count
@@ -154,12 +160,20 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         }
 
         const result = await this.dbPool.query(`
-            SELECT *
-            FROM psychotherapy_patients
+            SELECT * FROM psychotherapy_patients
             WHERE tenant_id = $1 AND deleted_at IS NULL
-            ORDER BY status = 'inactive', name ASC;
+            ORDER BY status = 'inactive', name ASC
         `, [validTenantId]);
+        return result.rows.map(row => this.mapPatient(row));
+    }
 
+    async listIndividualPatientsForBilling(tenantId: string): Promise<PsychotherapyPatient[]> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT * FROM psychotherapy_patients
+            WHERE tenant_id = $1 AND individual_therapy_enabled = TRUE AND deleted_at IS NULL
+            ORDER BY status = 'inactive', name ASC
+        `, [validTenantId]);
         return result.rows.map(row => this.mapPatient(row));
     }
 
@@ -1070,7 +1084,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 FROM psychotherapy_monthly_records mr
                 WHERE mr.tenant_id = $1 AND mr.month = $2;
             `, [validTenantId, currentMonthStr]);
-            pendingCents = parseInt(pendRes.rows[0].pending, 10);
+
+            const pendGroupRes = await this.dbPool.query(`
+                SELECT COALESCE(SUM(amount_cents), 0) AS pending
+                FROM group_payments
+                WHERE tenant_id = $1 AND reference_month = $2 AND status = 'pending';
+            `, [validTenantId, currentMonthStr]);
+
+            pendingCents = parseInt(pendRes.rows[0].pending, 10) + parseInt(pendGroupRes.rows[0].pending, 10);
         } else {
             // Pendente legado
             const pendingResult = await this.dbPool.query(`
@@ -1085,7 +1106,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 FROM psychotherapy_monthly_records
                 WHERE tenant_id = $1 AND month = $2 AND payment_status != 'paid'
             `, [validTenantId, currentMonthStr]);
-            pendingCents = parseInt(pendingResult.rows[0].pending, 10);
+            
+            const pendGroupRes = await this.dbPool.query(`
+                SELECT COALESCE(SUM(amount_cents), 0) AS pending
+                FROM group_payments
+                WHERE tenant_id = $1 AND reference_month = $2 AND status = 'pending';
+            `, [validTenantId, currentMonthStr]);
+            
+            pendingCents = parseInt(pendingResult.rows[0].pending, 10) + parseInt(pendGroupRes.rows[0].pending, 10);
         }
 
         return {
@@ -1934,7 +1962,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             new Date(row.updated_at),
             row.reminder_channel ?? 'whatsapp',
             row.full_name ?? null,
-            row.whatsapp_bulk_opt_in ?? false
+            row.whatsapp_bulk_opt_in ?? false,
+            row.individual_therapy_enabled
         );
     }
 

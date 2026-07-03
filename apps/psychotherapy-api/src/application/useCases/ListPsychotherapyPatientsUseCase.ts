@@ -6,7 +6,7 @@ import { IPsychotherapyRepository, PaginatedResult } from '../../domain/reposito
 export class ListPsychotherapyPatientsUseCase {
     constructor(@inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository) {}
 
-    async execute(tenantId: string, page: number, limit: number, search?: string): Promise<PaginatedResult<PsychotherapyPatient>> {
-        return this.repository.listPatients(tenantId, { page, limit, search });
+    async execute(tenantId: string, page: number, limit: number, search?: string, scope?: 'individual' | 'all'): Promise<PaginatedResult<PsychotherapyPatient>> {
+        return this.repository.listPatients(tenantId, { page, limit, search, scope: scope ?? 'all' }) as Promise<PaginatedResult<PsychotherapyPatient>>;
     }
 }

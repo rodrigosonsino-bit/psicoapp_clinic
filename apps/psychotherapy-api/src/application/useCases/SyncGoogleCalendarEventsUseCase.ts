@@ -100,9 +100,8 @@ export class SyncGoogleCalendarEventsUseCase {
             logger.error({ err, tenantId: config.tenantId }, 'Erro ao criar eventos faltantes no Google Calendar');
         }
 
-        if (events.length === 0) return;
-
-        const patients = await this.repository.listPatients(config.tenantId);
+        // Precisa carregar pacientes, pois as heurísticas (por nome/email) dependem da lista completa.
+        const patients = await this.repository.listPatients(config.tenantId) as PsychotherapyPatient[];
 
         // ── 1. Eventos cancelados/apagados no Google: restaurar se o app ainda os tem ──
         for (const event of events) {

@@ -3,6 +3,15 @@ import { injectable, inject } from 'tsyringe';
 import { Pool } from 'pg';
 import crypto from 'crypto';
 import { RegisterGroupSessionUseCase } from '../../application/useCases/RegisterGroupSessionUseCase';
+import { CreateGroupChargesUseCase } from '../../application/useCases/CreateGroupChargesUseCase';
+import { ConfirmGroupPaymentUseCase } from '../../application/useCases/ConfirmGroupPaymentUseCase';
+import { VoidGroupPaymentUseCase } from '../../application/useCases/VoidGroupPaymentUseCase';
+import { ReplaceGroupChargeUseCase } from '../../application/useCases/ReplaceGroupChargeUseCase';
+import { AddGroupMemberIdempotentUseCase } from '../../application/useCases/AddGroupMemberIdempotentUseCase';
+import { AttachExistingGroupMemberUseCase } from '../../application/useCases/AttachExistingGroupMemberUseCase';
+import { CreateUpfrontCourseChargeUseCase } from '../../application/useCases/CreateUpfrontCourseChargeUseCase';
+import { RefundUpfrontCourseUseCase } from '../../application/useCases/RefundUpfrontCourseUseCase';
+import { CancelPolicyUseCase } from '../../application/useCases/CancelPolicyUseCase';
 import { AppError } from '../../domain/errors/AppError';
 import { logger } from '../../infrastructure/logger';
 
@@ -11,6 +20,15 @@ export class GroupController {
     constructor(
         @inject(Pool) private readonly dbPool: Pool,
         @inject(RegisterGroupSessionUseCase) private readonly registerSession: RegisterGroupSessionUseCase,
+        @inject(CreateGroupChargesUseCase) private readonly createGroupCharges: CreateGroupChargesUseCase,
+        @inject(ConfirmGroupPaymentUseCase) private readonly confirmGroupPayment: ConfirmGroupPaymentUseCase,
+        @inject(VoidGroupPaymentUseCase) private readonly voidGroupPayment: VoidGroupPaymentUseCase,
+        @inject(ReplaceGroupChargeUseCase) private readonly replaceGroupCharge: ReplaceGroupChargeUseCase,
+        @inject(AddGroupMemberIdempotentUseCase) private readonly addGroupMemberIdempotentUseCase: AddGroupMemberIdempotentUseCase,
+        @inject(AttachExistingGroupMemberUseCase) private readonly attachExistingGroupMember: AttachExistingGroupMemberUseCase,
+        @inject(CreateUpfrontCourseChargeUseCase) private readonly createUpfrontCourseCharge: CreateUpfrontCourseChargeUseCase,
+        @inject(RefundUpfrontCourseUseCase) private readonly refundUpfrontCourse: RefundUpfrontCourseUseCase,
+        @inject(CancelPolicyUseCase) private readonly cancelPolicy: CancelPolicyUseCase,
     ) {}
 
     /** POST /psychotherapy/groups/:groupId/sessions */
@@ -36,6 +54,155 @@ export class GroupController {
             success: true,
             data: result,
         });
+    }
+
+    /** POST /psychotherapy/groups/:groupId/charges */
+    async generateCharges(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { groupId } = req.params;
+        const { referenceMonth, dueDate } = req.body;
+
+        const result = await this.createGroupCharges.execute({
+            tenantId,
+            groupId,
+            referenceMonth,
+            dueDate
+        });
+
+        res.status(201).json({ success: true, data: result });
+    }
+
+    /** POST /psychotherapy/group-payments/:id/confirm */
+    async confirmPayment(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { id } = req.params;
+        const { paymentMethod, amountPaidCents } = req.body;
+
+        const operatorId = (req as any).userId || tenantId; // fallback for tests
+
+        await this.confirmGroupPayment.execute({
+            tenantId,
+            operatorId,
+            groupPaymentId: id,
+            paymentMethod,
+            amountPaidCents
+        });
+
+        res.status(200).json({ success: true });
+    }
+
+    /** POST /psychotherapy/group-payments/:id/void */
+    async voidPayment(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        await this.voidGroupPayment.execute({
+            tenantId,
+            groupPaymentId: id,
+            reason
+        });
+
+        res.status(200).json({ success: true });
+    }
+
+    /** POST /psychotherapy/group-payments/:id/replace */
+    async replaceCharge(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { id } = req.params;
+        const { amountCents, dueDate } = req.body;
+
+        const result = await this.replaceGroupCharge.execute({
+            tenantId,
+            groupPaymentId: id,
+            amountCents,
+            dueDate
+        });
+
+        res.status(201).json({ success: true, data: result });
+    }
+
+    /** POST /psychotherapy/groups/:groupId/members (Anexar membro existente) */
+    async addGroupMember(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { groupId } = req.params;
+        const { patientId } = req.body;
+
+        const result = await this.attachExistingGroupMember.execute({
+            tenantId,
+            groupId,
+            patientId
+        });
+
+        res.status(201).json({ success: true, data: result });
+    }
+
+    /** POST /psychotherapy/groups/:groupId/upfront-charge */
+    async createUpfrontCharge(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        const operatorId = (req as any).userId as string; // or whoever is authenticated
+        if (!tenantId || !operatorId) throw new AppError('Não autenticado', 401);
+
+        const { groupId } = req.params;
+        const { groupMemberId, overrideTotalCents } = req.body;
+
+        const result = await this.createUpfrontCourseCharge.execute({
+            tenantId,
+            operatorId,
+            groupId,
+            groupMemberId,
+            overrideTotalCents
+        });
+
+        res.status(201).json({ success: true, data: result });
+    }
+
+    /** POST /psychotherapy/group-payments/:id/refund-upfront */
+    async refundUpfrontCharge(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        const operatorId = (req as any).userId as string;
+        if (!tenantId || !operatorId) throw new AppError('Não autenticado', 401);
+
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        const result = await this.refundUpfrontCourse.execute({
+            tenantId,
+            operatorId,
+            groupPaymentId: id,
+            reason
+        });
+
+        res.status(200).json({ success: true, data: result });
+    }
+
+    /** POST /psychotherapy/billing-policies/:id/cancel */
+    async cancelBillingPolicy(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        const operatorId = (req as any).userId as string;
+        if (!tenantId || !operatorId) throw new AppError('Não autenticado', 401);
+
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        await this.cancelPolicy.execute({
+            tenantId,
+            operatorId,
+            policyId: id,
+            reason
+        });
+
+        res.status(200).json({ success: true });
     }
 
     /** GET /psychotherapy/groups/:groupId/sessions */
@@ -80,6 +247,39 @@ export class GroupController {
               ${dateFilter}
             ORDER BY gsr.session_date DESC, p.name ASC;
         `, params);
+
+        res.status(200).json({
+            success: true,
+            data: result.rows,
+        });
+    }
+
+    /** GET /psychotherapy/groups/:groupId/eligible-upfront-payments */
+    async listEligibleUpfrontPayments(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { groupId } = req.params;
+
+        const result = await this.dbPool.query(`
+            SELECT 
+                tgm.id AS group_member_id,
+                p.id AS patient_id,
+                p.name AS patient_name,
+                (tg.duration_months * tg.monthly_fee_cents) AS default_upfront_price_cents
+            FROM therapy_group_members tgm
+            JOIN psychotherapy_patients p ON p.id = tgm.patient_id
+            JOIN therapy_groups tg ON tg.id = tgm.group_id
+            WHERE tgm.group_id = $1
+              AND tgm.tenant_id = $2
+              AND tgm.left_at IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM therapy_group_member_billing_policies bp
+                  WHERE bp.member_id = tgm.id
+                    AND bp.billing_type = 'upfront'
+                    AND bp.status = 'active'
+              )
+        `, [groupId, tenantId]);
 
         res.status(200).json({
             success: true,
@@ -249,44 +449,26 @@ export class GroupController {
         }
     }
 
-    /** POST /psychotherapy/groups/:groupId/members */
-    async addGroupMember(req: Request, res: Response): Promise<void> {
+    /** POST /psychotherapy/groups/:groupId/members-new */
+    async addGroupMemberIdempotent(req: Request, res: Response): Promise<void> {
         const tenantId = (req as any).tenantId as string;
         if (!tenantId) throw new AppError('Não autenticado', 401);
 
         const { groupId } = req.params;
-        const { patientId } = req.body;
+        const { requestId, name, phone, document, email } = req.body;
 
-        if (!patientId) {
-            throw new AppError('patientId é obrigatório', 400);
-        }
+        const result = await this.addGroupMemberIdempotentUseCase.execute({
+            tenantId,
+            groupId,
+            requestId,
+            name,
+            phone,
+            document,
+            email,
+        });
 
-        // Verifica se o grupo pertence ao tenant
-        const groupCheck = await this.dbPool.query('SELECT id FROM therapy_groups WHERE id = $1 AND tenant_id = $2', [groupId, tenantId]);
-        if (groupCheck.rows.length === 0) {
-            throw new AppError('Grupo não encontrado', 404);
-        }
-
-        // Verifica se o paciente pertence ao tenant
-        const patientCheck = await this.dbPool.query('SELECT id FROM psychotherapy_patients WHERE id = $1 AND tenant_id = $2', [patientId, tenantId]);
-        if (patientCheck.rows.length === 0) {
-            throw new AppError('Paciente não encontrado', 404);
-        }
-
-        try {
-            await this.dbPool.query(`
-                INSERT INTO therapy_group_members (group_id, patient_id, tenant_id)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (group_id, patient_id) DO UPDATE SET left_at = NULL, tenant_id = EXCLUDED.tenant_id
-            `, [groupId, patientId, tenantId]);
-            
-            res.status(201).json({ success: true, message: 'Paciente adicionado ao grupo' });
-        } catch (error: any) {
-            logger.error({ tenantId, groupId, patientId, err: error.message }, 'Erro ao adicionar membro');
-            throw new AppError('Erro ao vincular paciente ao grupo', 500);
-        }
+        res.status(201).json({ success: true, data: result });
     }
-
     /** DELETE /psychotherapy/groups/:groupId/members/:patientId */
     async removeGroupMember(req: Request, res: Response): Promise<void> {
         const tenantId = (req as any).tenantId as string;
@@ -471,14 +653,14 @@ export class GroupController {
             SELECT
                 p.id            AS patient_id,
                 p.name,
-                COALESCE(SUM(gp.amount_cents), 0)::int   AS total_paid_cents,
-                COUNT(gp.id)::int                        AS payments_count,
-                MAX(gp.total_installments)               AS total_installments,
+                COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_paid_cents,
+                COUNT(gp.id) FILTER (WHERE gp.status != 'voided')::int                   AS payments_count,
+                MAX(gp.total_installments)                                               AS total_installments,
                 tg.monthly_fee_cents,
                 CASE
                     WHEN tg.monthly_fee_cents IS NULL OR tg.monthly_fee_cents = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(gp.amount_cents), 0) = 0                    THEN 'pending'
-                    WHEN COALESCE(SUM(gp.amount_cents), 0) >= tg.monthly_fee_cents THEN 'paid'
+                    WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) = 0 THEN 'pending'
+                    WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) >= tg.monthly_fee_cents THEN 'paid'
                     ELSE 'partial'
                 END AS payment_status,
                 COALESCE(
@@ -491,9 +673,11 @@ export class GroupController {
                             'installment_number', gp.installment_number,
                             'installment_group_id', gp.installment_group_id,
                             'paid_at', gp.paid_at,
-                            'notes', gp.notes
-                        )
-                    ) FILTER (WHERE gp.id IS NOT NULL),
+                            'notes', gp.notes,
+                            'status', gp.status,
+                            'due_date', gp.due_date
+                        ) ORDER BY gp.due_date ASC
+                    ) FILTER (WHERE gp.id IS NOT NULL AND gp.status != 'voided'),
                     '[]'::json
                 ) AS payments
             FROM therapy_group_members tgm
@@ -504,6 +688,7 @@ export class GroupController {
                 AND gp.patient_id      = tgm.patient_id
                 AND gp.reference_month = $1
                 AND gp.tenant_id       = $2
+                AND gp.status != 'voided'
             WHERE tgm.group_id   = $3
               AND tgm.left_at   IS NULL
               AND p.tenant_id    = $2
@@ -518,194 +703,6 @@ export class GroupController {
         });
     }
 
-    /** POST /psychotherapy/groups/:groupId/payments */
-    async registerPayment(req: Request, res: Response): Promise<void> {
-        const tenantId = (req as any).tenantId as string;
-        if (!tenantId) throw new AppError('Não autenticado', 401);
-
-        const { groupId } = req.params;
-        const {
-            patient_id,
-            reference_month,
-            amount_cents,
-            payment_method,
-            total_installments,
-            notes
-        } = req.body;
-
-        const groupCheck = await this.dbPool.query(
-            'SELECT id FROM therapy_groups WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
-            [groupId, tenantId]
-        );
-        if (groupCheck.rows.length === 0) {
-            throw new AppError('Grupo não encontrado', 404);
-        }
-
-        const memberCheck = await this.dbPool.query(
-            'SELECT id FROM therapy_group_members WHERE group_id = $1 AND patient_id = $2 AND left_at IS NULL',
-            [groupId, patient_id]
-        );
-        if (memberCheck.rows.length === 0) {
-            throw new AppError('Paciente não é membro ativo deste grupo', 400);
-        }
-
-        const client = await this.dbPool.connect();
-
-        try {
-            await client.query('BEGIN');
-
-            const insertedPayments: any[] = [];
-
-            if (payment_method === 'credit_card' && total_installments > 1) {
-                const installmentGroupId = crypto.randomUUID();
-
-                for (let i = 0; i < total_installments; i++) {
-                    const instNum = i + 1;
-                    const refMonth = addMonths(reference_month, i);
-
-                    try {
-                        const insertRes = await client.query(`
-                            INSERT INTO group_payments (
-                                tenant_id, group_id, patient_id, reference_month,
-                                amount_cents, payment_method, total_installments,
-                                installment_number, installment_group_id, notes
-                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                            RETURNING *;
-                        `, [
-                            tenantId,
-                            groupId,
-                            patient_id,
-                            refMonth,
-                            amount_cents,
-                            payment_method,
-                            total_installments,
-                            instNum,
-                            installmentGroupId,
-                            notes ?? null
-                        ]);
-                        insertedPayments.push(insertRes.rows[0]);
-                    } catch (err: any) {
-                        if (err.code === '23505') {
-                            throw new AppError(`A parcela ${instNum} (${refMonth}) já foi registrada para este paciente.`, 409);
-                        }
-                        throw err;
-                    }
-                }
-            } else {
-                try {
-                    const insertRes = await client.query(`
-                        INSERT INTO group_payments (
-                            tenant_id, group_id, patient_id, reference_month,
-                            amount_cents, payment_method, total_installments,
-                            installment_number, notes
-                        ) VALUES ($1, $2, $3, $4, $5, $6, 1, 1, $7)
-                        RETURNING *;
-                    `, [
-                        tenantId,
-                        groupId,
-                        patient_id,
-                        reference_month,
-                        amount_cents,
-                        payment_method,
-                        notes ?? null
-                    ]);
-                    insertedPayments.push(insertRes.rows[0]);
-                } catch (err: any) {
-                    if (err.code === '23505') {
-                        throw new AppError('Esta parcela já foi registrada.', 409);
-                    }
-                    throw err;
-                }
-            }
-
-            await client.query('COMMIT');
-
-            res.status(201).json({
-                success: true,
-                data: insertedPayments
-            });
-
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-    /** PUT /psychotherapy/groups/:groupId/payments/:paymentId */
-    async updatePayment(req: Request, res: Response): Promise<void> {
-        const tenantId = (req as any).tenantId as string;
-        if (!tenantId) throw new AppError('Não autenticado', 401);
-
-        const { groupId, paymentId } = req.params;
-        const { amount_cents, payment_method, notes } = req.body;
-
-        const groupCheck = await this.dbPool.query(
-            'SELECT id FROM therapy_groups WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
-            [groupId, tenantId]
-        );
-        if (groupCheck.rows.length === 0) {
-            throw new AppError('Grupo não encontrado', 404);
-        }
-
-        const result = await this.dbPool.query(
-            `UPDATE group_payments
-                SET amount_cents   = $1,
-                    payment_method = $2::group_payment_method,
-                    notes          = $3
-              WHERE id = $4 AND group_id = $5 AND tenant_id = $6
-          RETURNING *`,
-            [amount_cents, payment_method, notes ?? null, paymentId, groupId, tenantId]
-        );
-
-        if (result.rows.length === 0) {
-            throw new AppError('Pagamento não encontrado', 404);
-        }
-
-        res.status(200).json({ success: true, data: result.rows[0] });
-    }
-
-    /** DELETE /psychotherapy/groups/:groupId/payments/:paymentId */
-    async deletePayment(req: Request, res: Response): Promise<void> {
-        const tenantId = (req as any).tenantId as string;
-        if (!tenantId) throw new AppError('Não autenticado', 401);
-
-        const { groupId, paymentId } = req.params;
-        const { mode } = req.query as { mode?: 'single' | 'all' };
-
-        const groupCheck = await this.dbPool.query(
-            'SELECT id FROM therapy_groups WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
-            [groupId, tenantId]
-        );
-        if (groupCheck.rows.length === 0) {
-            throw new AppError('Grupo não encontrado', 404);
-        }
-
-        const paymentResult = await this.dbPool.query(
-            'SELECT id, installment_group_id FROM group_payments WHERE id = $1 AND group_id = $2 AND tenant_id = $3',
-            [paymentId, groupId, tenantId]
-        );
-        if (paymentResult.rows.length === 0) {
-            throw new AppError('Pagamento não encontrado', 404);
-        }
-
-        const payment = paymentResult.rows[0];
-
-        if (mode === 'all' && payment.installment_group_id) {
-            await this.dbPool.query(
-                'DELETE FROM group_payments WHERE installment_group_id = $1 AND group_id = $2 AND tenant_id = $3',
-                [payment.installment_group_id, groupId, tenantId]
-            );
-        } else {
-            await this.dbPool.query(
-                'DELETE FROM group_payments WHERE id = $1 AND group_id = $2 AND tenant_id = $3',
-                [paymentId, groupId, tenantId]
-            );
-        }
-
-        res.status(200).json({ success: true });
-    }
 }
 
 function addMonths(monthStr: string, monthsToAdd: number): string {

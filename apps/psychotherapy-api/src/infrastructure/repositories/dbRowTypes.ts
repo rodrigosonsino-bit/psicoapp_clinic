@@ -15,6 +15,7 @@ export interface PatientRow {
     updated_at: Date;
     full_name: string | null;
     whatsapp_bulk_opt_in?: boolean;
+    individual_therapy_enabled: boolean;
 }
 
 // Linha da tabela: psychotherapy_monthly_records

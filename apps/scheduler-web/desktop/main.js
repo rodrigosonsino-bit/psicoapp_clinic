@@ -55,6 +55,17 @@ function startLocalServer() {
         });
     });
     
+    // Se a porta 54321 já estiver ocupada (ex.: outra instalação do app aberta), encerra
+    // esta instância de forma limpa em vez de derrubar o processo com uma exceção não tratada.
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error('Porta 54321 já está em uso (outra instância do app está aberta). Encerrando.');
+            app.quit();
+        } else {
+            console.error('Erro no servidor local:', err);
+        }
+    });
+
     server.listen(54321, '127.0.0.1', () => {
         console.log('Servidor estático local desktop rodando na porta 54321');
     });
@@ -149,24 +160,42 @@ function createWindow() {
     });
 }
 
-app.whenReady().then(async () => {
-    try {
-        await session.defaultSession.clearStorageData({
-            storages: ['serviceworkers', 'cachestorage']
-        });
-        await session.defaultSession.clearCache();
-    } catch (e) {
-        console.error('Erro ao limpar cache:', e);
-    }
-    startLocalServer();
-    createWindow();
-    
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
+// Instância única: o servidor local usa a porta fixa 54321, que só pode ser aberta por
+// uma instância. Sem este lock, abrir o app uma segunda vez (ou enquanto uma instância
+// antiga ainda não fechou) causa EADDRINUSE e derruba o processo main com o erro
+// "A JavaScript error occurred in the main process". Aqui, a segunda instância apenas
+// traz a janela existente para frente e encerra.
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
         }
     });
-});
+
+    app.whenReady().then(async () => {
+        try {
+            await session.defaultSession.clearStorageData({
+                storages: ['serviceworkers', 'cachestorage']
+            });
+            await session.defaultSession.clearCache();
+        } catch (e) {
+            console.error('Erro ao limpar cache:', e);
+        }
+        startLocalServer();
+        createWindow();
+
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
+        });
+    });
+}
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

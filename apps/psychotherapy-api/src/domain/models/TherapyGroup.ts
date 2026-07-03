@@ -33,6 +33,7 @@ export class GroupSessionRecord {
         public readonly attendanceStatus: GroupAttendanceStatus,
         public readonly notes: string | null,
         public readonly sessionPriceCents: number | null,
+        public readonly groupMemberId: string,
         public readonly createdAt: Date,
         public readonly updatedAt: Date
     ) {}

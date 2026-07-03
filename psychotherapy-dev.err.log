@@ -1,0 +1,10 @@
+(node:27544) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2026-06-26T02:00:01.282Z] [PID: 27544] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Thu Jun 25 2026 23:00:00 GMT-0300 (Horário Padrão de Brasília)! Possible blocking IO or high CPU user at the same process used by node-cron.

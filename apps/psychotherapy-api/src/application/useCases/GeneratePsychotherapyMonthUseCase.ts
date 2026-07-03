@@ -19,7 +19,7 @@ export class GeneratePsychotherapyMonthUseCase {
             throw new Error('Mês inválido. Use o formato YYYY-MM');
         }
 
-        const patients = await this.repository.listPatients(tenantId);
+        const patients = await this.repository.listIndividualPatientsForBilling(tenantId);
 
         // Skip inactive patients — they don't generate monthly records.
         const activePatients = patients.filter(p => p.status !== 'inactive' && p.email !== PASTORAL_SENTINEL_EMAIL);
