@@ -742,7 +742,10 @@ export default function Groups() {
                               </td>
                               <td>
                                 <span className="text-small" style={{ textTransform: 'capitalize' }}>
-                                  {m.payment_type === 'monthly' ? 'Mensal' : 'Por sessão'}
+                                  {m.payment_type === 'monthly' ? 'Mensal' : 
+                                   m.payment_type === 'upfront' ? 'Total (Pacote)' : 
+                                   m.payment_type === 'installments' ? 'Parcelado' : 
+                                   'Mensal'}
                                 </span>
                               </td>
                               <td>
