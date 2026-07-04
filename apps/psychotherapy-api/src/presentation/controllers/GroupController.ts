@@ -101,7 +101,7 @@ export class GroupController {
         if (!tenantId) throw new AppError('Não autenticado', 401);
 
         const { id } = req.params;
-        const { paymentMethod, amountPaidCents } = req.body;
+        const { paymentMethod, amountPaidCents, observations } = req.body;
 
         const operatorId = (req as any).userId || tenantId; // fallback for tests
 
@@ -110,7 +110,8 @@ export class GroupController {
             operatorId,
             groupPaymentId: id,
             paymentMethod,
-            amountPaidCents
+            amountPaidCents,
+            observations
         });
 
         res.status(200).json({ success: true });

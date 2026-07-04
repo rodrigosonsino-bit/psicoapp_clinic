@@ -673,7 +673,7 @@ export default function Groups() {
                                           onClick={() => {
                                             const pending = m.payments?.find((p: any) => p.status === 'pending');
                                             if (pending) {
-                                              setPaymentToConfirm(pending);
+                                              setPaymentToConfirm({ ...pending, patientName: m.name });
                                               setShowPaymentModal(true);
                                             } else {
                                               toast.error('Nenhuma cobrança pendente gerada. Clique em Gerar Cobranças.');
@@ -690,7 +690,7 @@ export default function Groups() {
                                           onClick={() => {
                                             const pending = m.payments?.find((p: any) => p.status === 'pending' || p.status === 'partial');
                                             if (pending) {
-                                              setPaymentToConfirm(pending);
+                                              setPaymentToConfirm({ ...pending, patientName: m.name });
                                               setShowPaymentModal(true);
                                             }
                                           }}
@@ -1894,6 +1894,7 @@ function ConfirmPaymentModal({
 
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'debit_card' | 'credit_card'>('pix');
   const [amount, setAmount] = useState(String((payment.amount_cents || 0) / 100));
+  const [observations, setObservations] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1915,7 +1916,8 @@ function ConfirmPaymentModal({
         method: 'POST',
         body: JSON.stringify({
           paymentMethod,
-          amountPaidCents: amountCents
+          amountPaidCents: amountCents,
+          observations
         })
       });
       onSuccess();
@@ -1929,11 +1931,12 @@ function ConfirmPaymentModal({
   return (
     <div className="modal-overlay">
       <div className="modal-content animate-fade-in" style={{ maxWidth: '480px' }}>
-        <h2 className="text-h2 mb-2">Confirmar Pagamento</h2>
-        <p className="text-body mb-4" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-          Mês de referência: <span style={{ textTransform: 'capitalize' }}>{monthLabel(payment.reference_month)}</span><br />
-          Valor Original: <strong>{formatCurrency(payment.amount_cents)}</strong>
-        </p>
+        <h2 className="text-h2 mb-2">Editar Pagamento</h2>
+        {payment.patientName && (
+          <p className="text-body mb-4" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+            {payment.patientName}
+          </p>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group mb-4">
@@ -1975,7 +1978,7 @@ function ConfirmPaymentModal({
           </div>
 
           <div className="form-group mb-3">
-            <label className="form-label">Valor Efetivamente Pago (R$)</label>
+            <label className="form-label">Valor (R$)</label>
             <input
               type="number"
               className="form-control"
@@ -1985,6 +1988,19 @@ function ConfirmPaymentModal({
               step="0.01"
               required
               disabled={submitting}
+            />
+          </div>
+
+          <div className="form-group mb-4">
+            <label className="form-label">Observações</label>
+            <textarea
+              className="form-control"
+              rows={3}
+              value={observations}
+              onChange={e => setObservations(e.target.value)}
+              placeholder="Opcional"
+              disabled={submitting}
+              style={{ resize: 'vertical' }}
             />
           </div>
 
@@ -2002,7 +2018,7 @@ function ConfirmPaymentModal({
               className="btn btn-primary"
               disabled={submitting}
             >
-              {submitting ? 'Salvando...' : 'Confirmar pagamento'}
+              {submitting ? 'Salvando...' : 'Salvar alterações'}
             </button>
           </div>
         </form>

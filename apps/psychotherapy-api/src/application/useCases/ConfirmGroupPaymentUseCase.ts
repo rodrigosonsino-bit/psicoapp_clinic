@@ -18,6 +18,7 @@ export interface ConfirmGroupPaymentInput {
     groupPaymentId: string;
     paymentMethod: 'pix' | 'cash' | 'debit_card' | 'credit_card';
     amountPaidCents?: number;
+    observations?: string;
 }
 
 @injectable()
@@ -25,7 +26,7 @@ export class ConfirmGroupPaymentUseCase {
     constructor(@inject(Pool) private readonly dbPool: Pool) {}
 
     async execute(input: ConfirmGroupPaymentInput): Promise<void> {
-        const { tenantId, operatorId, groupPaymentId, paymentMethod, amountPaidCents } = input;
+        const { tenantId, operatorId, groupPaymentId, paymentMethod, amountPaidCents, observations } = input;
 
         if (!tenantId || !operatorId || !groupPaymentId) {
             throw new AppError('tenantId, operatorId e groupPaymentId são obrigatórios.', 400);
@@ -101,15 +102,15 @@ export class ConfirmGroupPaymentUseCase {
                     INSERT INTO financial_payments (
                         id, tenant_id, patient_id, monthly_record_id,
                         amount_cents, currency, paid_at, method, source, status,
-                        idempotency_key, created_by, group_payment_id
+                        idempotency_key, created_by, group_payment_id, notes
                     ) VALUES (
                         gen_random_uuid(), $1, $2, NULL,
                         $3, 'BRL', NOW(), $4, 'manual', 'confirmed',
-                        $5, $1, $6
+                        $5, $1, $6, $7
                     )
                     ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
                     RETURNING id
-                `, [tenantId, payment.patient_id, finalAmountPaid, ledgerMethod, idempotencyKey, groupPaymentId]);
+                `, [tenantId, payment.patient_id, finalAmountPaid, ledgerMethod, idempotencyKey, groupPaymentId, observations || null]);
 
                 if (ledgerInsert.rowCount === 0) {
                     const existing = await client.query(`
