@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Patient } from '../types/api';
+import type { Patient, TenantProfile, CardFeeRates } from '../types/api';
 import {
   Users, ChevronLeft, ChevronRight, ClipboardCheck,
   Clock, Calendar, CheckCircle2, XCircle, AlertCircle, RefreshCw,
@@ -35,12 +35,30 @@ interface GroupMember {
   patient_id: string;
   name: string;
   phone: string | null;
-  payment_type: string | null;
+  payment_type: BillingType | null;
   patient_status: string;
   payment_status: PaymentStatus;
   paid_sessions: number;
   expected_sessions: number;
   absences: number;
+}
+
+/** billing_type vindo do backend: 'group_default' (mensal), 'upfront' (pacote), 'exempt' (isento). */
+type BillingType = 'group_default' | 'upfront' | 'exempt' | string;
+
+interface GroupPaymentSummary {
+  patient_id: string;
+  group_member_id: string;
+  name: string;
+  payment_type: BillingType;
+  total_paid_cents: number;
+  total_net_cents: number;
+  total_fee_cents: number;
+  payments_count: number;
+  total_installments: number | null;
+  monthly_fee_cents: number | null;
+  payment_status: PaymentStatus;
+  payments: any[];
 }
 
 interface SessionRecord {
@@ -62,6 +80,21 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   partial: '🟡 Parcial',
   pending: '🔴 Pendente',
 };
+
+/**
+ * billing_type real do backend só assume 'group_default' | 'upfront' | 'exempt'
+ * (therapy_group_member_billing_policies, migration 079) — não 'monthly'/'installments',
+ * que nunca chegam a existir. "Parcelado" não é um tipo de plano nesta modelagem: um membro
+ * mensal que pré-pagou meses futuros (via "Adiantar Parcelas") continua sendo 'group_default'.
+ */
+function billingTypeLabel(type: BillingType | null | undefined): string {
+  switch (type) {
+    case 'upfront': return 'Pacote Completo';
+    case 'exempt': return 'Isento';
+    case 'group_default':
+    default: return 'Mensal';
+  }
+}
 
 
 function formatCurrency(cents: number) {
@@ -106,7 +139,7 @@ export default function Groups() {
   // Novos estados para CRUD de grupos e pagamentos
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupToEdit, setGroupToEdit] = useState<TherapyGroup | null>(null);
-  const [payments, setPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<GroupPaymentSummary[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentToConfirm, setPaymentToConfirm] = useState<any | null>(null);
@@ -130,6 +163,22 @@ export default function Groups() {
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editingNotesValue, setEditingNotesValue] = useState('');
   const [savingRecordId, setSavingRecordId] = useState<string | null>(null);
+
+  // Taxas de cartão configuradas no perfil (sugestão no modal de confirmação de pagamento).
+  // Buscado uma vez aqui (não existe contexto/hook de perfil compartilhado no app hoje) e
+  // repassado como prop pro ConfirmPaymentModal.
+  const [cardFeeRates, setCardFeeRates] = useState<CardFeeRates | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchApi<TenantProfile>('/api/profile');
+        setCardFeeRates(data.cardFeeRates ?? null);
+      } catch {
+        // silencioso: sem sugestão de taxa, modal continua funcionando com entrada manual
+      }
+    })();
+  }, []);
 
   const loadUpfrontEligibleMembers = useCallback(async (groupId: string) => {
     try {
@@ -247,7 +296,7 @@ export default function Groups() {
   const loadPayments = useCallback(async (groupId: string, month: string) => {
     try {
       setLoadingPayments(true);
-      const res = await fetchApi<{ data: any[] }>(
+      const res = await fetchApi<{ data: GroupPaymentSummary[] }>(
         `/api/psychotherapy/groups/${groupId}/payments?month=${month}`
       );
       setPayments(res.data);
@@ -593,6 +642,7 @@ export default function Groups() {
                           <tr>
                             <th>Paciente</th>
                             <th>Status</th>
+                            <th>Tipo</th>
                             <th>Total Pago</th>
                             <th style={{ width: '150px', textAlign: 'right' }}>Ações</th>
                           </tr>
@@ -670,6 +720,9 @@ export default function Groups() {
                                       <span className={`payment-dot ${m.payment_status}`} />
                                       {PAYMENT_LABEL[m.payment_status as PaymentStatus]}
                                     </span>
+                                  </td>
+                                  <td>
+                                    <span className="text-small">{billingTypeLabel(m.payment_type)}</span>
                                   </td>
                                   <td>
                                     <strong>{formatCurrency(m.total_paid_cents)}</strong>
@@ -778,11 +831,8 @@ export default function Groups() {
                                 </span>
                               </td>
                               <td>
-                                <span className="text-small" style={{ textTransform: 'capitalize' }}>
-                                  {m.payment_type === 'monthly' ? 'por mês' : 
-                                   m.payment_type === 'upfront' ? 'total' : 
-                                   m.payment_type === 'installments' ? 'parcelado' : 
-                                   'por mês'}
+                                <span className="text-small">
+                                  {billingTypeLabel(m.payment_type)}
                                 </span>
                               </td>
                               <td>
@@ -994,6 +1044,7 @@ export default function Groups() {
       {showPaymentModal && selectedGroup && paymentToConfirm && (
         <ConfirmPaymentModal
           payment={paymentToConfirm}
+          cardFeeRates={cardFeeRates}
           onClose={() => {
             setShowPaymentModal(false);
             setPaymentToConfirm(null);
@@ -1166,19 +1217,30 @@ function FinancialSummary({
 }: {
   group: TherapyGroup;
   members: GroupMember[];
-  payments: any[];
+  payments: GroupPaymentSummary[];
   loading: boolean;
 }) {
   if (loading || members.length === 0) return null;
 
   const feePerMember = group.monthly_fee_cents ?? 0;
-  const totalExpected = members.length * feePerMember;
-  const totalReceived = payments.reduce((sum: number, p: any) => sum + (p.total_paid_cents || 0), 0);
+
+  // Membros isentos não geram expectativa; membros de pacote (upfront) já quitado (payment_status
+  // 'paid' via pagamento à vista, ver listGroupPayments) também não — o valor deles já entrou
+  // no "Recebido" no mês em que o pacote foi pago, não deve continuar "esperado" todo mês depois.
+  const expectedForPayment = (p: GroupPaymentSummary): number => {
+    if (p.payment_type === 'exempt') return 0;
+    if (p.payment_type === 'upfront' && p.payment_status === 'paid') return 0;
+    return p.monthly_fee_cents ?? feePerMember;
+  };
+
+  const totalExpected = payments.reduce((sum, p) => sum + expectedForPayment(p), 0);
+  const totalReceived = payments.reduce((sum, p) => sum + (p.total_paid_cents || 0), 0);
+  const totalFees = payments.reduce((sum, p) => sum + (p.total_fee_cents || 0), 0);
+  const totalNetReceived = payments.reduce((sum, p) => sum + (p.total_net_cents || 0), 0);
   // Cálculo por paciente: evita que pagamento excedente de um membro mascare dívida de outro
-  const totalPending = payments.reduce((sum: number, p: any) => {
-    const fee = p.monthly_fee_cents ?? feePerMember;
+  const totalPending = payments.reduce((sum, p) => {
     const paid = p.total_paid_cents ?? 0;
-    return sum + Math.max(0, fee - paid);
+    return sum + Math.max(0, expectedForPayment(p) - paid);
   }, 0);
 
   const paidCount = payments.filter((p: any) => p.payment_status === 'paid').length;
@@ -1211,6 +1273,24 @@ function FinancialSummary({
             <span className="fin-kpi-value">{formatCurrency(totalPending)}</span>
           </div>
         </div>
+        {totalFees > 0 && (
+          <div className="fin-kpi fin-kpi--neutral">
+            <span className="fin-kpi-icon"><CreditCard size={15} /></span>
+            <div>
+              <span className="fin-kpi-label">Taxas descontadas</span>
+              <span className="fin-kpi-value">{formatCurrency(totalFees)}</span>
+            </div>
+          </div>
+        )}
+        {totalFees > 0 && (
+          <div className="fin-kpi fin-kpi--success">
+            <span className="fin-kpi-icon"><Wallet size={15} /></span>
+            <div>
+              <span className="fin-kpi-label">Recebido líquido</span>
+              <span className="fin-kpi-value">{formatCurrency(totalNetReceived)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="fin-status-row">
@@ -1898,9 +1978,10 @@ function GroupFormModal({
 // ── Payment Modal (Registrar Pagamento de Grupo) ──────────────────────────────────
 
 function ConfirmPaymentModal({
-  payment, onClose, onSuccess
+  payment, cardFeeRates, onClose, onSuccess
 }: {
   payment: any;
+  cardFeeRates?: CardFeeRates | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -1912,11 +1993,31 @@ function ConfirmPaymentModal({
   const [netAmount, setNetAmount] = useState(''); // vazio = sem taxa (líquido = valor pago)
   const [observations, setObservations] = useState(payment.notes || '');
 
+  // Parcelas do cartão: campo local/efêmero, usado só pra procurar a taxa sugerida em
+  // cardFeeRates. NÃO é o mesmo conceito de total_installments (parcelamento da mensalidade
+  // do curso) — aqui é o parcelamento da transação na maquininha/gateway.
+  const [cardInstallments, setCardInstallments] = useState(1);
+  // Uma vez que o operador edite o líquido manualmente, a sugestão nunca mais sobrescreve.
+  const [netAmountTouched, setNetAmountTouched] = useState(false);
+
   const nominalCents = payment.amount_cents || 0;
   const paidCents = Math.round((parseFloat(amount) || 0) * 100);
   const netCents = netAmount.trim() === '' ? paidCents : Math.round((parseFloat(netAmount) || 0) * 100);
   const discountCents = Math.max(0, nominalCents - paidCents);
   const feeCents = Math.max(0, paidCents - netCents);
+
+  const suggestedFeeBps = paymentMethod === 'credit_card'
+    ? cardFeeRates?.[String(cardInstallments)] ?? null
+    : null;
+
+  useEffect(() => {
+    if (netAmountTouched || suggestedFeeBps === null || paidCents <= 0) return;
+    const suggestedNetCents = Math.round(paidCents * (1 - suggestedFeeBps / 10000));
+    if (suggestedNetCents > 0) {
+      setNetAmount((suggestedNetCents / 100).toFixed(2));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestedFeeBps, cardInstallments, paidCents, paymentMethod]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1953,7 +2054,11 @@ function ConfirmPaymentModal({
           paymentMethod,
           amountPaidCents: amountCents,
           ...(netAmountCents !== undefined ? { netAmountCents } : {}),
-          observations
+          observations,
+          // Auditoria: registra o que originou a sugestão de líquido exibida (mesmo que o
+          // operador tenha editado o valor depois) — não é usado para recalcular nada.
+          ...(paymentMethod === 'credit_card' ? { cardInstallments } : {}),
+          ...(suggestedFeeBps !== null ? { appliedFeeBps: suggestedFeeBps } : {})
         })
       });
       onSuccess();
@@ -2027,13 +2132,34 @@ function ConfirmPaymentModal({
             />
           </div>
 
+          {paymentMethod === 'credit_card' && (
+            <div className="form-group mb-3">
+              <label className="form-label">Parcelas no cartão</label>
+              <select
+                className="form-control"
+                value={cardInstallments}
+                onChange={e => setCardInstallments(Number(e.target.value))}
+                disabled={submitting}
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                  <option key={n} value={n}>{n}x</option>
+                ))}
+              </select>
+              {suggestedFeeBps !== null && (
+                <p className="text-small" style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Taxa configurada para {cardInstallments}x: {(suggestedFeeBps / 100).toFixed(2)}% — líquido sugerido abaixo (editável).
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="form-group mb-3">
             <label className="form-label">Crédito Líquido em Conta (Opcional)</label>
             <input
               type="number"
               className="form-control"
               value={netAmount}
-              onChange={e => setNetAmount(e.target.value)}
+              onChange={e => { setNetAmount(e.target.value); setNetAmountTouched(true); }}
               min="0.01"
               step="0.01"
               placeholder="Deixe em branco se não houve taxa (cartão/adquirente)"

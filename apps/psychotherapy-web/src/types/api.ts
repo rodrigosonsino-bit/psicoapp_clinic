@@ -164,6 +164,9 @@ export interface BookingPageSettings {
   welcomeMessage?: string | null;
 }
 
+/** Taxa de cartão sugerida por nº de parcelas (chave "1"-"12"), em basis points (350 = 3,50%). */
+export type CardFeeRates = Record<string, number>;
+
 export interface TenantProfile {
   id: string;
   name: string;
@@ -175,6 +178,7 @@ export interface TenantProfile {
   twoFactorEnabled?: boolean;
   bookingPage?: BookingPageSettings | null;
   whatsappReminderTemplate?: string | null;
+  cardFeeRates?: CardFeeRates | null;
 }
 
 export interface DashboardAnalytics {

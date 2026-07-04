@@ -93,6 +93,10 @@ const confirmGroupPaymentSchema = z.object({
     // Crédito líquido após taxa da adquirente. Omitido = sem taxa (líquido = bruto).
     netAmountCents: z.number().int().positive().optional(),
     observations: z.string().max(500).optional(),
+    // Auditoria da sugestão de taxa (não é fonte da verdade financeira — só registra o que
+    // originou o netAmountCents sugerido, pra permitir reconstruir depois). Opcionais.
+    cardInstallments: z.number().int().min(1).max(12).optional(),
+    appliedFeeBps: z.number().int().min(0).max(10000).optional(),
 });
 
 const voidGroupPaymentSchema = z.object({
@@ -141,12 +145,30 @@ const monthlyRecordSchema = z.object({
     previousMonthPaidCents: z.number().int().nonnegative().optional()
 });
 
+const bookingPageSchema = z.object({
+    professionLabel: z.string().nullable().optional(),
+    displayName: z.string().nullable().optional(),
+    accentColor: z.string().nullable().optional(),
+    welcomeMessage: z.string().nullable().optional()
+});
+
+// Chave = nº de parcelas ("1"-"12"), valor = taxa em basis points (350 = 3,50%).
+const cardFeeRatesSchema = z.record(
+    z.string().regex(/^([1-9]|1[0-2])$/, 'Chave deve ser um número de parcelas entre 1 e 12'),
+    z.number().int().min(0).max(10000)
+);
+
 const updateProfileSchema = z.object({
     fullName: z.string().min(1).nullable().optional(),
     document: z.string().nullable().optional(),
     professionalId: z.string().nullable().optional(),
     address: z.string().nullable().optional(),
-    whatsappReminderTemplate: z.string().max(1000).nullable().optional()
+    whatsappReminderTemplate: z.string().max(1000).nullable().optional(),
+    // BUG PRÉ-EXISTENTE corrigido aqui: bookingPage nunca esteve neste schema, então o Zod
+    // descartava o campo silenciosamente antes de chegar no controller — a personalização da
+    // página de agendamento nunca era persistida de fato via PUT /api/profile.
+    bookingPage: bookingPageSchema.nullable().optional(),
+    cardFeeRates: cardFeeRatesSchema.nullable().optional()
 });
 
 const issueReceiptSchema = z.object({

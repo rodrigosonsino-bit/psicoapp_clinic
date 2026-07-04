@@ -382,8 +382,21 @@ export class GroupController {
                 COALESCE(gp_status.payment_status, 'pending') AS payment_status
             FROM therapy_group_members tgm
             JOIN psychotherapy_patients p ON p.id = tgm.patient_id
-            LEFT JOIN therapy_group_member_billing_policies bp 
-              ON bp.member_id = tgm.id AND bp.status = 'active'
+            -- Política vigente NO MÊS CONSULTADO (não CURRENT_DATE) e do tenant certo — evita
+            -- pegar uma política histórica que ainda está status='active' com valid_until no
+            -- passado (ConfirmGroupPaymentUseCase só fecha valid_until, nunca muda status ao
+            -- ativar uma nova política upfront).
+            LEFT JOIN LATERAL (
+                SELECT billing_type
+                FROM therapy_group_member_billing_policies bp
+                WHERE bp.member_id = tgm.id
+                  AND bp.tenant_id = $2
+                  AND bp.status = 'active'
+                  AND bp.valid_from <= (to_date($3, 'YYYY-MM') + INTERVAL '1 month' - INTERVAL '1 day')
+                  AND (bp.valid_until IS NULL OR bp.valid_until >= to_date($3, 'YYYY-MM'))
+                ORDER BY bp.valid_from DESC
+                LIMIT 1
+            ) bp ON true
             -- Presença: contagem de sessões do mês para este membro neste grupo
             LEFT JOIN LATERAL (
                 SELECT
@@ -401,18 +414,23 @@ export class GroupController {
                 SELECT
                     CASE
                         WHEN tg.monthly_fee_cents IS NULL OR tg.monthly_fee_cents = 0 THEN 'paid'
+                        -- Pacote pago cobre o mês consultado se a compra ocorreu ATÉ esse mês
+                        -- (não em todo mês indiscriminadamente — meses anteriores à compra
+                        -- podem ter dívida real não quitada, que o pacote não cobre).
                         WHEN EXISTS (
-                            SELECT 1 FROM group_payments gp2 
-                            WHERE gp2.group_member_id = tgm.id AND gp2.tenant_id = $2 AND gp2.status = 'paid' AND gp2.charge_type IN ('upfront', 'installments')
+                            SELECT 1 FROM group_payments gp2
+                            WHERE gp2.group_member_id = tgm.id AND gp2.tenant_id = $2 AND gp2.status = 'paid'
+                              AND gp2.charge_type = 'course_upfront'
+                              AND TO_CHAR(gp2.paid_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') <= $3
                         ) THEN 'paid'
-                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid' AND gp.charge_type = 'monthly'), 0) = 0 AND NOT EXISTS (SELECT 1 FROM group_payments gp3 WHERE gp3.group_member_id = tgm.id AND gp3.charge_type IN ('upfront', 'installments')) THEN 'pending'
+                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid' AND gp.charge_type = 'monthly'), 0) = 0 AND NOT EXISTS (SELECT 1 FROM group_payments gp3 WHERE gp3.group_member_id = tgm.id AND gp3.tenant_id = $2 AND gp3.charge_type = 'course_upfront') THEN 'pending'
                         WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid' AND gp.charge_type = 'monthly'), 0) >= tg.monthly_fee_cents THEN 'paid'
                         ELSE 'partial'
                     END AS payment_status
                 FROM therapy_groups tg
                 LEFT JOIN group_payments gp
                     ON  gp.group_member_id = tgm.id
-                    AND (gp.reference_month = $3 OR gp.charge_type IN ('upfront', 'installments'))
+                    AND (gp.reference_month = $3 OR gp.charge_type = 'course_upfront')
                     AND gp.tenant_id       = $2
                 WHERE tg.id = tgm.group_id
                 GROUP BY tg.monthly_fee_cents, tgm.id
@@ -682,6 +700,7 @@ export class GroupController {
                 p.id            AS patient_id,
                 tgm.id          AS group_member_id,
                 p.name,
+                COALESCE(bp.billing_type, 'monthly') AS payment_type,
                 COALESCE(SUM(gp.amount_paid_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_paid_cents,
                 COALESCE(SUM(gp.net_amount_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_net_cents,
                 COALESCE(SUM(gp.processing_fee_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_fee_cents,
@@ -690,6 +709,14 @@ export class GroupController {
                 tg.monthly_fee_cents,
                 CASE
                     WHEN tg.monthly_fee_cents IS NULL OR tg.monthly_fee_cents = 0 THEN 'paid'
+                    -- Pacote pago cobre o mês consultado se a compra ocorreu ATÉ esse mês (não
+                    -- em todo mês — evita duplicar a mesma cobrança em toda competência vista).
+                    WHEN EXISTS (
+                        SELECT 1 FROM group_payments gp2
+                        WHERE gp2.group_member_id = tgm.id AND gp2.tenant_id = $2 AND gp2.status = 'paid'
+                          AND gp2.charge_type = 'course_upfront'
+                          AND TO_CHAR(gp2.paid_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') <= $1
+                    ) THEN 'paid'
                     WHEN COALESCE(SUM(gp.amount_paid_cents) FILTER (WHERE gp.status = 'paid'), 0) = 0 THEN 'pending'
                     WHEN COALESCE(SUM(gp.amount_paid_cents) FILTER (WHERE gp.status = 'paid'), 0) >= tg.monthly_fee_cents THEN 'paid'
                     ELSE 'partial'
@@ -717,15 +744,33 @@ export class GroupController {
             FROM therapy_group_members tgm
             JOIN psychotherapy_patients p  ON p.id  = tgm.patient_id
             JOIN therapy_groups tg         ON tg.id = tgm.group_id
+            -- Política vigente NO MÊS CONSULTADO (mesmo padrão de listGroupMembers).
+            LEFT JOIN LATERAL (
+                SELECT billing_type
+                FROM therapy_group_member_billing_policies bp
+                WHERE bp.member_id = tgm.id
+                  AND bp.tenant_id = $2
+                  AND bp.status = 'active'
+                  AND bp.valid_from <= (to_date($1, 'YYYY-MM') + INTERVAL '1 month' - INTERVAL '1 day')
+                  AND (bp.valid_until IS NULL OR bp.valid_until >= to_date($1, 'YYYY-MM'))
+                ORDER BY bp.valid_from DESC
+                LIMIT 1
+            ) bp ON true
+            -- Pagamento de pacote (course_upfront) só entra nos totais/lista do MÊS EM QUE
+            -- FOI PAGO (paid_at) — não em todo mês, senão o mesmo valor apareceria somado em
+            -- cada competência vista.
             LEFT JOIN group_payments gp
                 ON  gp.group_member_id = tgm.id
-                AND (gp.reference_month = $1 OR gp.charge_type IN ('upfront', 'installments'))
+                AND (
+                    gp.reference_month = $1
+                    OR (gp.charge_type = 'course_upfront' AND TO_CHAR(gp.paid_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') = $1)
+                )
                 AND gp.tenant_id       = $2
                 AND gp.status != 'voided'
             WHERE tgm.group_id   = $3
               AND tgm.left_at   IS NULL
               AND p.tenant_id    = $2
-            GROUP BY p.id, p.name, tg.monthly_fee_cents, tgm.id
+            GROUP BY p.id, p.name, bp.billing_type, tg.monthly_fee_cents, tgm.id
             ORDER BY p.name ASC;
         `, [effectiveMonth, tenantId, groupId]);
 

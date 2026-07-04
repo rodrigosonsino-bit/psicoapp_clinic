@@ -22,6 +22,10 @@ export interface ConfirmGroupPaymentInput {
      *  assume-se igual ao valor pago (taxa zero) — caso comum de dinheiro/Pix sem taxa. */
     netAmountCents?: number;
     observations?: string;
+    /** Auditoria da sugestão de taxa exibida no modal — não recalculada nem validada aqui,
+     *  a fonte da verdade financeira continua sendo netAmountCents. */
+    cardInstallments?: number;
+    appliedFeeBps?: number;
 }
 
 @injectable()
@@ -29,7 +33,7 @@ export class ConfirmGroupPaymentUseCase {
     constructor(@inject(Pool) private readonly dbPool: Pool) {}
 
     async execute(input: ConfirmGroupPaymentInput): Promise<void> {
-        const { tenantId, operatorId, groupPaymentId, paymentMethod, amountPaidCents, netAmountCents, observations } = input;
+        const { tenantId, operatorId, groupPaymentId, paymentMethod, amountPaidCents, netAmountCents, observations, cardInstallments, appliedFeeBps } = input;
 
         if (!tenantId || !operatorId || !groupPaymentId) {
             throw new AppError('tenantId, operatorId e groupPaymentId são obrigatórios.', 400);
@@ -115,9 +119,11 @@ export class ConfirmGroupPaymentUseCase {
                         processing_fee_cents = $4,
                         original_amount_cents = COALESCE(original_amount_cents, amount_cents),
                         notes               = $5,
+                        card_installments   = $7,
+                        applied_fee_bps     = $8,
                         updated_at          = NOW()
                     WHERE id = $6
-                `, [paymentMethod, finalAmountPaid, finalNetAmount, processingFeeCents, observations || null, groupPaymentId]);
+                `, [paymentMethod, finalAmountPaid, finalNetAmount, processingFeeCents, observations || null, groupPaymentId, cardInstallments ?? null, appliedFeeBps ?? null]);
 
                 // DO NOTHING (não DO UPDATE): campos de valor são imutáveis no ledger (trigger
                 // 080) — uma tentativa concorrente com valores diferentes precisa retornar 409
@@ -126,17 +132,19 @@ export class ConfirmGroupPaymentUseCase {
                     INSERT INTO financial_payments (
                         id, tenant_id, patient_id, monthly_record_id,
                         amount_cents, net_amount_cents, processing_fee_cents,
+                        card_installments, applied_fee_bps,
                         currency, paid_at, method, source, status,
                         idempotency_key, created_by, group_payment_id
                     ) VALUES (
                         gen_random_uuid(), $1, $2, NULL,
                         $3, $4, $5,
+                        $9, $10,
                         'BRL', NOW(), $6, 'manual', 'confirmed',
                         $7, $1, $8
                     )
                     ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
                     RETURNING id
-                `, [tenantId, payment.patient_id, finalAmountPaid, finalNetAmount, processingFeeCents, ledgerMethod, idempotencyKey, groupPaymentId]);
+                `, [tenantId, payment.patient_id, finalAmountPaid, finalNetAmount, processingFeeCents, ledgerMethod, idempotencyKey, groupPaymentId, cardInstallments ?? null, appliedFeeBps ?? null]);
 
                 if (ledgerInsert.rowCount === 0) {
                     const existing = await client.query(`

@@ -411,7 +411,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = this.validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template, card_fee_rates
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
@@ -421,6 +421,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile> {
         const tenantId = this.validateTenantId(data.tenantId);
+
+        // card_fee_rates precisa distinguir "não veio no payload" (não mexe) de "veio null"
+        // (limpa) — diferente dos demais campos, que usam COALESCE e por isso nunca
+        // conseguem limpar um valor já salvo enviando null (mesma limitação de bookingPage).
+        const cardFeeRatesProvided = data.cardFeeRates !== undefined;
+        const cardFeeRatesValue = data.cardFeeRates === null || data.cardFeeRates === undefined
+            ? null
+            : JSON.stringify(data.cardFeeRates);
+
         const result = await this.dbPool.query(`
             UPDATE tenants
             SET
@@ -430,9 +439,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 address = COALESCE($5, address),
                 booking_page = COALESCE($6::jsonb, booking_page),
                 whatsapp_reminder_template = COALESCE($7, whatsapp_reminder_template),
+                card_fee_rates = CASE WHEN $8 THEN $9::jsonb ELSE card_fee_rates END,
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template, card_fee_rates;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
@@ -440,7 +450,9 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             data.professionalId !== undefined ? data.professionalId : null,
             data.address !== undefined ? data.address : null,
             data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null,
-            data.whatsappReminderTemplate !== undefined ? data.whatsappReminderTemplate : null
+            data.whatsappReminderTemplate !== undefined ? data.whatsappReminderTemplate : null,
+            cardFeeRatesProvided,
+            cardFeeRatesValue
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Tenant não encontrado');
@@ -2277,7 +2289,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.address,
             row.totp_enabled || false,
             row.booking_page ?? null,
-            row.whatsapp_reminder_template ?? null
+            row.whatsapp_reminder_template ?? null,
+            row.card_fee_rates ?? null
         );
     }
 

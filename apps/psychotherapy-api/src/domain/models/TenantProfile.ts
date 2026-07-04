@@ -9,6 +9,9 @@ export interface BookingPageSettings {
     welcomeMessage?: string | null;  // mensagem de boas-vindas / mini-bio
 }
 
+/** Taxa de cartão sugerida por nº de parcelas (chave "1"-"12"), em basis points (350 = 3,50%). */
+export type CardFeeRates = Record<string, number>;
+
 export class TenantProfile {
     constructor(
         public readonly id: string,
@@ -20,7 +23,8 @@ export class TenantProfile {
         public readonly address: string | null,
         public readonly twoFactorEnabled: boolean = false,
         public readonly bookingPage: BookingPageSettings | null = null,
-        public readonly whatsappReminderTemplate: string | null = null
+        public readonly whatsappReminderTemplate: string | null = null,
+        public readonly cardFeeRates: CardFeeRates | null = null
     ) {}
 
     toJSON() {
@@ -34,7 +38,8 @@ export class TenantProfile {
             address: this.address,
             twoFactorEnabled: this.twoFactorEnabled,
             bookingPage: this.bookingPage,
-            whatsappReminderTemplate: this.whatsappReminderTemplate
+            whatsappReminderTemplate: this.whatsappReminderTemplate,
+            cardFeeRates: this.cardFeeRates
         };
     }
 }

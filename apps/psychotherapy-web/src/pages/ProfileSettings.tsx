@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, User, CreditCard, Shield, MapPin, ShieldCheck, ShieldOff, Copy, CalendarDays, CheckCircle, XCircle, Smartphone, RefreshCw, Power, Loader2, Palette, MessageSquare } from 'lucide-react';
 import { fetchApi } from '../services/api';
-import type { TenantProfile, TotpSetupResult, GoogleCalendarStatus, WhatsappStatus, BookingPageSettings } from '../types/api';
+import type { TenantProfile, TotpSetupResult, GoogleCalendarStatus, WhatsappStatus, BookingPageSettings, CardFeeRates } from '../types/api';
 import { useToast } from '../context/ToastContext';
 import Skeleton from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
@@ -115,6 +115,7 @@ export default function ProfileSettings() {
       />
 
       <BookingPageSection />
+      <CardFeeRatesSection />
 
       <div className="card profile-card mt-4">
         <form onSubmit={handleSubmit} className="profile-form">
@@ -859,6 +860,115 @@ function BookingPageSection() {
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{previewWelcome}</span>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Taxas de cartão (sugestão de líquido no modal de pagamento de grupo) ──────────
+
+const CARD_INSTALLMENT_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
+
+function CardFeeRatesSection() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  // Editado em % (string, ex: "3.50") — convertido pra basis points só ao salvar.
+  const [ratesPercent, setRatesPercent] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchApi<TenantProfile>('/api/profile');
+        const rates = data.cardFeeRates ?? {};
+        const initial: Record<number, string> = {};
+        for (const n of CARD_INSTALLMENT_OPTIONS) {
+          const bps = rates[String(n)];
+          initial[n] = bps !== undefined ? (bps / 100).toFixed(2) : '';
+        }
+        setRatesPercent(initial);
+      } catch {
+        // silencioso: a seção fica vazia, sem sugestão configurada
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const cardFeeRates: CardFeeRates = {};
+      for (const n of CARD_INSTALLMENT_OPTIONS) {
+        const raw = (ratesPercent[n] ?? '').trim();
+        if (raw === '') continue;
+        const percent = parseFloat(raw);
+        if (isNaN(percent) || percent < 0 || percent > 100) {
+          toast.error(`Taxa inválida para ${n}x. Use um valor entre 0 e 100.`);
+          setSaving(false);
+          return;
+        }
+        cardFeeRates[String(n)] = Math.round(percent * 100); // % -> basis points
+      }
+      await fetchApi<TenantProfile>('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ cardFeeRates }),
+      });
+      toast.success('Taxas de cartão atualizadas!');
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao salvar as taxas de cartão.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="card profile-card mt-4">
+        <Skeleton width="220px" height="1.25rem" />
+        <Skeleton width="100%" height="4rem" className="mt-3" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="card profile-card mt-4">
+      <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem' }}>
+        <CreditCard size={20} style={{ color: 'var(--brand-primary)' }} />
+        <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-primary)' }}>Taxas de Cartão</h2>
+      </div>
+      <p className="text-body" style={{ marginBottom: '1.25rem' }}>
+        Configure a taxa da operadora por número de parcelas. Ao confirmar um pagamento de grupo no cartão de crédito,
+        o sistema sugere o valor líquido com base nessa taxa — o valor final continua editável antes de confirmar.
+        Deixe em branco as parcelas sem taxa configurada (nenhuma sugestão será feita para elas).
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem' }}>
+        {CARD_INSTALLMENT_OPTIONS.map(n => (
+          <div key={n} className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">{n}x</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                className="form-control"
+                min="0"
+                max="100"
+                step="0.01"
+                placeholder="—"
+                value={ratesPercent[n] ?? ''}
+                onChange={e => setRatesPercent(prev => ({ ...prev, [n]: e.target.value }))}
+                disabled={saving}
+              />
+              <span className="text-small" style={{ color: 'var(--text-muted)' }}>%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end mt-4">
+        <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          <Save size={18} /> {saving ? 'Salvando...' : 'Salvar'}
+        </button>
       </div>
     </div>
   );

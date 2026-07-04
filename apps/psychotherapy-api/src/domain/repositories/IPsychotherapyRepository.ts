@@ -65,6 +65,8 @@ export interface UpdateTenantProfileDTO {
     address?: string | null;
     bookingPage?: import('../models/TenantProfile').BookingPageSettings | null;
     whatsappReminderTemplate?: string | null;
+    /** ausente = não altera; null = limpa a configuração; objeto = substitui por inteiro. */
+    cardFeeRates?: import('../models/TenantProfile').CardFeeRates | null;
 }
 
 export interface SaveReceiptDTO {

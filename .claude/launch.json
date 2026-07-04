@@ -8,6 +8,14 @@
       "port": 5173,
       "autoPort": false,
       "cwd": "C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp/apps/psychotherapy-web"
+    },
+    {
+      "name": "psychotherapy-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:psychotherapy-api"],
+      "port": 3001,
+      "autoPort": false,
+      "cwd": "C:/Users/Rodrigo/.gemini/antigravity/scratch/psicoapp"
     }
   ]
 }

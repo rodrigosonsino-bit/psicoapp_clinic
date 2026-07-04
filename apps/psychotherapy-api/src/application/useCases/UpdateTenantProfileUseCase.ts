@@ -45,6 +45,8 @@ export class UpdateTenantProfileUseCase {
         }
 
         // bookingPage só é tocado quando enviado; sanitiza para evitar conteúdo inválido.
+        // cardFeeRates passa direto (formato/faixa já validados pelo Zod na rota) — undefined
+        // e null são distintos e ambos preservados aqui (ver updateTenantProfile no repositório).
         const sanitized: UpdateTenantProfileDTO = {
             ...data,
             bookingPage: data.bookingPage !== undefined && data.bookingPage !== null
@@ -52,7 +54,8 @@ export class UpdateTenantProfileUseCase {
                 : undefined,
             whatsappReminderTemplate: data.whatsappReminderTemplate !== undefined
                 ? sanitizeReminderTemplate(data.whatsappReminderTemplate)
-                : undefined
+                : undefined,
+            cardFeeRates: data.cardFeeRates
         };
 
         return this.repository.updateTenantProfile(sanitized);

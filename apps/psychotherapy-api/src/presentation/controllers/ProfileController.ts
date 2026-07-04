@@ -36,7 +36,10 @@ export class ProfileController {
             professionalId: data.professionalId,
             address: data.address,
             bookingPage: data.bookingPage,
-            whatsappReminderTemplate: data.whatsappReminderTemplate
+            whatsappReminderTemplate: data.whatsappReminderTemplate,
+            // 'cardFeeRates' in data (não data.cardFeeRates !== undefined) preserva a
+            // distinção entre "campo ausente" e "campo enviado como null" até o repositório.
+            ...('cardFeeRates' in data ? { cardFeeRates: data.cardFeeRates } : {})
         });
 
         res.status(200).json(updatedProfile.toJSON());
