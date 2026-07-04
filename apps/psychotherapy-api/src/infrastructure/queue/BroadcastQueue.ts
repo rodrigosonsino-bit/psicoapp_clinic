@@ -14,7 +14,19 @@ export class BroadcastQueue {
     public readonly queue: Queue;
 
     constructor() {
-        this.queue = new Queue(BROADCAST_QUEUE_NAME, { connection: getBroadcastRedisConnection() as any });
+        this.queue = new Queue(BROADCAST_QUEUE_NAME, {
+            connection: getBroadcastRedisConnection() as any,
+            // O construtor do Queue faz waitUntilReady() + um hset() de metadados
+            // incondicionais, o que força a conexão mesmo com lazyConnect no ioredis
+            // e mesmo com a feature desligada (BroadcastQueue é resolvido sempre que
+            // as rotas sobem, via BroadcastController). As 3 flags abaixo eliminam
+            // toda comunicação com o Redis na construção; só ocorre no primeiro uso
+            // real (addRecipientJob), que nunca acontece com ENABLE_BROADCAST_MESSAGES
+            // desligado.
+            skipVersionCheck: true,
+            skipWaitingForReady: true,
+            skipMetasUpdate: true
+        });
     }
 
     async addRecipientJob(recipientId: string): Promise<void> {
