@@ -558,7 +558,10 @@ export default function Groups() {
                           try {
                             await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/charges`, {
                               method: 'POST',
-                              body: JSON.stringify({ referenceMonth: currentMonth })
+                              body: JSON.stringify({ 
+                                referenceMonth: currentMonth,
+                                dueDate: `${currentMonth}-10` // Default due date to the 10th of the month
+                              })
                             });
                             toast.success('Cobranças geradas com sucesso!');
                             loadPayments(selectedGroup.id, currentMonth);
