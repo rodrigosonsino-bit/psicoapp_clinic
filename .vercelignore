@@ -1,0 +1,8 @@
+node_modules
+.git
+**/*.exe
+**/.cache
+apps/scheduler-web/desktop/dist-desktop
+apps/scheduler-web/desktop/dist-new
+apps/scheduler-web/desktop/dist-package
+**/*.zip
