@@ -63,7 +63,7 @@ export class CreateGroupChargesUseCase {
                 LEFT JOIN therapy_group_member_billing_policies p 
                   ON p.member_id = m.id 
                  AND p.status = 'active'
-                 AND p.valid_from <= $3::date 
+                 AND p.valid_from < ($3::date + INTERVAL '1 month') 
                  AND (p.valid_until IS NULL OR p.valid_until >= $3::date)
                 WHERE m.group_id = $1 
                   AND m.tenant_id = $2
