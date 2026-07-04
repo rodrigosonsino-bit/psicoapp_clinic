@@ -36,7 +36,12 @@ const monthParamSchema = z.object({
 const listPatientsQuerySchema = z.object({
     page: z.string().transform(val => Math.max(1, parseInt(val, 10) || 1)).optional().default('1'),
     limit: z.string().transform(val => Math.min(100, Math.max(1, parseInt(val, 10) || 20))).optional().default('20'),
-    search: z.string().max(100).optional()
+    search: z.string().max(100).optional(),
+    // scope=individual filtra pacientes com individual_therapy_enabled=TRUE (esconde
+    // membros criados só via Grupo). Sem declarar aqui, validateQuery descartava o
+    // parâmetro silenciosamente (Zod remove chaves não declaradas por padrão) e o
+    // filtro nunca chegava no repositório — bug encontrado em revisão em 04/07/2026.
+    scope: z.enum(['individual', 'all']).optional()
 });
 
 const listReceiptsQuerySchema = z.object({

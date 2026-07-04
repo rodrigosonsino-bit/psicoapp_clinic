@@ -681,14 +681,14 @@ export class GroupController {
                 p.id            AS patient_id,
                 tgm.id          AS group_member_id,
                 p.name,
-                COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_paid_cents,
+                COALESCE(SUM(gp.amount_paid_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_paid_cents,
                 COUNT(gp.id) FILTER (WHERE gp.status != 'voided')::int                   AS payments_count,
                 MAX(gp.total_installments)                                               AS total_installments,
                 tg.monthly_fee_cents,
                 CASE
                     WHEN tg.monthly_fee_cents IS NULL OR tg.monthly_fee_cents = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) = 0 THEN 'pending'
-                    WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) >= tg.monthly_fee_cents THEN 'paid'
+                    WHEN COALESCE(SUM(gp.amount_paid_cents) FILTER (WHERE gp.status = 'paid'), 0) = 0 THEN 'pending'
+                    WHEN COALESCE(SUM(gp.amount_paid_cents) FILTER (WHERE gp.status = 'paid'), 0) >= tg.monthly_fee_cents THEN 'paid'
                     ELSE 'partial'
                 END AS payment_status,
                 COALESCE(

@@ -1,24 +1,26 @@
 /**
  * groupPaymentStatusBugs.integration.test.ts
  *
- * Testes de CARACTERIZAÇÃO (não de correção) dos bugs de cálculo de pagamento de grupo
- * encontrados na auditoria de 03/07/2026 e confirmados por revisão externa (Codex CLI):
+ * Testes de REGRESSÃO para os dois bugs de cálculo de pagamento de grupo encontrados na
+ * auditoria de 03/07/2026 e confirmados por revisão externa (Codex CLI). Começaram como
+ * testes de CARACTERIZAÇÃO (documentando o comportamento buggy como baseline antes da
+ * correção); os dois bugs já foram corrigidos, então os asserts abaixo já refletem o
+ * comportamento CORRETO — se algum regredir, um destes testes falha.
  *
- * 1. GroupController.listGroupMembers (GET /psychotherapy/groups/:groupId/members) soma
+ * 1. GroupController.listGroupMembers (GET /psychotherapy/groups/:groupId/members) somava
  *    SUM(gp.amount_cents) de TODOS os group_payments do mês, sem filtrar por status —
- *    cobranças 'pending' (nunca pagas) ou 'voided' (estornadas) contam como se já
- *    estivessem pagas, podendo fazer um membro aparecer como "paid" indevidamente.
+ *    cobranças 'pending' (nunca pagas) ou 'voided' (estornadas) contavam como se já
+ *    estivessem pagas. CORRIGIDO pelo Antigravity (commit 58c6a4e, 03/07/2026): a query
+ *    agora usa `FILTER (WHERE gp.status = 'paid' AND gp.charge_type = 'monthly')`.
  *
- * 2. GroupController.listGroupPayments (GET /psychotherapy/groups/:groupId/payments) filtra
- *    corretamente por status='paid', mas soma gp.amount_cents (valor NOMINAL da cobrança)
- *    em vez de gp.amount_paid_cents (valor EFETIVAMENTE confirmado) — diverge sempre que
+ * 2. GroupController.listGroupPayments (GET /psychotherapy/groups/:groupId/payments) filtrava
+ *    corretamente por status='paid', mas somava gp.amount_cents (valor NOMINAL da cobrança)
+ *    em vez de gp.amount_paid_cents (valor EFETIVAMENTE confirmado) — divergia sempre que
  *    ConfirmGroupPaymentUseCase é chamado com amountPaidCents diferente do valor nominal
- *    (ex: desconto negociado, pagamento parcial aceito como quitação).
- *
- * Estes testes documentam o comportamento ATUAL (com os bugs) como baseline. Ao corrigir
- * os bugs (fase 4 do plano de correções — "corrigir cálculo de pagamento de grupo"), os
- * asserts marcados com "← comportamento errado, documentado" devem ser invertidos para
- * o valor correto, e o teste passa a ser a prova de que a correção funciona.
+ *    (ex: desconto negociado, pagamento parcial aceito como quitação). CORRIGIDO nesta sessão
+ *    (04/07/2026): troca de `SUM(gp.amount_cents)` para `SUM(gp.amount_paid_cents)` nas 3
+ *    agregações relevantes. Seguro porque a migration de `amount_paid_cents` tem CHECK
+ *    constraint garantindo NOT NULL sempre que status='paid' (com backfill de linhas antigas).
  */
 
 import 'reflect-metadata';
@@ -88,8 +90,8 @@ afterEach(async () => {
     await truncateTables(pool, TABLES);
 });
 
-describe('[CARACTERIZAÇÃO] GroupController.listGroupMembers — soma ignora status', () => {
-    it('BUG: cobrança "pending" (nunca paga) faz o membro aparecer como "paid"', async () => {
+describe('[REGRESSÃO] GroupController.listGroupMembers — soma deve respeitar status', () => {
+    it('cobrança "pending" (nunca paga) NÃO faz o membro aparecer como "paid"', async () => {
         const tenant = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
@@ -108,13 +110,10 @@ describe('[CARACTERIZAÇÃO] GroupController.listGroupMembers — soma ignora st
         const payload = (res.json as jest.Mock).mock.calls[0][0];
         const member = payload.data.find((m: { patient_id: string }) => m.patient_id === patient.id);
 
-        // Comportamento ATUAL (com bug): a query soma SUM(gp.amount_cents) sem
-        // FILTER (WHERE status = 'paid'), então uma cobrança pendente já basta pra "paid".
-        // Pós-fix esperado: 'pending'.
-        expect(member.payment_status).toBe('paid'); // ← comportamento errado, documentado
+        expect(member.payment_status).toBe('pending');
     });
 
-    it('BUG: cobrança "voided" (estornada) ainda conta pro status de pagamento', async () => {
+    it('cobrança "voided" (estornada) NÃO conta pro status de pagamento', async () => {
         const tenant = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
@@ -133,12 +132,10 @@ describe('[CARACTERIZAÇÃO] GroupController.listGroupMembers — soma ignora st
         const payload = (res.json as jest.Mock).mock.calls[0][0];
         const member = payload.data.find((m: { patient_id: string }) => m.patient_id === patient.id);
 
-        // Comportamento ATUAL (com bug): estorno não é excluído da soma.
-        // Pós-fix esperado: 'pending' (nenhuma cobrança realmente paga existe).
-        expect(member.payment_status).toBe('paid'); // ← comportamento errado, documentado
+        expect(member.payment_status).toBe('pending');
     });
 
-    it('referência (não-bug): cobrança "paid" corretamente conta como paga', async () => {
+    it('cobrança "paid" corretamente conta como paga', async () => {
         const tenant = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
@@ -157,12 +154,12 @@ describe('[CARACTERIZAÇÃO] GroupController.listGroupMembers — soma ignora st
         const payload = (res.json as jest.Mock).mock.calls[0][0];
         const member = payload.data.find((m: { patient_id: string }) => m.patient_id === patient.id);
 
-        expect(member.payment_status).toBe('paid'); // este caso já está correto hoje
+        expect(member.payment_status).toBe('paid');
     });
 });
 
-describe('[CARACTERIZAÇÃO] GroupController.listGroupPayments — soma valor nominal em vez do pago', () => {
-    it('BUG: total_paid_cents usa amount_cents (nominal), não amount_paid_cents (efetivo)', async () => {
+describe('[REGRESSÃO] GroupController.listGroupPayments — total_paid_cents deve usar o valor efetivamente pago', () => {
+    it('total_paid_cents usa amount_paid_cents (efetivo), não amount_cents (nominal)', async () => {
         const tenant = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
@@ -190,9 +187,35 @@ describe('[CARACTERIZAÇÃO] GroupController.listGroupPayments — soma valor no
         const payload = (res.json as jest.Mock).mock.calls[0][0];
         const row = payload.data.find((m: { patient_id: string }) => m.patient_id === patient.id);
 
-        // Comportamento ATUAL (com bug): usa o valor NOMINAL (20000), não o efetivamente
-        // pago (15000) — o psicólogo veria "recebido: R$200" quando na verdade recebeu R$150.
-        // Pós-fix esperado: total_paid_cents === 15000.
-        expect(row.total_paid_cents).toBe(20000); // ← comportamento errado, documentado
+        // Valor efetivamente recebido (15000), não o valor nominal da cobrança (20000).
+        expect(row.total_paid_cents).toBe(15000);
+    });
+
+    it('quando não há desconto, total_paid_cents coincide com o valor nominal (caso comum)', async () => {
+        const tenant = await createTenant(pool);
+        const patient = await createPatient(pool, tenant.id);
+        const group = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
+
+        const payment = await createGroupPayment(pool, {
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            groupMemberId: memberId, amountCents: 20000,
+            referenceMonth: '2025-05', status: 'pending',
+        });
+
+        await pool.query(`
+            UPDATE group_payments
+            SET status = 'paid', amount_paid_cents = amount_cents, paid_at = NOW(), payment_method = 'pix'
+            WHERE id = $1
+        `, [payment.id]);
+
+        const req = mockReq(tenant.id, { groupId: group.id }, { month: '2025-05' });
+        const res = mockRes();
+        await controller.listGroupPayments(req, res);
+
+        const payload = (res.json as jest.Mock).mock.calls[0][0];
+        const row = payload.data.find((m: { patient_id: string }) => m.patient_id === patient.id);
+
+        expect(row.total_paid_cents).toBe(20000);
     });
 });
