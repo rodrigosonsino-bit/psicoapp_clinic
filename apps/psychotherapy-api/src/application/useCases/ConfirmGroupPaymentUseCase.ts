@@ -103,19 +103,18 @@ export class ConfirmGroupPaymentUseCase {
                     INSERT INTO financial_payments (
                         id, tenant_id, patient_id, monthly_record_id,
                         amount_cents, currency, paid_at, method, source, status,
-                        idempotency_key, created_by, group_payment_id, notes
+                        idempotency_key, created_by, group_payment_id
                     ) VALUES (
                         gen_random_uuid(), $1, $2, NULL,
                         $3, 'BRL', NOW(), $4, 'manual', 'confirmed',
-                        $5, $1, $6, $7
+                        $5, $1, $6
                     )
                     ON CONFLICT (tenant_id, idempotency_key) DO UPDATE
                     SET 
                         method = EXCLUDED.method,
-                        notes  = EXCLUDED.notes,
                         amount_cents = EXCLUDED.amount_cents
                     RETURNING id
-                `, [tenantId, payment.patient_id, finalAmountPaid, ledgerMethod, idempotencyKey, groupPaymentId, observations || null]);
+                `, [tenantId, payment.patient_id, finalAmountPaid, ledgerMethod, idempotencyKey, groupPaymentId]);
 
                 if (ledgerInsert.rowCount === 0) {
                     const existing = await client.query(`
