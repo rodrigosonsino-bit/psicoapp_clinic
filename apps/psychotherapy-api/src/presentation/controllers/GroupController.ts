@@ -101,7 +101,7 @@ export class GroupController {
         if (!tenantId) throw new AppError('Não autenticado', 401);
 
         const { id } = req.params;
-        const { paymentMethod, amountPaidCents, observations } = req.body;
+        const { paymentMethod, amountPaidCents, netAmountCents, observations } = req.body;
 
         const operatorId = (req as any).userId || tenantId; // fallback for tests
 
@@ -111,6 +111,7 @@ export class GroupController {
             groupPaymentId: id,
             paymentMethod,
             amountPaidCents,
+            netAmountCents,
             observations
         });
 
@@ -682,6 +683,8 @@ export class GroupController {
                 tgm.id          AS group_member_id,
                 p.name,
                 COALESCE(SUM(gp.amount_paid_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_paid_cents,
+                COALESCE(SUM(gp.net_amount_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_net_cents,
+                COALESCE(SUM(gp.processing_fee_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_fee_cents,
                 COUNT(gp.id) FILTER (WHERE gp.status != 'voided')::int                   AS payments_count,
                 MAX(gp.total_installments)                                               AS total_installments,
                 tg.monthly_fee_cents,
@@ -696,6 +699,9 @@ export class GroupController {
                         json_build_object(
                             'id', gp.id,
                             'amount_cents', gp.amount_cents,
+                            'amount_paid_cents', gp.amount_paid_cents,
+                            'net_amount_cents', gp.net_amount_cents,
+                            'processing_fee_cents', gp.processing_fee_cents,
                             'payment_method', gp.payment_method,
                             'total_installments', gp.total_installments,
                             'installment_number', gp.installment_number,

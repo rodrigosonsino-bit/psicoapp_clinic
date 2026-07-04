@@ -1909,7 +1909,14 @@ function ConfirmPaymentModal({
 
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'debit_card' | 'credit_card'>(payment.payment_method || 'pix');
   const [amount, setAmount] = useState(String((payment.amount_cents || 0) / 100));
+  const [netAmount, setNetAmount] = useState(''); // vazio = sem taxa (líquido = valor pago)
   const [observations, setObservations] = useState(payment.notes || '');
+
+  const nominalCents = payment.amount_cents || 0;
+  const paidCents = Math.round((parseFloat(amount) || 0) * 100);
+  const netCents = netAmount.trim() === '' ? paidCents : Math.round((parseFloat(netAmount) || 0) * 100);
+  const discountCents = Math.max(0, nominalCents - paidCents);
+  const feeCents = Math.max(0, paidCents - netCents);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1918,6 +1925,19 @@ function ConfirmPaymentModal({
     if (isNaN(amountCents) || amountCents <= 0) {
       toast.error('Valor inválido');
       return;
+    }
+
+    let netAmountCents: number | undefined;
+    if (netAmount.trim() !== '') {
+      netAmountCents = Math.round(parseFloat(netAmount) * 100);
+      if (isNaN(netAmountCents) || netAmountCents <= 0) {
+        toast.error('Crédito líquido inválido');
+        return;
+      }
+      if (netAmountCents > amountCents) {
+        toast.error('O crédito líquido não pode ser maior que o valor pago');
+        return;
+      }
     }
 
     if (!payment?.id) {
@@ -1932,6 +1952,7 @@ function ConfirmPaymentModal({
         body: JSON.stringify({
           paymentMethod,
           amountPaidCents: amountCents,
+          ...(netAmountCents !== undefined ? { netAmountCents } : {}),
           observations
         })
       });
@@ -1993,7 +2014,7 @@ function ConfirmPaymentModal({
           </div>
 
           <div className="form-group mb-3">
-            <label className="form-label">Valor (R$)</label>
+            <label className="form-label">Valor Pago pelo Paciente (R$)</label>
             <input
               type="number"
               className="form-control"
@@ -2005,6 +2026,50 @@ function ConfirmPaymentModal({
               disabled={submitting}
             />
           </div>
+
+          <div className="form-group mb-3">
+            <label className="form-label">Crédito Líquido em Conta (Opcional)</label>
+            <input
+              type="number"
+              className="form-control"
+              value={netAmount}
+              onChange={e => setNetAmount(e.target.value)}
+              min="0.01"
+              step="0.01"
+              placeholder="Deixe em branco se não houve taxa (cartão/adquirente)"
+              disabled={submitting}
+            />
+          </div>
+
+          {(discountCents > 0 || feeCents > 0) && paidCents > 0 && (
+            <div
+              className="mb-4"
+              style={{
+                fontSize: '0.85rem',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                background: 'var(--bg-surface-secondary, rgba(0,0,0,0.03))',
+                display: 'grid',
+                gap: '0.25rem',
+              }}
+            >
+              <div className="flex justify-between"><span>Valor nominal</span><span>R$ {(nominalCents / 100).toFixed(2)}</span></div>
+              {discountCents > 0 && (
+                <div className="flex justify-between" style={{ color: 'var(--color-warning, #b45309)' }}>
+                  <span>Desconto comercial</span><span>- R$ {(discountCents / 100).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between"><span>Pago pelo paciente</span><span>R$ {(paidCents / 100).toFixed(2)}</span></div>
+              {feeCents > 0 && (
+                <div className="flex justify-between" style={{ color: 'var(--color-danger, #b91c1c)' }}>
+                  <span>Taxa da adquirente</span><span>- R$ {(feeCents / 100).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between" style={{ fontWeight: 600, borderTop: '1px solid var(--border-color, rgba(0,0,0,0.08))', paddingTop: '0.25rem' }}>
+                <span>Crédito líquido em conta</span><span>R$ {(netCents / 100).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
 
           <div className="form-group mb-4">
             <label className="form-label">Observações</label>

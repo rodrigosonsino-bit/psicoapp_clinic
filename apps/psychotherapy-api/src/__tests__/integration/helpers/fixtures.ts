@@ -73,24 +73,25 @@ export interface GroupFixture {
 export async function createGroup(
     pool: Pool,
     tenantId: string,
-    overrides: Partial<{ name: string; monthlyFeeCents: number; sessionPriceCents: number }> = {}
+    overrides: Partial<{ name: string; monthlyFeeCents: number; sessionPriceCents: number; durationMonths: number }> = {}
 ): Promise<GroupFixture> {
     const id               = uuidv4();
     const name             = overrides.name             ?? `Grupo ${id.slice(0, 8)}`;
     const monthlyFeeCents  = overrides.monthlyFeeCents  ?? 20000;
     const sessionPriceCents = overrides.sessionPriceCents ?? 0;
+    const durationMonths   = overrides.durationMonths   ?? null;
 
     await pool.query(`
         INSERT INTO therapy_groups (
             id, tenant_id, name, is_active,
             monthly_fee_cents, session_price_cents,
-            duration_minutes, start_time
+            duration_minutes, start_time, duration_months
         ) VALUES (
             $1, $2, $3, true,
             $4, $5,
-            90, '10:00'
+            90, '10:00', $6
         )
-    `, [id, tenantId, name, monthlyFeeCents, sessionPriceCents]);
+    `, [id, tenantId, name, monthlyFeeCents, sessionPriceCents, durationMonths]);
 
     return { id, tenantId, name, monthlyFeeCents, sessionPriceCents };
 }
@@ -132,27 +133,37 @@ export async function createGroupPayment(
         patientId: string;
         groupMemberId?: string;
         amountCents?: number;
+        /** Valor efetivamente pago — obrigatório pela constraint chk_gp_paid_amount quando
+         *  status='paid'. Default: igual a amountCents (sem desconto) se status='paid'. */
+        amountPaidCents?: number;
         referenceMonth?: string;
         status?: 'pending' | 'paid' | 'voided';
+        chargeType?: 'monthly' | 'course_upfront' | 'installments';
+        /** Sobrescreve due_date (default: primeiro dia de referenceMonth). Use pra testar
+         *  cenários de "vencido" (passado) vs "coberto" (futuro) em relação a CURRENT_DATE. */
+        dueDate?: string;
     }
 ): Promise<GroupPaymentFixture> {
     const id             = uuidv4();
     const amountCents    = opts.amountCents    ?? 20000;
     const referenceMonth = opts.referenceMonth ?? '2025-01';
     const status         = opts.status         ?? 'pending';
+    const chargeType     = opts.chargeType     ?? 'monthly';
+    const dueDate        = opts.dueDate        ?? `${referenceMonth}-01`;
+    const amountPaidCents = opts.amountPaidCents ?? (status === 'paid' ? amountCents : null);
 
     await pool.query(`
         INSERT INTO group_payments (
             id, tenant_id, group_id, patient_id, group_member_id, charge_type,
-            reference_month, amount_cents, original_amount_cents,
+            reference_month, amount_cents, original_amount_cents, amount_paid_cents,
             status, due_date
         ) VALUES (
-            $1, $2, $3, $4, $5, 'monthly',
-            $6, $7, $7,
-            $8, $6::date
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, $8, $9,
+            $10, $11::date
         )
-    `, [id, opts.tenantId, opts.groupId, opts.patientId, opts.groupMemberId || null,
-        `${referenceMonth}-01`, amountCents, status]);
+    `, [id, opts.tenantId, opts.groupId, opts.patientId, opts.groupMemberId || null, chargeType,
+        `${referenceMonth}-01`, amountCents, amountPaidCents, status, dueDate]);
 
     return {
         id, tenantId: opts.tenantId, groupId: opts.groupId,

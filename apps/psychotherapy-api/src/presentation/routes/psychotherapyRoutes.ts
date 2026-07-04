@@ -90,6 +90,9 @@ const generateGroupChargesSchema = z.object({
 const confirmGroupPaymentSchema = z.object({
     paymentMethod: z.enum(['pix', 'cash', 'debit_card', 'credit_card']),
     amountPaidCents: z.number().int().positive().optional(),
+    // Crédito líquido após taxa da adquirente. Omitido = sem taxa (líquido = bruto).
+    netAmountCents: z.number().int().positive().optional(),
+    observations: z.string().max(500).optional(),
 });
 
 const voidGroupPaymentSchema = z.object({

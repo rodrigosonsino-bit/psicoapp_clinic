@@ -55,14 +55,37 @@ export class CreateUpfrontCourseChargeUseCase {
             }
 
             const group = groupResult.rows[0];
-            
-            // Regra do valor do curso:
+
+            // Regra do valor do curso: por padrão, cobra o SALDO RESTANTE (valor cheio do
+            // curso menos o que já foi pago via mensalidades), nunca o valor cheio de novo —
+            // senão um aluno que já pagou alguns meses seria cobrado em duplicidade ao migrar
+            // pra pagamento à vista. overrideTotalCents ignora esse cálculo propositalmente
+            // (renegociação explícita e auditada pelo operador, não é o caminho automático).
             let totalCents = 0;
             if (overrideTotalCents !== undefined && overrideTotalCents > 0) {
                 totalCents = overrideTotalCents;
             } else {
                 if (group.duration_months && group.monthly_fee_cents) {
-                    totalCents = group.monthly_fee_cents * group.duration_months;
+                    const fullCourseCents = group.monthly_fee_cents * group.duration_months;
+
+                    const paidMonthlyResult = await client.query(`
+                        SELECT COALESCE(SUM(amount_paid_cents), 0) AS total
+                        FROM group_payments
+                        WHERE tenant_id = $1 AND group_member_id = $2
+                          AND charge_type = 'monthly' AND status = 'paid'
+                    `, [tenantId, groupMemberId]);
+                    const alreadyPaidCents = Number(paidMonthlyResult.rows[0].total);
+
+                    totalCents = fullCourseCents - alreadyPaidCents;
+
+                    if (totalCents <= 0) {
+                        throw new AppError(
+                            'O aluno já pagou, via mensalidades, valor igual ou maior que o total do curso — ' +
+                            'não há saldo restante para cobrança à vista. Para renegociar mesmo assim, ' +
+                            'informe overrideTotalCents explicitamente.',
+                            409
+                        );
+                    }
                 } else {
                     throw new AppError('Não foi possível calcular o valor do curso (grupo sem mensalidade fixa com duração). Envie overrideTotalCents.', 400);
                 }
