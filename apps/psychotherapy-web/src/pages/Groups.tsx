@@ -621,16 +621,28 @@ export default function Groups() {
                                               </span>
                                             </span>
                                             <div className="flex gap-1">
-
                                               {p.status !== 'voided' && (
-                                                <button
-                                                  className="icon-btn danger"
-                                                  style={{ padding: '2px' }}
-                                                  onClick={() => handleVoidPayment(p)}
-                                                  title="Estornar/Cancelar esta cobrança"
-                                                >
-                                                  <Trash2 size={12} />
-                                                </button>
+                                                <>
+                                                  <button
+                                                    className="icon-btn"
+                                                    style={{ padding: '2px' }}
+                                                    onClick={() => {
+                                                      setPaymentToConfirm({ ...p, patientName: m.name });
+                                                      setShowPaymentModal(true);
+                                                    }}
+                                                    title="Editar/Registrar pagamento"
+                                                  >
+                                                    <Pencil size={12} />
+                                                  </button>
+                                                  <button
+                                                    className="icon-btn danger"
+                                                    style={{ padding: '2px' }}
+                                                    onClick={() => handleVoidPayment(p)}
+                                                    title="Estornar/Cancelar esta cobrança"
+                                                  >
+                                                    <Trash2 size={12} />
+                                                  </button>
+                                                </>
                                               )}
                                             </div>
                                           </div>
