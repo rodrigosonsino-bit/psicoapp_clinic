@@ -53,6 +53,7 @@ export function MessageSchedulerModal({
 }: MessageSchedulerModalProps) {
   const [content, setContent] = useState('');
   const [recipient, setRecipient] = useState('');
+  const [recipientName, setRecipientName] = useState('');
   const [platform, setPlatform] = useState<MessagePlatform>('whatsapp');
   const [date, setDate] = useState(new Date());
   // Espelho em string do campo web datetime-local. Manter uma string separada evita que o
@@ -80,6 +81,7 @@ export function MessageSchedulerModal({
       if (editingMessage) {
         setContent(editingMessage.content);
         setRecipient(editingMessage.recipientId);
+        setRecipientName(editingMessage.recipientName || '');
         setPlatform(editingMessage.platform || 'whatsapp');
         setRecurrence(editingMessage.metadata?.recurrence || 'Única');
         setImageBase64(undefined);
@@ -100,6 +102,7 @@ export function MessageSchedulerModal({
         // New Message
         setContent('');
         setRecipient('');
+        setRecipientName('');
         setPlatform('whatsapp');
         setRecurrence('Única');
         setImageBase64(undefined);
@@ -209,12 +212,10 @@ export function MessageSchedulerModal({
 
     if (platform === 'whatsapp' && !whatsappStatus.connected) {
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const proceed = window.confirm(
+        window.alert(
           '⚠️ Atenção: Seu WhatsApp está desconectado no momento.\n\n' +
-          'A mensagem será agendada, mas só será enviada automaticamente quando a conexão for restabelecida.\n\n' +
-          'Deseja continuar mesmo assim?'
+          'A mensagem será agendada, mas só será enviada automaticamente quando a conexão for restabelecida.'
         );
-        if (!proceed) return;
       } else {
         const proceed = await new Promise<boolean>((resolve) => {
           Alert.alert(
@@ -237,6 +238,7 @@ export function MessageSchedulerModal({
         await updateMessage(editingMessage.id, {
           content,
           recipientId: recipient,
+          recipientName: recipientName.trim() || undefined,
           sendAt: utcDateStr,
           platform,
           recurrence,
@@ -244,7 +246,7 @@ export function MessageSchedulerModal({
         });
         Alert.alert('Sucesso', 'Mensagem atualizada com sucesso!');
       } else {
-        await scheduleMessage(content, recipient, utcDateStr, platform, recurrence, imageBase64);
+        await scheduleMessage(content, recipient, utcDateStr, platform, recurrence, imageBase64, recipientName.trim() || undefined);
         Alert.alert('Sucesso', 'Mensagem agendada com sucesso!');
       }
       onSaveSuccess();
@@ -363,6 +365,12 @@ export function MessageSchedulerModal({
               value={recipient}
               onChangeText={setRecipient}
               keyboardType={platform === 'whatsapp' ? "phone-pad" : "default"}
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 10 }]}
+              placeholder="Nome do Contato (Opcional - útil se não sincronizar)"
+              value={recipientName}
+              onChangeText={setRecipientName}
             />
 
             <View style={styles.platformSelector}>

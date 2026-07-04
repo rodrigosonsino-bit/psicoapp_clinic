@@ -3,6 +3,7 @@ import { ScheduledMessage, MessageStatus, MessagePlatform } from '../models/Sche
 export interface UpdateMessageDTO {
     content?: string;
     recipientId?: string;
+    recipientName?: string;
     sendAt?: Date;
     platform?: MessagePlatform;
     recurrence?: string;

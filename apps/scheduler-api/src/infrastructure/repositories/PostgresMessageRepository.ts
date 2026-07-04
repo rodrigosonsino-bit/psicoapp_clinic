@@ -135,7 +135,7 @@ export class PostgresMessageRepository implements IMessageRepository {
             : 'sm.created_at DESC';
 
         const query = `
-            SELECT sm.*, wc.name AS recipient_name
+            SELECT sm.*, COALESCE(sm.metadata->>'recipientName', wc.name) AS recipient_name
             FROM scheduled_messages sm
             LEFT JOIN whatsapp_contacts wc
               ON (wc.id = sm.recipient_id OR wc.id = sm.recipient_id || '@s.whatsapp.net') AND wc.tenant_id = sm.user_id::uuid

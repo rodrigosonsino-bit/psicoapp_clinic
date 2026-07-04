@@ -95,10 +95,11 @@ export const getMessages = async (
     return response.data;
 };
 
-export const scheduleMessage = async (content: string, recipientId: string, sendAt: string, platform: MessagePlatform = 'whatsapp', recurrence?: RecurrenceType, imageBase64?: string) => {
+export const scheduleMessage = async (content: string, recipientId: string, sendAt: string, platform: MessagePlatform = 'whatsapp', recurrence?: RecurrenceType, imageBase64?: string, recipientName?: string) => {
     const response = await api.post('/messages', {
         content,
         recipientId,
+        recipientName,
         sendAt, // expected in UTC ISO format
         platform,
         recurrence,
@@ -114,7 +115,7 @@ export const deleteMessage = async (id: string) => {
 
 export const updateMessage = async (
     id: string,
-    fields: { content?: string; recipientId?: string; sendAt?: string; platform?: MessagePlatform; recurrence?: RecurrenceType; imageBase64?: string }
+    fields: { content?: string; recipientId?: string; recipientName?: string; sendAt?: string; platform?: MessagePlatform; recurrence?: RecurrenceType; imageBase64?: string }
 ) => {
     const response = await api.patch(`/messages/${id}`, fields);
     return response.data;

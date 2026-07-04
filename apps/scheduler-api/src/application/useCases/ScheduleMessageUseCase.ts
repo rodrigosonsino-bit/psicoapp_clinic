@@ -6,6 +6,7 @@ export interface ScheduleMessageDTO {
     userId: string;
     content: string;
     recipientId: string;
+    recipientName?: string;
     sendAt: Date;
     platform?: MessagePlatform;
     recurrence?: string;
@@ -42,7 +43,8 @@ export class ScheduleMessageUseCase {
             'pending',
             dto.platform || 'whatsapp',
             new Date(),
-            { recurrence: dto.recurrence, imageUrl: dto.imageUrl }
+            { recurrence: dto.recurrence, imageUrl: dto.imageUrl, recipientName: dto.recipientName },
+            dto.recipientName || null
         );
         console.log("Saving message with metadata:", message.metadata);
 

@@ -7,6 +7,7 @@ export interface UpdateMessageRequestDTO {
     userId: string;
     content?: string;
     recipientId?: string;
+    recipientName?: string;
     sendAt?: Date;
     platform?: MessagePlatform;
     recurrence?: string;
@@ -41,6 +42,7 @@ export class UpdateMessageUseCase {
         const existingMessage = { ...original };
         if (dto.content !== undefined) fields.content = dto.content;
         if (dto.recipientId !== undefined) fields.recipientId = dto.recipientId;
+        if (dto.recipientName !== undefined) fields.recipientName = dto.recipientName;
         if (dto.sendAt !== undefined) fields.sendAt = dto.sendAt;
         if (dto.platform !== undefined) fields.platform = dto.platform;
         if (dto.recurrence !== undefined) {
@@ -48,6 +50,9 @@ export class UpdateMessageUseCase {
         }
         if (dto.imageUrl !== undefined) {
             existingMessage.metadata = { ...existingMessage.metadata, imageUrl: dto.imageUrl };
+        }
+        if (dto.recipientName !== undefined) {
+            existingMessage.metadata = { ...existingMessage.metadata, recipientName: dto.recipientName };
         }
         fields.metadata = existingMessage.metadata;
 

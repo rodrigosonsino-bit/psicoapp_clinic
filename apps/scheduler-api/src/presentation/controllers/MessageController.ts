@@ -71,7 +71,7 @@ export class MessageController {
     async schedule(req: Request, res: Response): Promise<Response> {
         try {
             const userId = (req as any).userId;
-            const { content, recipientId, sendAt, platform, recurrence, imageBase64 } = req.body;
+            const { content, recipientId, recipientName, sendAt, platform, recurrence, imageBase64 } = req.body;
 
             let imageUrl = undefined;
             if (imageBase64) {
@@ -87,6 +87,7 @@ export class MessageController {
                 userId,
                 content,
                 recipientId,
+                recipientName,
                 sendAt: sendAtDate,
                 platform,
                 recurrence,
@@ -168,7 +169,7 @@ export class MessageController {
         try {
             const userId = (req as any).userId;
             const { id } = req.params;
-            const { content, recipientId, sendAt, platform, recurrence, imageBase64 } = req.body;
+            const { content, recipientId, recipientName, sendAt, platform, recurrence, imageBase64 } = req.body;
 
             let imageUrl = undefined;
             if (imageBase64) {
@@ -185,6 +186,7 @@ export class MessageController {
                 userId,
                 content,
                 recipientId,
+                recipientName,
                 sendAt: sendAtDate,
                 platform,
                 recurrence,

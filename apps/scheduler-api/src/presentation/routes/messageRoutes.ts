@@ -17,6 +17,7 @@ import { validateBody } from '../middlewares/validationMiddleware';
 
 const scheduleMessageSchema = z.object({
     recipientId: z.string().min(1, 'Destinatário é obrigatório'),
+    recipientName: z.string().optional(),
     content: z.string().min(1, 'O conteúdo da mensagem não pode estar vazio'),
     sendAt: z.string().datetime({ message: 'Data de disparo inválida (deve ser ISO 8601)' }),
     platform: z.enum(['whatsapp', 'telegram']).default('whatsapp'),
