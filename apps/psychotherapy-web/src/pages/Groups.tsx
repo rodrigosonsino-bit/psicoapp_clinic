@@ -604,8 +604,13 @@ export default function Groups() {
                                 <tr>
                                   <td>
                                     <strong style={{ color: 'var(--text-primary)' }}>{m.name}</strong>
-                                    {isExpanded && hasPayments && (
+                                    {isExpanded && (
                                       <div className="payment-history-list">
+                                        {!hasPayments && (
+                                          <div style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                            Nenhuma cobrança gerada para este mês.
+                                          </div>
+                                        )}
                                         {m.payments.map((p: any) => (
                                           <div key={p.id} className="payment-history-item">
                                             <span>
@@ -697,8 +702,7 @@ export default function Groups() {
                                           className="btn btn-secondary btn-sm"
                                           style={{
                                             padding: '0.25rem 0.5rem',
-                                            fontSize: '0.75rem',
-                                            visibility: hasPayments ? 'visible' : 'hidden'
+                                            fontSize: '0.75rem'
                                           }}
                                           onClick={() => setExpandedPatientId(isExpanded ? null : m.patient_id)}
                                         >
