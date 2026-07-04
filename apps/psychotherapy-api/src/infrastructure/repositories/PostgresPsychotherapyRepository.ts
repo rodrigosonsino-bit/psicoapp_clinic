@@ -646,29 +646,83 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async saveSession(data: SaveSessionDTO): Promise<PsychotherapySession> {
         const tenantId = this.validateTenantId(data.tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_sessions (
-                id, tenant_id, patient_id, date, status, notes
-            )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6)
-            ON CONFLICT (id) DO UPDATE SET
-                date = EXCLUDED.date,
-                status = EXCLUDED.status,
-                notes = EXCLUDED.notes,
-                updated_at = NOW()
-            WHERE psychotherapy_sessions.tenant_id = EXCLUDED.tenant_id
-            RETURNING *;
-        `, [
-            data.id || null,
-            tenantId,
-            data.patientId,
-            data.date,
-            data.status,
-            data.notes || null
-        ]);
+        const client = await this.dbPool.connect();
 
-        if (result.rows.length === 0) throw new NotFoundError('Sessão não encontrada ou não autorizada');
-        return this.mapSession(result.rows[0]);
+        try {
+            await client.query('BEGIN');
+
+            // Sessão vinculada a um agendamento (appointment_id, migration 082): data/status são
+            // gerenciados pelo Agendamento (fonte de verdade da agenda) — o Diário só pode editar
+            // notes nela. Checagem + upsert na MESMA transação com FOR UPDATE: sem isso, um
+            // saveAppointment() concorrente podia reagendar a sessão entre a checagem e o UPDATE
+            // daqui, e este UPDATE sobrescreveria com data/status já obsoletos (achado da 2ª
+            // revisão, 04/07/2026). Também rejeita se patientId enviado pelo cliente estiver
+            // obsoleto (ex: tela carregada pro paciente A, agendamento foi transferido pra B
+            // enquanto isso) — evita gravar nota clínica na sessão errada.
+            if (data.id) {
+                const existing = await client.query(
+                    `SELECT date, status, patient_id, appointment_id FROM psychotherapy_sessions
+                     WHERE id = $1 AND tenant_id = $2
+                     FOR UPDATE`,
+                    [data.id, tenantId]
+                );
+                if (existing.rows.length === 0) {
+                    throw new NotFoundError('Sessão não encontrada ou não autorizada');
+                }
+                const current = existing.rows[0];
+
+                if (current.patient_id !== data.patientId) {
+                    throw new AppError(
+                        'Esta sessão pertence a outro paciente agora (dado desatualizado na ' +
+                        'tela) — recarregue a página antes de salvar.',
+                        409
+                    );
+                }
+
+                if (current.appointment_id) {
+                    const dateChanged = new Date(current.date).getTime() !== new Date(data.date).getTime();
+                    const statusChanged = current.status !== data.status;
+                    if (dateChanged || statusChanged) {
+                        throw new AppError(
+                            'Esta sessão está vinculada a um agendamento — data e status só podem ' +
+                            'ser alterados pela tela de Agendamentos. Você pode editar as notas aqui.',
+                            409
+                        );
+                    }
+                }
+            }
+
+            const result = await client.query(`
+                INSERT INTO psychotherapy_sessions (
+                    id, tenant_id, patient_id, date, status, notes
+                )
+                VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6)
+                ON CONFLICT (id) DO UPDATE SET
+                    date = EXCLUDED.date,
+                    status = EXCLUDED.status,
+                    notes = EXCLUDED.notes,
+                    updated_at = NOW()
+                WHERE psychotherapy_sessions.tenant_id = EXCLUDED.tenant_id
+                RETURNING *;
+            `, [
+                data.id || null,
+                tenantId,
+                data.patientId,
+                data.date,
+                data.status,
+                data.notes || null
+            ]);
+
+            if (result.rows.length === 0) throw new NotFoundError('Sessão não encontrada ou não autorizada');
+
+            await client.query('COMMIT');
+            return this.mapSession(result.rows[0]);
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     async listSessions(
@@ -718,6 +772,22 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async deleteSession(tenantId: string, id: string): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
+
+        // Sessão vinculada a um agendamento: excluir por aqui deixaria o agendamento
+        // "attended"/"no_show"/"canceled" sem sessão correspondente. Precisa reverter o status
+        // do agendamento (que já cuida de remover a sessão) ou excluir o agendamento.
+        const linked = await this.dbPool.query(
+            `SELECT appointment_id FROM psychotherapy_sessions WHERE id = $1 AND tenant_id = $2`,
+            [id, validTenantId]
+        );
+        if (linked.rows.length > 0 && linked.rows[0].appointment_id) {
+            throw new AppError(
+                'Esta sessão está vinculada a um agendamento — para removê-la, reverta o ' +
+                'status do agendamento ou exclua o agendamento na tela de Agendamentos.',
+                409
+            );
+        }
+
         const result = await this.dbPool.query(`
             DELETE FROM psychotherapy_sessions
             WHERE tenant_id = $1 AND id = $2;
@@ -1145,22 +1215,66 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment> {
         const tenantId = this.validateTenantId(data.tenantId);
 
-        // Pré-leitura do mês antigo (para reagendamentos)
-        let oldMonth: string | null = null;
-        if (data.id) {
-            const prev = await this.dbPool.query(
-                `SELECT scheduled_at FROM psychotherapy_appointments
-                 WHERE id = $1 AND tenant_id = $2`,
-                [data.id, tenantId]
-            );
-            if (prev.rows[0]) {
-                oldMonth = toMonthStr(new Date(prev.rows[0].scheduled_at));
-            }
-        }
-
         const client = await this.dbPool.connect();
         try {
             await client.query('BEGIN');
+
+            // Pré-leitura do agendamento anterior (reagendamento/troca de paciente), com lock —
+            // evita corrida com uma exclusão/atualização concorrente do mesmo agendamento
+            // (achado na revisão de 04/07/2026).
+            let oldMonth: string | null = null;
+            let oldPatientId: string | null = null;
+            if (data.id) {
+                const prev = await client.query(
+                    `SELECT scheduled_at, patient_id FROM psychotherapy_appointments
+                     WHERE id = $1 AND tenant_id = $2
+                     FOR UPDATE`,
+                    [data.id, tenantId]
+                );
+                if (prev.rows[0]) {
+                    oldMonth = toMonthStr(new Date(prev.rows[0].scheduled_at));
+                    oldPatientId = prev.rows[0].patient_id;
+                }
+            }
+
+            const patientChanged = oldPatientId !== null && oldPatientId !== data.patientId;
+            if (patientChanged) {
+                // Reatribuir um agendamento pra outro paciente é uma operação rara e perigosa
+                // se já existe conteúdo clínico registrado na sessão vinculada — nesse caso, a
+                // troca é bloqueada (o operador deve criar um novo agendamento em vez de
+                // reaproveitar este). Ver achado da revisão de 04/07/2026.
+                // Conteúdo clínico = nota estruturada (psychotherapy_clinical_notes) OU texto
+                // livre em session.notes (achado da 2ª revisão, 04/07/2026: a checagem original
+                // só olhava a tabela estruturada, deixando passar session.notes preenchido).
+                // Lock PRIMEIRO, checagem de conteúdo DEPOIS em consulta separada (achado da 4ª
+                // revisão, 04/07/2026): um SELECT com FOR UPDATE + EXISTS no mesmo statement
+                // pode não enxergar uma nota clínica confirmada por outra transação enquanto
+                // esperava o lock (o EXISTS usa o snapshot do início do statement, só a própria
+                // linha travada é reobtida). Serializa contra saveSession()/saveClinicalNote().
+                const lock = await client.query(
+                    `SELECT s.id FROM psychotherapy_sessions s
+                     WHERE s.tenant_id = $1 AND s.appointment_id = $2
+                     FOR UPDATE OF s`,
+                    [tenantId, data.id]
+                );
+                const linkedSession = lock.rows.length === 0 ? { rows: [{}] } : await client.query(
+                    `SELECT
+                        (NULLIF(TRIM(s.notes), '') IS NOT NULL) AS has_notes,
+                        EXISTS (
+                            SELECT 1 FROM psychotherapy_clinical_notes cn WHERE cn.session_id = s.id
+                        ) AS has_clinical_notes
+                     FROM psychotherapy_sessions s
+                     WHERE s.id = $1`,
+                    [lock.rows[0].id]
+                );
+                if (linkedSession.rows[0]?.has_notes || linkedSession.rows[0]?.has_clinical_notes) {
+                    throw new AppError(
+                        'Não é possível trocar o paciente deste agendamento: já existe conteúdo ' +
+                        'clínico registrado na sessão vinculada. Crie um novo agendamento.',
+                        409
+                    );
+                }
+            }
 
             const id = data.id || crypto.randomUUID();
             const duration = data.durationMinutes ?? 50;
@@ -1253,13 +1367,84 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 throw new NotFoundError('Agendamento não encontrado ou não autorizado');
             }
 
+            // Sincronização com o Diário de Sessões (vínculo por appointment_id, migration 082).
+            // saveAppointment() é usado tanto pra criar/editar quanto pelo fluxo de "atendimento
+            // retroativo" do frontend (agendamento já criado com status='attended' desde o
+            // início) — antes desta correção, só updateAppointmentStatus() sincronizava a
+            // sessão, então o fluxo retroativo nunca gerava sessão nenhuma (achado da revisão
+            // de 03/07/2026). Mesma lógica de status → session_status usada lá.
+            //
+            // IMPORTANTE (achado da revisão de 04/07/2026): NÃO copiar appointment.notes pra
+            // session.notes. São conteúdos diferentes — notes do agendamento é observação de
+            // agenda, notes da sessão é conteúdo clínico (protegido de exclusão em outros
+            // pontos deste arquivo). Copiar aqui arriscava sobrescrever silenciosamente uma
+            // nota clínica já registrada. notes da sessão só é gerenciado via saveSession()/
+            // Diário — nunca por este fluxo.
+            const finalStatus = result.rows[0].status;
+            if (finalStatus === 'attended' || finalStatus === 'no_show' || finalStatus === 'canceled') {
+                const targetSessionStatus =
+                    finalStatus === 'attended' ? 'attended' :
+                    finalStatus === 'no_show'  ? 'unjustified_absence' : 'canceled';
+
+                await client.query(`
+                    INSERT INTO psychotherapy_sessions (id, tenant_id, patient_id, date, status, appointment_id)
+                    VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+                    ON CONFLICT (appointment_id) WHERE appointment_id IS NOT NULL DO UPDATE SET
+                        patient_id = EXCLUDED.patient_id,
+                        date = EXCLUDED.date,
+                        status = EXCLUDED.status,
+                        updated_at = NOW();
+                `, [tenantId, data.patientId, scheduledAt, targetSessionStatus, id]);
+            } else {
+                // Reverter pra scheduled/confirmed com conteúdo clínico registrado deixaria um
+                // estado contraditório (agendamento "scheduled", sessão ainda "attended" com
+                // nota) — bloqueado explicitamente em vez de preservar silenciosamente (achado
+                // da 2ª revisão, 04/07/2026). Lock primeiro, checagem de conteúdo depois em
+                // consulta separada (achado da 4ª revisão, 04/07/2026 — ver comentário
+                // equivalente na checagem de troca de paciente acima).
+                const lockRev = await client.query(`
+                    SELECT s.id FROM psychotherapy_sessions s
+                    WHERE s.tenant_id = $1 AND s.appointment_id = $2
+                    FOR UPDATE OF s
+                `, [tenantId, id]);
+                const linkedContent = lockRev.rows.length === 0 ? { rows: [{}] } : await client.query(`
+                    SELECT
+                        (NULLIF(TRIM(s.notes), '') IS NOT NULL) AS has_notes,
+                        EXISTS (
+                            SELECT 1 FROM psychotherapy_clinical_notes cn WHERE cn.session_id = s.id
+                        ) AS has_clinical_notes
+                    FROM psychotherapy_sessions s
+                    WHERE s.id = $1
+                `, [lockRev.rows[0].id]);
+
+                if (linkedContent.rows[0]?.has_notes || linkedContent.rows[0]?.has_clinical_notes) {
+                    throw new AppError(
+                        'Não é possível reverter este agendamento: a sessão vinculada tem ' +
+                        'conteúdo clínico registrado. Remova o conteúdo clínico antes de reverter.',
+                        409
+                    );
+                }
+
+                await client.query(`
+                    DELETE FROM psychotherapy_sessions
+                    WHERE tenant_id = $1 AND appointment_id = $2;
+                `, [tenantId, id]);
+            }
+
             await client.query('COMMIT');
-            
+
             const appointment = this.mapAppointment(result.rows[0]);
             const newMonth = toMonthStr(data.scheduledAt);
             await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, newMonth);
             if (oldMonth && oldMonth !== newMonth) {
-                await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, oldMonth);
+                // Se o paciente também mudou, o mês antigo pertence ao paciente ANTERIOR, não
+                // ao novo (achado da revisão de 04/07/2026).
+                await this.syncMonthlyRecord(this.dbPool, tenantId, oldPatientId ?? data.patientId, oldMonth);
+            }
+            if (patientChanged && oldPatientId) {
+                // Mesmo sem mudança de mês, o registro mensal do paciente anterior no mês
+                // atual também precisa ser recalculado (perdeu este agendamento).
+                await this.syncMonthlyRecord(this.dbPool, tenantId, oldPatientId, newMonth);
             }
 
             return appointment;
@@ -1329,7 +1514,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         try {
             await client.query('BEGIN');
 
-            // 1. Lê o agendamento + dados do paciente antes de deletar
+            // 1. Lê o agendamento + dados do paciente antes de deletar, com lock — evita
+            // corrida com um update/save concorrente do mesmo agendamento (achado na revisão
+            // de 04/07/2026: sem FOR UPDATE, uma sessão podia ser recriada entre o DELETE da
+            // sessão abaixo e o DELETE do agendamento).
             const appQuery = await client.query(`
                 SELECT
                     a.patient_id, a.scheduled_at, a.status,
@@ -1339,6 +1527,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 FROM psychotherapy_appointments a
                 JOIN psychotherapy_patients p ON p.id = a.patient_id
                 WHERE a.tenant_id = $1 AND a.id = $2
+                FOR UPDATE OF a
             `, [validTenantId, id]);
 
             if (appQuery.rows.length === 0)
@@ -1346,16 +1535,27 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
             const { patient_id, scheduled_at, status, payment_type, calendar_event_id, group_id } = appQuery.rows[0];
 
-            // 3. Remove sessão correspondente (somente se sem notas clínicas)
+            // 3. Remove sessão correspondente (somente se sem notas clínicas). Vínculo por
+            // appointment_id (FK composta, migration 082) — ver nota em updateAppointmentStatus.
             await client.query(`
                 DELETE FROM psychotherapy_sessions
-                WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
+                WHERE tenant_id = $1 AND appointment_id = $2
                   AND (notes IS NULL OR TRIM(notes) = '')
                   AND NOT EXISTS (
                       SELECT 1 FROM psychotherapy_clinical_notes
                       WHERE session_id = psychotherapy_sessions.id
                   )
-            `, [validTenantId, patient_id, scheduled_at]);
+            `, [validTenantId, id]);
+
+            // 3b. Sessões PRESERVADAS (com nota clínica) precisam ter o vínculo desfeito antes
+            // de excluir o agendamento — a FK (appointment_id, tenant_id) não tem ON DELETE
+            // SET NULL (evitar zerar tenant_id, que é NOT NULL, numa FK composta), então sem
+            // isso o DELETE do agendamento abaixo violaria a FK.
+            await client.query(`
+                UPDATE psychotherapy_sessions
+                SET appointment_id = NULL, updated_at = NOW()
+                WHERE tenant_id = $1 AND appointment_id = $2
+            `, [validTenantId, id]);
 
             // 4. Deleta o agendamento
             const del = await client.query(`
@@ -1397,7 +1597,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         try {
             await client.query('BEGIN');
 
-            // ── Pré-leitura: old_status + dados do paciente ───────────────────
+            // ── Pré-leitura: old_status + dados do paciente (com lock, ver deleteAppointment) ──
             const preQuery = await client.query(`
                 SELECT
                     a.patient_id, a.scheduled_at, a.status AS old_status,
@@ -1409,6 +1609,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 FROM psychotherapy_appointments a
                 JOIN psychotherapy_patients p ON p.id = a.patient_id
                 WHERE a.tenant_id = $1 AND a.id = $2
+                FOR UPDATE OF a
             `, [validTenantId, id]);
 
             if (preQuery.rows.length === 0)
@@ -1443,6 +1644,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             }
 
             // ── 2. Sincronização com o Diário de Sessões ──────────────────────
+            // Vínculo por appointment_id (FK, migration 082) — não mais por
+            // (tenant_id, patient_id, date). O heurístico por data quebrava em reagendamentos
+            // (a sessão ficava órfã na data antiga) e não cobria edições feitas via
+            // saveAppointment(). Ver achado da revisão de 03/07/2026.
             if (status === 'attended' || status === 'no_show' || status === 'canceled') {
                 const targetSessionStatus =
                     status === 'attended'  ? 'attended' :
@@ -1450,32 +1655,56 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
                 const sessionCheck = await client.query(`
                     SELECT id FROM psychotherapy_sessions
-                    WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
+                    WHERE tenant_id = $1 AND appointment_id = $2
                     LIMIT 1;
-                `, [validTenantId, patient_id, scheduled_at]);
+                `, [validTenantId, id]);
 
+                // IMPORTANTE (achado da revisão de 04/07/2026): não copiar appointment.notes
+                // pra session.notes — são conteúdos diferentes, e sobrescreveria uma nota
+                // clínica já registrada. notes da sessão só é gerenciado via saveSession().
                 if (sessionCheck.rows.length > 0) {
                     await client.query(`
                         UPDATE psychotherapy_sessions
-                        SET status = $1, notes = COALESCE($2, notes), updated_at = NOW()
+                        SET status = $1, date = $2, updated_at = NOW()
                         WHERE id = $3;
-                    `, [targetSessionStatus, appointment.notes, sessionCheck.rows[0].id]);
+                    `, [targetSessionStatus, scheduled_at, sessionCheck.rows[0].id]);
                 } else {
                     await client.query(`
-                        INSERT INTO psychotherapy_sessions (id, tenant_id, patient_id, date, status, notes)
+                        INSERT INTO psychotherapy_sessions (id, tenant_id, patient_id, date, status, appointment_id)
                         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5);
-                    `, [validTenantId, patient_id, scheduled_at, targetSessionStatus, appointment.notes]);
+                    `, [validTenantId, patient_id, scheduled_at, targetSessionStatus, id]);
                 }
             } else if (status === 'scheduled' || status === 'confirmed') {
+                // Mesma regra de saveAppointment(): bloquear em vez de preservar silenciosamente
+                // um estado contraditório (achado da 2ª revisão, 04/07/2026). Lock primeiro,
+                // checagem depois em consulta separada (achado da 4ª revisão, 04/07/2026).
+                const lockRev2 = await client.query(`
+                    SELECT s.id FROM psychotherapy_sessions s
+                    WHERE s.tenant_id = $1 AND s.appointment_id = $2
+                    FOR UPDATE OF s
+                `, [validTenantId, id]);
+                const linkedContent = lockRev2.rows.length === 0 ? { rows: [{}] } : await client.query(`
+                    SELECT
+                        (NULLIF(TRIM(s.notes), '') IS NOT NULL) AS has_notes,
+                        EXISTS (
+                            SELECT 1 FROM psychotherapy_clinical_notes cn WHERE cn.session_id = s.id
+                        ) AS has_clinical_notes
+                    FROM psychotherapy_sessions s
+                    WHERE s.id = $1
+                `, [lockRev2.rows[0].id]);
+
+                if (linkedContent.rows[0]?.has_notes || linkedContent.rows[0]?.has_clinical_notes) {
+                    throw new AppError(
+                        'Não é possível reverter este agendamento: a sessão vinculada tem ' +
+                        'conteúdo clínico registrado. Remova o conteúdo clínico antes de reverter.',
+                        409
+                    );
+                }
+
                 await client.query(`
                     DELETE FROM psychotherapy_sessions
-                    WHERE tenant_id = $1 AND patient_id = $2 AND date = $3
-                      AND (notes IS NULL OR TRIM(notes) = '')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM psychotherapy_clinical_notes
-                          WHERE session_id = psychotherapy_sessions.id
-                      );
-                `, [validTenantId, patient_id, scheduled_at]);
+                    WHERE tenant_id = $1 AND appointment_id = $2;
+                `, [validTenantId, id]);
             }
 
             await this.syncMonthlyRecord(
@@ -1722,31 +1951,68 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async saveClinicalNote(data: SaveClinicalNoteDTO): Promise<ClinicalNote> {
         const tenantId = this.validateTenantId(data.tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_clinical_notes (
-                id, tenant_id, patient_id, session_id, note_date, content, tags
-            )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (id) DO UPDATE SET
-                session_id = EXCLUDED.session_id,
-                note_date = EXCLUDED.note_date,
-                content = EXCLUDED.content,
-                tags = EXCLUDED.tags,
-                updated_at = NOW()
-            WHERE psychotherapy_clinical_notes.tenant_id = EXCLUDED.tenant_id
-            RETURNING *;
-        `, [
-            data.id || null,
-            tenantId,
-            data.patientId,
-            data.sessionId ?? null,
-            data.noteDate,
-            data.content,
-            data.tags ?? []
-        ]);
+        const client = await this.dbPool.connect();
 
-        if (result.rows.length === 0) throw new NotFoundError('Nota clínica não encontrada ou não autorizada');
-        return this.mapClinicalNote(result.rows[0]);
+        try {
+            await client.query('BEGIN');
+
+            // Trava a sessão vinculada (se houver) ANTES de inserir a nota — sem isso, um
+            // fluxo de appointment concorrente (troca de paciente/reversão) podia ler a sessão
+            // como "sem conteúdo clínico" no meio do INSERT desta nota e prosseguir (achado da
+            // 4ª revisão, 04/07/2026). Serializa contra o FOR UPDATE OF s usado nos 3 pontos de
+            // saveAppointment()/updateAppointmentStatus() e em saveSession().
+            if (data.sessionId) {
+                const session = await client.query(
+                    `SELECT patient_id FROM psychotherapy_sessions
+                     WHERE id = $1 AND tenant_id = $2
+                     FOR UPDATE`,
+                    [data.sessionId, tenantId]
+                );
+                if (session.rows.length === 0) {
+                    throw new NotFoundError('Sessão vinculada não encontrada ou não autorizada');
+                }
+                if (session.rows[0].patient_id !== data.patientId) {
+                    throw new AppError(
+                        'Esta sessão pertence a outro paciente agora (dado desatualizado na ' +
+                        'tela) — recarregue a página antes de salvar.',
+                        409
+                    );
+                }
+            }
+
+            const result = await client.query(`
+                INSERT INTO psychotherapy_clinical_notes (
+                    id, tenant_id, patient_id, session_id, note_date, content, tags
+                )
+                VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (id) DO UPDATE SET
+                    session_id = EXCLUDED.session_id,
+                    note_date = EXCLUDED.note_date,
+                    content = EXCLUDED.content,
+                    tags = EXCLUDED.tags,
+                    updated_at = NOW()
+                WHERE psychotherapy_clinical_notes.tenant_id = EXCLUDED.tenant_id
+                RETURNING *;
+            `, [
+                data.id || null,
+                tenantId,
+                data.patientId,
+                data.sessionId ?? null,
+                data.noteDate,
+                data.content,
+                data.tags ?? []
+            ]);
+
+            if (result.rows.length === 0) throw new NotFoundError('Nota clínica não encontrada ou não autorizada');
+
+            await client.query('COMMIT');
+            return this.mapClinicalNote(result.rows[0]);
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     async listClinicalNotes(tenantId: string, patientId: string, page = 1, limit = 20): Promise<PaginatedResult<ClinicalNote>> {
@@ -2044,6 +2310,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             date: new Date(row.date),
             status: row.status,
             notes: row.notes ?? undefined,
+            appointmentId: row.appointment_id ?? undefined,
             createdAt: new Date(row.created_at),
             updatedAt: new Date(row.updated_at)
         };

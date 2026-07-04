@@ -7,6 +7,9 @@ export interface PsychotherapySession {
     date: Date;
     status: SessionStatus;
     notes?: string;
+    /** Agendamento de origem (migration 082) — null se a sessão foi criada manualmente pelo
+     *  Diário de Sessões, sem passar por um agendamento. */
+    appointmentId?: string;
     createdAt?: Date;
     updatedAt?: Date;
 }

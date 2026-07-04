@@ -80,6 +80,7 @@ export interface SessionRow {
     date: Date;
     status: 'attended' | 'justified_absence' | 'unjustified_absence' | 'canceled';
     notes: string | null;
+    appointment_id: string | null;
     created_at: Date;
     updated_at: Date;
 }
