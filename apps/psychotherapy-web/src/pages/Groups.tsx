@@ -1904,9 +1904,9 @@ function ConfirmPaymentModal({
   const toast = useToast();
   const [submitting, setSubmitting] = useState(false);
 
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'debit_card' | 'credit_card'>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cash' | 'debit_card' | 'credit_card'>(payment.payment_method || 'pix');
   const [amount, setAmount] = useState(String((payment.amount_cents || 0) / 100));
-  const [observations, setObservations] = useState('');
+  const [observations, setObservations] = useState(payment.notes || '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

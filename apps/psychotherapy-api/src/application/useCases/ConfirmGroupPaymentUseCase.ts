@@ -94,9 +94,10 @@ export class ConfirmGroupPaymentUseCase {
                         payment_method      = $1,
                         amount_paid_cents   = $2,
                         original_amount_cents = COALESCE(original_amount_cents, amount_cents),
+                        notes               = $3,
                         updated_at          = NOW()
-                    WHERE id = $3
-                `, [paymentMethod, finalAmountPaid, groupPaymentId]);
+                    WHERE id = $4
+                `, [paymentMethod, finalAmountPaid, observations || null, groupPaymentId]);
 
                 const ledgerInsert = await client.query(`
                     INSERT INTO financial_payments (
@@ -108,7 +109,11 @@ export class ConfirmGroupPaymentUseCase {
                         $3, 'BRL', NOW(), $4, 'manual', 'confirmed',
                         $5, $1, $6, $7
                     )
-                    ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+                    ON CONFLICT (tenant_id, idempotency_key) DO UPDATE
+                    SET 
+                        method = EXCLUDED.method,
+                        notes  = EXCLUDED.notes,
+                        amount_cents = EXCLUDED.amount_cents
                     RETURNING id
                 `, [tenantId, payment.patient_id, finalAmountPaid, ledgerMethod, idempotencyKey, groupPaymentId, observations || null]);
 
