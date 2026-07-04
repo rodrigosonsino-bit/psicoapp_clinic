@@ -257,6 +257,10 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/groups/:groupId/members', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.addGroupMember(req, res)));
     router.post('/psychotherapy/groups/:groupId/members-new', validateParams(groupIdParamSchema), validateBody(addGroupMemberIdempotentSchema), asyncHandler((req, res) => groupController.addGroupMemberIdempotent(req, res)));
     router.delete('/psychotherapy/groups/:groupId/members/:patientId', validateParams(groupMemberParamSchema), asyncHandler((req, res) => groupController.removeGroupMember(req, res)));
+    router.post('/psychotherapy/groups/:groupId/members/:memberId/advance-installments', 
+        validateParams(z.object({ groupId: z.string().uuid(), memberId: z.string().uuid() })), 
+        validateBody(z.object({ monthsToAdvance: z.number().int().min(1).max(24) })),
+        asyncHandler((req, res) => groupController.advanceMemberInstallments(req, res)));
     
     // Pagamentos do Grupo
     router.get('/psychotherapy/groups/:groupId/payments', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.listGroupPayments(req, res)));

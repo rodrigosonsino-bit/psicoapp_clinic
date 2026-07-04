@@ -4,7 +4,7 @@ import {
   Users, ChevronLeft, ChevronRight, ClipboardCheck,
   Clock, Calendar, CheckCircle2, XCircle, AlertCircle, RefreshCw,
   UserPlus, UserMinus, Search, Pencil, Trash2, Plus, CreditCard, Banknote, Wallet,
-  TrendingUp, CircleDollarSign, Hourglass, Save
+  TrendingUp, CircleDollarSign, Hourglass, Save, X
 } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -118,6 +118,12 @@ export default function Groups() {
   const [selectedUpfrontMemberId, setSelectedUpfrontMemberId] = useState<string>('');
   const [upfrontAmountStr, setUpfrontAmountStr] = useState<string>('');
   const [submittingUpfront, setSubmittingUpfront] = useState(false);
+
+  // Novos estados para o modal de adiantar parcelas
+  const [showAdvanceModal, setShowAdvanceModal] = useState(false);
+  const [memberToAdvance, setMemberToAdvance] = useState<any | null>(null);
+  const [monthsToAdvance, setMonthsToAdvance] = useState('1');
+  const [submittingAdvance, setSubmittingAdvance] = useState(false);
 
   // Inline editing for session history
   const [editingPresenceId, setEditingPresenceId] = useState<string | null>(null);
@@ -624,6 +630,18 @@ export default function Groups() {
                                             </div>
                                           </div>
                                         ))}
+                                        <div style={{ marginTop: '0.5rem', textAlign: 'right' }}>
+                                          <button 
+                                            className="btn btn-secondary btn-sm"
+                                            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                                            onClick={() => {
+                                              setMemberToAdvance(m);
+                                              setShowAdvanceModal(true);
+                                            }}
+                                          >
+                                            Adiantar Parcelas
+                                          </button>
+                                        </div>
                                       </div>
                                     )}
                                   </td>
@@ -742,10 +760,10 @@ export default function Groups() {
                               </td>
                               <td>
                                 <span className="text-small" style={{ textTransform: 'capitalize' }}>
-                                  {m.payment_type === 'monthly' ? 'Mensal' : 
-                                   m.payment_type === 'upfront' ? 'Total (Pacote)' : 
-                                   m.payment_type === 'installments' ? 'Parcelado' : 
-                                   'Mensal'}
+                                  {m.payment_type === 'monthly' ? 'por mês' : 
+                                   m.payment_type === 'upfront' ? 'total' : 
+                                   m.payment_type === 'installments' ? 'parcelado' : 
+                                   'por mês'}
                                 </span>
                               </td>
                               <td>
@@ -1049,6 +1067,69 @@ export default function Groups() {
                 }}
               >
                 {submittingUpfront ? 'Gerando...' : 'Gerar Cobrança Única'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Advance Installments Modal */}
+      {showAdvanceModal && memberToAdvance && selectedGroup && (
+        <div className="modal-overlay" onClick={() => setShowAdvanceModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3>Adiantar Parcelas</h3>
+              <button className="icon-btn" onClick={() => setShowAdvanceModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="text-small" style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>
+                Deseja gerar cobranças antecipadas para <strong>{memberToAdvance.name}</strong>?
+                Isso criará cobranças com status "Pendente" para os próximos meses, permitindo que você registre o pagamento delas agora.
+              </p>
+              
+              <div className="form-group mb-3">
+                <label className="form-label">Número de meses a adiantar</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="24"
+                  className="form-control"
+                  value={monthsToAdvance}
+                  onChange={(e) => setMonthsToAdvance(e.target.value)}
+                  disabled={submittingAdvance}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2" style={{ marginTop: '1rem' }}>
+              <button className="btn btn-secondary" onClick={() => setShowAdvanceModal(false)}>
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={submittingAdvance || !monthsToAdvance || parseInt(monthsToAdvance) < 1}
+                onClick={async () => {
+                  setSubmittingAdvance(true);
+                  try {
+                    await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/members/${memberToAdvance.group_member_id}/advance-installments`, {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        monthsToAdvance: parseInt(monthsToAdvance)
+                      })
+                    });
+                    toast.success('Cobranças antecipadas geradas com sucesso!');
+                    setShowAdvanceModal(false);
+                    loadPayments(selectedGroup.id, currentMonth);
+                  } catch (err) {
+                    toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao adiantar parcelas.');
+                  } finally {
+                    setSubmittingAdvance(false);
+                  }
+                }}
+              >
+                {submittingAdvance ? 'Gerando...' : 'Gerar Cobranças'}
               </button>
             </div>
           </div>
@@ -1816,6 +1897,11 @@ function ConfirmPaymentModal({
     const amountCents = Math.round(parseFloat(amount) * 100);
     if (isNaN(amountCents) || amountCents <= 0) {
       toast.error('Valor inválido');
+      return;
+    }
+
+    if (!payment?.id) {
+      toast.error('ID da cobrança não encontrado. Atualize a página e tente novamente.');
       return;
     }
 

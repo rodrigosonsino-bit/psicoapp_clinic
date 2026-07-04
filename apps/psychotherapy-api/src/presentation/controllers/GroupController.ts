@@ -8,6 +8,7 @@ import { ConfirmGroupPaymentUseCase } from '../../application/useCases/ConfirmGr
 import { VoidGroupPaymentUseCase } from '../../application/useCases/VoidGroupPaymentUseCase';
 import { ReplaceGroupChargeUseCase } from '../../application/useCases/ReplaceGroupChargeUseCase';
 import { AddGroupMemberIdempotentUseCase } from '../../application/useCases/AddGroupMemberIdempotentUseCase';
+import { AdvanceInstallmentsUseCase } from '../../application/useCases/AdvanceInstallmentsUseCase';
 import { AttachExistingGroupMemberUseCase } from '../../application/useCases/AttachExistingGroupMemberUseCase';
 import { CreateUpfrontCourseChargeUseCase } from '../../application/useCases/CreateUpfrontCourseChargeUseCase';
 import { RefundUpfrontCourseUseCase } from '../../application/useCases/RefundUpfrontCourseUseCase';
@@ -29,6 +30,7 @@ export class GroupController {
         @inject(CreateUpfrontCourseChargeUseCase) private readonly createUpfrontCourseCharge: CreateUpfrontCourseChargeUseCase,
         @inject(RefundUpfrontCourseUseCase) private readonly refundUpfrontCourse: RefundUpfrontCourseUseCase,
         @inject(CancelPolicyUseCase) private readonly cancelPolicy: CancelPolicyUseCase,
+        @inject(AdvanceInstallmentsUseCase) private readonly advanceInstallments: AdvanceInstallmentsUseCase
     ) {}
 
     /** POST /psychotherapy/groups/:groupId/sessions */
@@ -55,6 +57,25 @@ export class GroupController {
             data: result,
         });
     }
+
+    /** POST /psychotherapy/groups/:groupId/members/:memberId/advance-installments */
+    async advanceMemberInstallments(req: Request, res: Response): Promise<void> {
+        const tenantId = (req as any).tenantId as string;
+        if (!tenantId) throw new AppError('Não autenticado', 401);
+
+        const { groupId, memberId } = req.params;
+        const { monthsToAdvance } = req.body;
+
+        const result = await this.advanceInstallments.execute({
+            tenantId,
+            groupId,
+            groupMemberId: memberId,
+            monthsToAdvance: Number(monthsToAdvance) || 1
+        });
+
+        res.status(201).json({ success: true, data: result });
+    }
+
 
     /** POST /psychotherapy/groups/:groupId/charges */
     async generateCharges(req: Request, res: Response): Promise<void> {
@@ -373,22 +394,26 @@ export class GroupController {
                   AND gsr.tenant_id  = $2
                   AND TO_CHAR(gsr.session_date, 'YYYY-MM') = $3
             ) sess ON true
-            -- Status de pagamento: vem dos pagamentos de grupo do mês
+            -- Status de pagamento: vem dos pagamentos de grupo do mês ou pacotes
             LEFT JOIN LATERAL (
                 SELECT
                     CASE
                         WHEN tg.monthly_fee_cents IS NULL OR tg.monthly_fee_cents = 0 THEN 'paid'
-                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) = 0 THEN 'pending'
-                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0) >= tg.monthly_fee_cents THEN 'paid'
+                        WHEN EXISTS (
+                            SELECT 1 FROM group_payments gp2 
+                            WHERE gp2.group_member_id = tgm.id AND gp2.tenant_id = $2 AND gp2.status = 'paid' AND gp2.charge_type IN ('upfront', 'installments')
+                        ) THEN 'paid'
+                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid' AND gp.charge_type = 'monthly'), 0) = 0 AND NOT EXISTS (SELECT 1 FROM group_payments gp3 WHERE gp3.group_member_id = tgm.id AND gp3.charge_type IN ('upfront', 'installments')) THEN 'pending'
+                        WHEN COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid' AND gp.charge_type = 'monthly'), 0) >= tg.monthly_fee_cents THEN 'paid'
                         ELSE 'partial'
                     END AS payment_status
                 FROM therapy_groups tg
                 LEFT JOIN group_payments gp
                     ON  gp.group_member_id = tgm.id
-                    AND gp.reference_month = $3
+                    AND (gp.reference_month = $3 OR gp.charge_type IN ('upfront', 'installments'))
                     AND gp.tenant_id       = $2
                 WHERE tg.id = tgm.group_id
-                GROUP BY tg.monthly_fee_cents
+                GROUP BY tg.monthly_fee_cents, tgm.id
             ) gp_status ON true
             WHERE tgm.group_id   = $1
               AND p.tenant_id    = $2
@@ -653,6 +678,7 @@ export class GroupController {
         const result = await this.dbPool.query(`
             SELECT
                 p.id            AS patient_id,
+                tgm.id          AS group_member_id,
                 p.name,
                 COALESCE(SUM(gp.amount_cents) FILTER (WHERE gp.status = 'paid'), 0)::int AS total_paid_cents,
                 COUNT(gp.id) FILTER (WHERE gp.status != 'voided')::int                   AS payments_count,
@@ -686,13 +712,13 @@ export class GroupController {
             JOIN therapy_groups tg         ON tg.id = tgm.group_id
             LEFT JOIN group_payments gp
                 ON  gp.group_member_id = tgm.id
-                AND gp.reference_month = $1
+                AND (gp.reference_month = $1 OR gp.charge_type IN ('upfront', 'installments'))
                 AND gp.tenant_id       = $2
                 AND gp.status != 'voided'
             WHERE tgm.group_id   = $3
               AND tgm.left_at   IS NULL
               AND p.tenant_id    = $2
-            GROUP BY p.id, p.name, tg.monthly_fee_cents
+            GROUP BY p.id, p.name, tg.monthly_fee_cents, tgm.id
             ORDER BY p.name ASC;
         `, [effectiveMonth, tenantId, groupId]);
 
