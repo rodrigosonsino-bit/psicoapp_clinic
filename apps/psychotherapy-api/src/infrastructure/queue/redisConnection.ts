@@ -7,6 +7,7 @@ export function getBroadcastRedisConnection(): IORedis {
     if (!connection) {
         connection = process.env.REDIS_URL
             ? new IORedis(process.env.REDIS_URL, {
+                lazyConnect: true,
                 maxRetriesPerRequest: null,
                 tls: process.env.REDIS_TLS === 'true' ? { rejectUnauthorized: false } : undefined
             })
@@ -14,6 +15,7 @@ export function getBroadcastRedisConnection(): IORedis {
                 host: process.env.REDIS_HOST || 'localhost',
                 port: parseInt(process.env.REDIS_PORT || '6379', 10),
                 password: process.env.REDIS_PASSWORD || undefined,
+                lazyConnect: true,
                 maxRetriesPerRequest: null,
                 tls: process.env.REDIS_TLS === 'true' ? { rejectUnauthorized: false } : undefined
             });
