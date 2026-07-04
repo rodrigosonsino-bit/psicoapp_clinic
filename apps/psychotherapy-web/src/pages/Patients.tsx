@@ -42,7 +42,7 @@ export default function Patients() {
     try {
       setLoading(true);
       setError(false);
-      const params = new URLSearchParams({ page: String(pg), limit: String(PAGE_SIZE) });
+      const params = new URLSearchParams({ page: String(pg), limit: String(PAGE_SIZE), scope: 'individual' });
       if (q) params.set('search', q);
       const res = await fetchApi<PaginatedResponse<Patient>>(`/api/psychotherapy/patients?${params}`);
       setPatients(res.data);
