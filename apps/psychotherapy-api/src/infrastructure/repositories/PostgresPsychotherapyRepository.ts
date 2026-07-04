@@ -766,9 +766,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     ): Promise<PaginatedResult<PsychotherapyExpense>> {
         const validTenantId = this.validateTenantId(tenantId);
 
-        // Auto-instantiate fixed expenses for current month and any months in start-end range
-        const now = new Date();
-        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        // Auto-instantiate fixed expenses for current month and any months in start-end range.
+        // Usa America/Sao_Paulo explicitamente (não new Date().getMonth(), que usa o fuso do
+        // servidor — normalmente UTC no Railway — e podia calcular o "mês atual" errado perto
+        // da virada do dia em BRT, achado na revisão de 04/07/2026).
+        const currentMonth = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+        }).format(new Date()).slice(0, 7);
         await this.checkAndInstantiateFixedExpenses(validTenantId, currentMonth);
         
         if (start && end) {
@@ -909,36 +915,42 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     private async checkAndInstantiateFixedExpenses(tenantId: string, monthStr: string): Promise<void> {
         const validTenantId = this.validateTenantId(tenantId);
         const fixedExpenses = await this.listFixedExpenses(validTenantId);
-        
+
         for (const fe of fixedExpenses) {
             if (!fe.active) continue;
-            
+
             const startMonth = fe.startDate.substring(0, 7); // YYYY-MM
             if (monthStr < startMonth) continue;
-            
+
             if (fe.endDate) {
                 const endMonth = fe.endDate.substring(0, 7); // YYYY-MM
                 if (monthStr > endMonth) continue;
             }
-            
-            const exists = await this.expenseExistsForMonth(validTenantId, fe.id, monthStr);
-            if (!exists) {
-                const [yearStr, mStr] = monthStr.split('-');
-                const year = parseInt(yearStr, 10);
-                const monthIdx = parseInt(mStr, 10) - 1;
-                const day = Math.min(fe.dayOfMonth, 28);
-                const date = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0));
-                
-                await this.saveExpense({
-                    tenantId: validTenantId,
-                    date,
-                    amountCents: fe.amountCents,
-                    description: fe.description,
-                    category: (fe.category || 'other') as any,
-                    fixedExpenseId: fe.id,
-                    referenceMonth: monthStr
-                });
-            }
+
+            const [yearStr, mStr] = monthStr.split('-');
+            const year = parseInt(yearStr, 10);
+            const monthIdx = parseInt(mStr, 10) - 1;
+            const day = Math.min(fe.dayOfMonth, 28);
+            const date = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0));
+
+            // INSERT atômico com ON CONFLICT DO NOTHING no índice único parcial
+            // uq_psychotherapy_expenses_fixed_month (migration 081) — substitui o antigo
+            // padrão SELECT (expenseExistsForMonth) + INSERT (saveExpense), que tinha race
+            // condition real: duas requests concorrentes (2 abas, polling duplo do dashboard)
+            // podiam ambas ver "não existe" e inserir, duplicando a despesa do mês.
+            // saveExpense() não serve aqui porque sempre gera um id novo e faz
+            // ON CONFLICT (id) DO UPDATE — nunca colide, então nunca detectava a duplicata.
+            await this.dbPool.query(`
+                INSERT INTO psychotherapy_expenses (
+                    id, tenant_id, date, amount_cents, description, category,
+                    fixed_expense_id, reference_month
+                ) VALUES (
+                    gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
+                )
+                ON CONFLICT (tenant_id, fixed_expense_id, reference_month)
+                    WHERE fixed_expense_id IS NOT NULL
+                    DO NOTHING
+            `, [validTenantId, date, fe.amountCents, fe.description, fe.category || 'other', fe.id, monthStr]);
         }
     }
 

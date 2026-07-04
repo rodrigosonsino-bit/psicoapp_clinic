@@ -261,11 +261,13 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/group-payments/:id/replace', validateParams(uuidParamSchema), validateBody(replaceGroupChargeSchema), asyncHandler((req, res) => groupController.replaceCharge(req, res)));
 
     // Group Members
-    router.get('/psychotherapy/groups/:groupId/members', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.listGroupMembers(req, res)));
-    router.post('/psychotherapy/groups/:groupId/members', validateParams(groupIdParamSchema), asyncHandler((req, res) => groupController.addGroupMember(req, res)));
+    // NOTA (04/07/2026): GET/POST /members e DELETE /members/:patientId eram registrados
+    // aqui E de novo mais abaixo (perto de "Membros de um grupo com status de pagamento"),
+    // com validação mais fraca ou ausente nesta cópia (Express sempre executa a PRIMEIRA
+    // rota registrada pra um dado método+path — a segunda cópia, mais validada, nunca era
+    // alcançada). Removidos daqui; as versões canônicas ficam só no bloco abaixo.
     router.post('/psychotherapy/groups/:groupId/members-new', validateParams(groupIdParamSchema), validateBody(addGroupMemberIdempotentSchema), asyncHandler((req, res) => groupController.addGroupMemberIdempotent(req, res)));
-    router.delete('/psychotherapy/groups/:groupId/members/:patientId', validateParams(groupMemberParamSchema), asyncHandler((req, res) => groupController.removeGroupMember(req, res)));
-    router.post('/psychotherapy/groups/:groupId/members/:memberId/advance-installments', 
+    router.post('/psychotherapy/groups/:groupId/members/:memberId/advance-installments',
         validateParams(z.object({ groupId: z.string().uuid(), memberId: z.string().uuid() })), 
         validateBody(z.object({ monthsToAdvance: z.number().int().min(1).max(24) })),
         asyncHandler((req, res) => groupController.advanceMemberInstallments(req, res)));

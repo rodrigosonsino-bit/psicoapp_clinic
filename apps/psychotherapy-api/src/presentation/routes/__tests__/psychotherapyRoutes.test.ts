@@ -1,30 +1,26 @@
 /**
  * psychotherapyRoutes.test.ts
  *
- * Teste de CARACTERIZAÇÃO (não de correção) do bug de rotas duplicadas encontrado na
- * auditoria de 03/07/2026 e confirmado por revisão externa (Codex CLI): várias rotas de
- * `/psychotherapy/groups/:groupId/members` são registradas duas vezes em
+ * Teste de REGRESSÃO pro bug de rotas duplicadas encontrado na auditoria de 03/07/2026
+ * e confirmado por revisão externa (Codex CLI): várias rotas de
+ * `/psychotherapy/groups/:groupId/members` eram registradas duas vezes em
  * `psychotherapyRoutes.ts`. No Express, a primeira rota registrada para um dado
- * (método, path) sempre vence — a segunda nunca é alcançada, mesmo que tenha validação
- * Zod (`validateBody`/`validateQuery`) que a primeira não tem.
+ * (método, path) sempre vence — a segunda nunca era alcançada, mesmo tendo validação
+ * Zod (`validateBody`/`validateQuery`) que a primeira não tinha.
  *
  * Execução real deste teste (03/07/2026) encontrou uma TERCEIRA duplicata não citada
- * pela revisão do Codex: `DELETE /psychotherapy/groups/:groupId/members/:patientId`
- * (linhas 259 e 559). Diferente de GET/POST members, as duas cópias do DELETE são
- * idênticas (mesmo `validateParams(groupMemberParamSchema)`, mesmo handler) — é
- * duplicação redundante e inofensiva, não um bypass de validação. Documentado abaixo
- * distinguindo os dois casos.
+ * pela revisão do Codex: `DELETE /psychotherapy/groups/:groupId/members/:patientId`.
+ * Diferente de GET/POST members, as duas cópias do DELETE eram idênticas (mesmo
+ * `validateParams(groupMemberParamSchema)`, mesmo handler) — redundante mas inofensiva.
+ *
+ * Corrigido em 04/07/2026 (item 5 do plano pós-Codex): removidas as 3 duplicatas,
+ * mantendo as versões mais completas (com validateQuery/validateBody). Este teste agora
+ * é a garantia de que a duplicação não volta — se alguém reintroduzir um registro
+ * duplicado (aqui ou em qualquer outra rota do arquivo), o "sanity check" abaixo falha.
  *
  * Detecção de validação: `validateBody`/`validateQuery`/`validateParams` retornam
- * arrow functions ANÔNIMAS (sem `.name`), então checar `handler.name` não funciona
- * (tentativa inicial deste teste confirmou isso na prática — sempre dava falso negativo).
- * A heurística usada aqui é o TAMANHO da cadeia de middlewares: a rota com Zod tem um
- * middleware a mais do que a rota sem — comparação relativa, não detecção por nome.
- *
- * Este teste documenta o estado ATUAL (duplicatas existem) e serve de critério de
- * aceite para a fase 5 do plano de correções ("consolidar rotas duplicadas de grupo"):
- * quando a duplicação for removida, os asserts marcados "← comportamento errado,
- * documentado" devem ser invertidos.
+ * arrow functions ANÔNIMAS (sem `.name`), então checar `handler.name` não funciona.
+ * A heurística usada aqui é o TAMANHO da cadeia de middlewares.
  */
 
 import 'reflect-metadata';
@@ -62,7 +58,7 @@ function extractRoutes(router: Router): RouteEntry[] {
     return entries;
 }
 
-describe('[CARACTERIZAÇÃO] psychotherapyRoutes — rotas de grupo duplicadas', () => {
+describe('[REGRESSÃO] psychotherapyRoutes — sem rotas de grupo duplicadas', () => {
     const router = createPsychotherapyRoutes();
     const routes = extractRoutes(router);
 
@@ -70,66 +66,35 @@ describe('[CARACTERIZAÇÃO] psychotherapyRoutes — rotas de grupo duplicadas',
         return routes.filter(r => r.method === method && r.path === path);
     }
 
-    it('BUG: POST /psychotherapy/groups/:groupId/members está registrada mais de uma vez', () => {
+    it('POST /psychotherapy/groups/:groupId/members está registrada exatamente 1 vez, com validateBody', () => {
         const matches = findAll('POST', '/psychotherapy/groups/:groupId/members');
-        // Comportamento ATUAL (com bug): 2 registros para o mesmo (método, path).
-        // Pós-fix (fase 5 do plano): deve haver exatamente 1.
-        expect(matches.length).toBeGreaterThan(1);
+        expect(matches).toHaveLength(1);
+        // stackLength 3 = validateParams + validateBody + asyncHandler(handler)
+        expect(matches[0].stackLength).toBe(3);
     });
 
-    it('BUG: GET /psychotherapy/groups/:groupId/members está registrada mais de uma vez', () => {
+    it('GET /psychotherapy/groups/:groupId/members está registrada exatamente 1 vez, com validateQuery', () => {
         const matches = findAll('GET', '/psychotherapy/groups/:groupId/members');
-        expect(matches.length).toBeGreaterThan(1);
+        expect(matches).toHaveLength(1);
+        // stackLength 3 = validateParams + validateQuery + asyncHandler(handler)
+        expect(matches[0].stackLength).toBe(3);
     });
 
-    it('BUG: a primeira rota registrada de POST members (com cadeia MENOR, ou seja menos validação) é a que o Express de fato executa — a versão com validateBody é código morto', () => {
-        const matches = findAll('POST', '/psychotherapy/groups/:groupId/members');
-        expect(matches.length).toBeGreaterThan(1);
-
-        // Express sempre executa a PRIMEIRA rota que casa (método, path) — as demais nunca
-        // são alcançadas para esse par exato.
-        const winner = matches[0];
-        const shadowed = matches.slice(1);
-
-        // Comportamento ATUAL (com bug): a rota vencedora tem MENOS middlewares (sem
-        // validateBody) do que pelo menos uma das rotas sombreadas (com validateBody).
-        // Pós-fix: só deve sobrar 1 rota, com a cadeia MAIOR (validada).
-        expect(shadowed.some(r => r.stackLength > winner.stackLength)).toBe(true);
+    it('DELETE /psychotherapy/groups/:groupId/members/:patientId está registrada exatamente 1 vez', () => {
+        const matches = findAll('DELETE', '/psychotherapy/groups/:groupId/members/:patientId');
+        expect(matches).toHaveLength(1);
     });
 
-    it('BUG: GET members com validateQuery também é sombreado pela versão sem validação', () => {
-        const matches = findAll('GET', '/psychotherapy/groups/:groupId/members');
-        expect(matches.length).toBeGreaterThan(1);
-
-        const winner = matches[0];
-        const shadowed = matches.slice(1);
-        expect(shadowed.some(r => r.stackLength > winner.stackLength)).toBe(true);
-    });
-
-    it('sanity check: mapeia TODAS as duplicatas de (método, path) hoje — 3 conhecidas, 1 delas inofensiva', () => {
+    it('sanity check: nenhuma combinação (método, path) está registrada mais de uma vez em todo o arquivo', () => {
         const seen = new Map<string, number>();
         for (const r of routes) {
             const key = `${r.method} ${r.path}`;
             seen.set(key, (seen.get(key) ?? 0) + 1);
         }
         const duplicates = [...seen.entries()].filter(([, count]) => count > 1);
-        const duplicateKeys = duplicates.map(([key]) => key).sort();
 
-        // Lista fechada do que sabemos estar duplicado hoje: GET/POST members (bug real —
-        // validação sombreada, ver testes acima) + DELETE members/:patientId (duplicata
-        // redundante mas INÓFENSIVA — as duas cópias são idênticas, mesmo validateParams).
-        // Se este teste falhar porque apareceu uma chave NOVA aqui, é uma duplicata adicional
-        // não documentada — investigar antes de simplesmente atualizar a lista.
-        expect(duplicateKeys).toEqual([
-            'DELETE /psychotherapy/groups/:groupId/members/:patientId',
-            'GET /psychotherapy/groups/:groupId/members',
-            'POST /psychotherapy/groups/:groupId/members',
-        ]);
-
-        // Confirma que o DELETE duplicado é de fato inofensivo (cadeias de mesmo tamanho,
-        // nenhuma validação extra sendo sombreada) — distingue do caso GET/POST.
-        const deleteMatches = findAll('DELETE', '/psychotherapy/groups/:groupId/members/:patientId');
-        const stackLengths = deleteMatches.map(r => r.stackLength);
-        expect(new Set(stackLengths).size).toBe(1); // todas as cópias têm a mesma cadeia
+        // Lista vazia = sem duplicatas. Se este teste falhar, alguém reintroduziu um
+        // registro duplicado — investigue qual rota antes de "corrigir" o teste.
+        expect(duplicates).toEqual([]);
     });
 });
