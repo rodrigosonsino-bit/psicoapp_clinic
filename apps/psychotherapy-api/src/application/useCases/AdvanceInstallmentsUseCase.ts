@@ -33,12 +33,24 @@ export class AdvanceInstallmentsUseCase {
         try {
             await client.query('BEGIN');
 
-            // 1. Validar membro e obter política de cobrança
+            // 1. Validar membro e obter política de cobrança vigente hoje. Ausência de
+            // política (LEFT JOIN sem match, o caso comum de um membro que nunca teve
+            // pacote/isenção) é o padrão "mensal" implícito — precisa de COALESCE, senão
+            // billing_type vem NULL e o comparativo abaixo bloqueia todo mundo por engano.
             const memberResult = await client.query(`
-                SELECT m.patient_id, p.billing_type
+                SELECT m.patient_id, COALESCE(p.billing_type, 'group_default') AS billing_type
                 FROM therapy_group_members m
-                LEFT JOIN therapy_group_member_billing_policies p 
-                  ON p.member_id = m.id AND p.status = 'active'
+                LEFT JOIN LATERAL (
+                    SELECT billing_type
+                    FROM therapy_group_member_billing_policies bp
+                    WHERE bp.member_id = m.id
+                      AND bp.tenant_id = $3
+                      AND bp.status = 'active'
+                      AND bp.valid_from <= CURRENT_DATE
+                      AND (bp.valid_until IS NULL OR bp.valid_until >= CURRENT_DATE)
+                    ORDER BY bp.valid_from DESC
+                    LIMIT 1
+                ) p ON true
                 WHERE m.id = $1 AND m.group_id = $2 AND m.tenant_id = $3 AND m.left_at IS NULL
             `, [groupMemberId, groupId, tenantId]);
 
