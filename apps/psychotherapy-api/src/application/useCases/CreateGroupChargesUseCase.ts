@@ -80,11 +80,9 @@ export class CreateGroupChargesUseCase {
             let skippedCount = 0;
 
             for (const row of membersResult.rows) {
-                if (!row.billing_type) {
-                    throw new AppError(`Falha de integridade: Matrícula ${row.group_member_id} não possui política de faturamento vigente em ${firstDayOfMonth}.`, 500);
-                }
+                const billingType = row.billing_type || 'group_default';
 
-                if (row.billing_type !== 'group_default') {
+                if (billingType !== 'group_default') {
                     // Isento ou pagou upfront, não gera mensalidade
                     skippedCount++;
                     continue;
