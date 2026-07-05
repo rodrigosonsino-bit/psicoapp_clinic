@@ -29,11 +29,14 @@ export class PostgresMessageRepository implements IMessageRepository {
                 // name é NOT NULL na tabela — em contato novo (nunca sincronizado via evento do
                 // WhatsApp) precisamos de um valor inicial. Usamos o próprio alias; se o contato já
                 // existir, o ON CONFLICT só atualiza alias_name, preservando o name já sincronizado.
+                // $3 e $4 recebem o mesmo valor em vez de reusar um único placeholder: name é
+                // VARCHAR(255) e alias_name é TEXT, e o Postgres rejeita ("inconsistent types
+                // deduced for parameter") o mesmo parâmetro alimentando colunas de tipos diferentes.
                 await this.dbPool.query(`
                     INSERT INTO whatsapp_contacts (tenant_id, id, name, alias_name)
-                    VALUES ($1, $2, $3, $3)
+                    VALUES ($1, $2, $3, $4)
                     ON CONFLICT (tenant_id, id) DO UPDATE SET alias_name = EXCLUDED.alias_name;
-                `, [message.userId, message.recipientId, message.metadata.recipientName]);
+                `, [message.userId, message.recipientId, message.metadata.recipientName, message.metadata.recipientName]);
             } catch (err) {
                 console.error("Error upserting contact alias:", err);
             }
@@ -81,12 +84,13 @@ export class PostgresMessageRepository implements IMessageRepository {
         if (fields.metadata?.recipientName) {
             try {
                 // Mesmo motivo do save(): name é NOT NULL, então um contato novo precisa de um
-                // valor inicial (o próprio alias) para o INSERT não falhar silenciosamente.
+                // valor inicial (o próprio alias) para o INSERT não falhar silenciosamente. $3/$4
+                // separados pelo mesmo motivo do save() (name VARCHAR vs alias_name TEXT).
                 await this.dbPool.query(`
                     INSERT INTO whatsapp_contacts (tenant_id, id, name, alias_name)
-                    VALUES ($1, $2, $3, $3)
+                    VALUES ($1, $2, $3, $4)
                     ON CONFLICT (tenant_id, id) DO UPDATE SET alias_name = EXCLUDED.alias_name;
-                `, [userId, fields.recipientId || row.recipient_id, fields.metadata.recipientName]);
+                `, [userId, fields.recipientId || row.recipient_id, fields.metadata.recipientName, fields.metadata.recipientName]);
             } catch (err) {
                 console.error("Error upserting contact alias:", err);
             }
