@@ -14,6 +14,7 @@ export class HealthController {
     async check(req: Request, res: Response): Promise<Response> {
         const healthStatus: any = {
             status: 'ok',
+            commit: process.env.RAILWAY_GIT_COMMIT_SHA || 'unknown',
             services: {
                 database: 'down',
                 redis: 'down',

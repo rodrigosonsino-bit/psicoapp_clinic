@@ -224,6 +224,7 @@ export class WhatsappController {
             const contacts = await client.getContacts();
             res.json(contacts);
         } catch (error: any) {
+            logger.error({ err: error, tenantId }, 'Erro ao buscar contatos do WhatsApp.');
             res.status(500).json({ error: error.message });
         }
     };
