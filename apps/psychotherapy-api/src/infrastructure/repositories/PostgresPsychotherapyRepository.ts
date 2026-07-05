@@ -227,10 +227,12 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                     session_price_cents = $7,
                     expected_sessions = COALESCE($8, 0),
                     paid_sessions = COALESCE($9, 0),
-                    absences = COALESCE($10, 0),
-                    payment_status = COALESCE($11, 'pending'),
-                    notes = $12,
-                    previous_month_paid_cents = COALESCE($13, 0),
+                    -- absences NÃO é atualizado aqui: é derivado de agendamentos marcados "Faltou"
+                    -- (ver syncMonthlyRecord) e não deve ser sobrescrito por um valor desatualizado
+                    -- que o cliente tinha em memória antes de uma falta ser marcada em outra tela.
+                    payment_status = COALESCE($10, 'pending'),
+                    notes = $11,
+                    previous_month_paid_cents = COALESCE($12, 0),
                     updated_at = NOW()
                 WHERE tenant_id = $1 AND id = $2
                 RETURNING *;
@@ -244,7 +246,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 data.sessionPriceCents ?? null,
                 data.expectedSessions ?? 0,
                 data.paidSessions ?? 0,
-                data.absences ?? 0,
                 data.paymentStatus || 'pending',
                 data.notes || null,
                 data.previousMonthPaidCents ?? 0
@@ -272,7 +273,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 session_price_cents = EXCLUDED.session_price_cents,
                 expected_sessions = EXCLUDED.expected_sessions,
                 paid_sessions = EXCLUDED.paid_sessions,
-                absences = EXCLUDED.absences,
+                -- absences preservado (ver comentário equivalente no branch UPDATE acima)
                 payment_status = EXCLUDED.payment_status,
                 notes = EXCLUDED.notes,
                 previous_month_paid_cents = EXCLUDED.previous_month_paid_cents,
@@ -2607,6 +2608,28 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 SET paid_sessions = $1, payment_status = $2, updated_at = NOW()
                 WHERE id = $3;
             `, [paidSessions, paymentStatus, record.id]);
+        } else {
+            // Fluxo legado (pré-cutover): paid_sessions/payment_status são editados manualmente
+            // na tela de Faturamento Mensal (não vêm do ledger). Se expected_sessions/absences
+            // mudou agora (ex: sessão marcada "Faltou" DEPOIS que os pagamentos já tinham sido
+            // registrados), payment_status ficava travado no valor antigo, pois só era
+            // recalculado no ato de pagar/gerar mês. Recalcula aqui pra refletir o novo alvo.
+            const target = Math.max(expectedSessions - absences, 0);
+            const paidSessions = record.paid_sessions;
+            let paymentStatus: 'pending' | 'partial' | 'paid' = 'pending';
+            if (paidSessions >= target) {
+                paymentStatus = 'paid';
+            } else if (paidSessions > 0) {
+                paymentStatus = 'partial';
+            }
+
+            if (paymentStatus !== record.payment_status) {
+                await client.query(`
+                    UPDATE psychotherapy_monthly_records
+                    SET payment_status = $1, updated_at = NOW()
+                    WHERE id = $2;
+                `, [paymentStatus, record.id]);
+            }
         }
     }
 
