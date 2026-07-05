@@ -3,6 +3,54 @@ import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken, login, register, getMe, TenantProfile } from '../services/api';
 
+// No app desktop (Electron), preferimos o armazenamento criptografado via safeStorage
+// (exposto pelo preload.js como window.desktopAPI) em vez de localStorage puro — mesma
+// origem que já persiste entre reaberturas do app, mas com o token protegido no disco
+// pelas credenciais do usuário do Windows/macOS em vez de texto plano.
+const desktopAPI = (): { storeToken: (k: string, v: string) => Promise<boolean>; getToken: (k: string) => Promise<string | null>; deleteToken: (k: string) => Promise<boolean> } | null => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).desktopAPI?.isDesktop) {
+    return (window as any).desktopAPI;
+  }
+  return null;
+};
+
+async function persistToken(key: string, value: string): Promise<void> {
+  const api = desktopAPI();
+  if (api) {
+    await api.storeToken(key, value);
+    return;
+  }
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.localStorage.setItem(key, value);
+  } else {
+    await AsyncStorage.setItem(key, value);
+  }
+}
+
+async function readToken(key: string): Promise<string | null> {
+  const api = desktopAPI();
+  if (api) {
+    return api.getToken(key);
+  }
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return window.localStorage.getItem(key);
+  }
+  return AsyncStorage.getItem(key);
+}
+
+async function clearToken(key: string): Promise<void> {
+  const api = desktopAPI();
+  if (api) {
+    await api.deleteToken(key);
+    return;
+  }
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.localStorage.removeItem(key);
+  } else {
+    await AsyncStorage.removeItem(key);
+  }
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
   tenant: TenantProfile | null;
@@ -30,12 +78,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let savedToken: string | null = null;
       let savedRealToken: string | null = null;
       try {
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          savedToken = window.localStorage.getItem('jwt_token');
-          savedRealToken = window.localStorage.getItem('jwt_token_real');
-        } else {
-          savedToken = await AsyncStorage.getItem('jwt_token');
-          savedRealToken = await AsyncStorage.getItem('jwt_token_real');
+        savedToken = await readToken('jwt_token');
+        savedRealToken = await readToken('jwt_token_real');
+
+        // Migração única: sessões desktop salvas antes da criptografia via safeStorage
+        // ficaram em localStorage puro. Se o armazenamento seguro não tiver nada ainda,
+        // aproveita o token velho (evita deslogar todo mundo na primeira abertura pós-update)
+        // e já move ele pro armazenamento seguro.
+        if (!savedToken && desktopAPI() && Platform.OS === 'web' && typeof window !== 'undefined') {
+          const legacyToken = window.localStorage.getItem('jwt_token');
+          if (legacyToken) {
+            savedToken = legacyToken;
+            await persistToken('jwt_token', legacyToken);
+            window.localStorage.removeItem('jwt_token');
+          }
+          const legacyRealToken = window.localStorage.getItem('jwt_token_real');
+          if (legacyRealToken) {
+            savedRealToken = legacyRealToken;
+            await persistToken('jwt_token_real', legacyRealToken);
+            window.localStorage.removeItem('jwt_token_real');
+          }
         }
 
         if (savedToken) {
@@ -71,13 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await setAuthToken(res.token);
       setToken(res.token);
-
-      // Persist token
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.localStorage.setItem('jwt_token', res.token);
-      } else {
-        await AsyncStorage.setItem('jwt_token', res.token);
-      }
+      await persistToken('jwt_token', res.token);
 
       const profile = await getMe();
       setTenant(profile);
@@ -92,17 +148,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRealTokenState(newToken);
     try {
       if (newToken) {
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          window.localStorage.setItem('jwt_token_real', newToken);
-        } else {
-          await AsyncStorage.setItem('jwt_token_real', newToken);
-        }
+        await persistToken('jwt_token_real', newToken);
       } else {
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          window.localStorage.removeItem('jwt_token_real');
-        } else {
-          await AsyncStorage.removeItem('jwt_token_real');
-        }
+        await clearToken('jwt_token_real');
       }
     } catch (e) {
       console.warn('Failed to persist jwt_token_real:', e);
@@ -117,12 +165,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRealTokenState(null);
 
     try {
+      await clearToken('jwt_token');
+      await clearToken('jwt_token_real');
+      // Também limpa eventual resíduo em localStorage puro (pré-migração).
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.localStorage.removeItem('jwt_token');
         window.localStorage.removeItem('jwt_token_real');
-      } else {
-        await AsyncStorage.removeItem('jwt_token');
-        await AsyncStorage.removeItem('jwt_token_real');
       }
     } catch (e) {
       console.warn('Failed to clear tokens from storage on logout:', e);

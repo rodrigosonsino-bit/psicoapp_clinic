@@ -12,7 +12,10 @@ export interface TokenPayload {
 
 export class JwtService {
     private readonly secret: string;
-    private readonly expiresIn = '7d';
+    // "Manter conectado": sessão desktop de longa duração. Seguro porque o trial/status do
+    // tenant é revalidado no banco a cada request (trialCheckMiddleware), não confia em claim
+    // antigo do JWT — só o admin-preview (rota separada) confia nas claims do próprio token.
+    private readonly expiresIn = '180d';
 
     constructor() {
         const secret = process.env.JWT_SECRET;
