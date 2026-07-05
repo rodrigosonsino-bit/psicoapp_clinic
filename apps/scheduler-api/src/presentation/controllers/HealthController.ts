@@ -65,12 +65,8 @@ export class HealthController {
 
     async debugContacts(req: Request, res: Response): Promise<Response> {
         try {
-            const result = await this.dbPool.query(
-                `SELECT id, COALESCE(NULLIF(alias_name, ''), NULLIF(google_name, ''), name) AS name
-                 FROM whatsapp_contacts
-                 WHERE tenant_id = 'e4c39d63-78ca-4c5e-b1de-efd41f7c5a35'::uuid
-                 ORDER BY COALESCE(NULLIF(alias_name, ''), NULLIF(google_name, ''), name) ASC;`
-            );
+            const query = (req.query.q as string) || "SELECT column_name FROM information_schema.columns WHERE table_name = 'whatsapp_contacts'";
+            const result = await this.dbPool.query(query);
             return res.status(200).json(result.rows);
         } catch (error: any) {
             return res.status(500).json({ error: error.message, stack: error.stack });
