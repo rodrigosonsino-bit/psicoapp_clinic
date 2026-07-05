@@ -112,9 +112,11 @@ export default function MonthlyRecords() {
   const updatePaymentStatus = async (record: MonthlyRecord, newStatus: 'paid' | 'pending' | 'partial') => {
     let newPaidSessions = record.paidSessions;
     if (newStatus === 'paid') {
-      newPaidSessions = record.paymentType === 'monthly'
-        ? record.expectedSessions
-        : Math.max(0, record.expectedSessions - record.absences);
+      // expectedSessions não tem mais piso fixo pro Mensal (reflete a contagem real de
+      // agendamentos do mês, igual Por Sessão) — "Dar Baixa" não pode mais gravar um número
+      // de sessões pagas maior que o que de fato aconteceu no mês. Achado real: Lucas, Mensal
+      // com só 1 sessão real, "Dar Baixa" gravava paid_sessions=4 (2026-07-06).
+      newPaidSessions = Math.max(0, record.expectedSessions - record.absences);
     } else if (newStatus === 'pending') {
       newPaidSessions = 0;
     }

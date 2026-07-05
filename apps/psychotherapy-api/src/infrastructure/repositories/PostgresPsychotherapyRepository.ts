@@ -257,14 +257,17 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
             if (updated.rows.length === 0) throw new NotFoundError('Registro mensal não encontrado ou não autorizado');
 
-            // "Por Sessão": expected_sessions é derivado da contagem real de agendamentos
-            // (ver syncMonthlyRecord), não deve ser aceito do cliente — a tela sempre reenvia
-            // o valor que tinha em memória junto de QUALQUER edição (pagar sessão, editar
+            // expected_sessions é derivado da contagem real de agendamentos (ver
+            // syncMonthlyRecord), não deve ser aceito do cliente — a tela sempre reenvia o
+            // valor que tinha em memória junto de QUALQUER edição (pagar sessão, editar
             // preço, etc.), e se esse valor estiver desatualizado (ex: cache de antes de um
             // agendamento ser resolvido), a edição não-relacionada acaba revertendo o total
             // esperado pro valor antigo. Resincroniza aqui pra garantir que fique sempre
-            // correto, não importa o que o cliente mandou. Achado real: Felipe (2026-07-05).
-            if (data.paymentType === 'per_session' && data.patientId) {
+            // correto, não importa o que o cliente mandou. Vale pros dois payment_type desde
+            // 2026-07-06 (antes só "per_session" — Achado real: Felipe, 2026-07-05); "monthly"
+            // ficava com o piso antigo travado no cache do cliente até um agendamento mudar de
+            // status. Achado real: Lucas (2026-07-06).
+            if (data.patientId) {
                 await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, data.month);
                 const resynced = await this.dbPool.query(
                     `SELECT * FROM psychotherapy_monthly_records WHERE id = $1;`,
@@ -2533,19 +2536,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const activeCount = parseInt(apptsRes.rows[0].active_count, 10);
         const absences    = parseInt(apptsRes.rows[0].no_show_count, 10);
 
-        const SESSIONS_BY_STATUS: Record<string, number> = {
-            weekly: 4, biweekly: 2, one_off: 0, inactive: 0,
-        };
-        const defaultSessions = SESSIONS_BY_STATUS[patient.status] ?? 0;
-        // O piso fixo (4/semanal, 2/quinzenal) só se aplica ao "Mensal" — ali o valor
-        // cobrado é fixo independente da contagem, então o piso só serve de lembrete
-        // (agendamento esquecido continua contando). Pro "Por Sessão" o valor escala com
-        // a contagem real: aplicar o mesmo piso inflava o esperado quando a terapia
-        // começava/terminava no meio do mês (paciente novo com só 3 sessões possíveis
-        // em junho ainda era cobrado como se tivesse 4).
-        const expectedSessions = patient.payment_type === 'monthly'
-            ? Math.max(defaultSessions, activeCount)
-            : activeCount;
+        // expected_sessions é sempre a contagem real de agendamentos do mês, pra Mensal e
+        // Por Sessão igualmente — sem piso fixo (nem 4/semanal, nem 2/quinzenal). Pro Mensal,
+        // o valor cobrado (expectedAmount, abaixo) já é fixo independente da contagem; o que
+        // esse número decide é só a META de sessões usada pra fechar "Pago" no fluxo de
+        // +/-/Dar Baixa (ver saveMonthlyRecord/MonthlyRecords.tsx) — um piso artificial aqui
+        // travava o mês em "Parcial" quando o paciente realmente teve menos sessões que o
+        // piso no mês (ex: terapia começando/terminando no meio do mês). Achado real: Lucas,
+        // Mensal/Semanal com só 1 sessão real em junho, preso em "Parcial" mesmo pagando-a.
+        const expectedSessions = activeCount;
 
         const sessionPrice = patient.default_session_price_cents ?? 0;
         const expectedAmount = patient.payment_type === 'monthly'
