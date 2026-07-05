@@ -15,7 +15,10 @@ export class ListPsychotherapyMonthUseCase {
     // Fix #5: single DB round-trip. Summary is computed in memory from the
     // records already fetched, instead of issuing a second identical query.
     async execute(tenantId: string, month: string): Promise<PsychotherapyMonthView> {
-        const records = await this.repository.listMonthlyRecords(tenantId, month);
+        const allRecords = await this.repository.listMonthlyRecords(tenantId, month);
+        // Pacientes inativos somem da tela de Faturamento Mensal (mas continuam existindo
+        // no banco/CSV export/emissão de recibo — só a listagem exibida aqui é filtrada).
+        const records = allRecords.filter(r => r.status !== 'inactive');
         const summary = this.computeSummary(month, records);
         return { month, summary, records };
     }

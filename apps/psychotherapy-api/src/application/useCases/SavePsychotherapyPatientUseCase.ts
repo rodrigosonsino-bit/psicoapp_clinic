@@ -31,17 +31,27 @@ export class SavePsychotherapyPatientUseCase {
             name
         });
 
-        // Se o paciente foi atualizado (já possuía id) e o valor padrão mudou,
-        // atualiza também o faturamento mensal do mês corrente se ele existir
-        if (data.id && data.defaultSessionPriceCents !== undefined) {
+        // Se o paciente foi atualizado (já possuía id), reflete no faturamento mensal do
+        // mês corrente (se o registro já existir): preço padrão e status. O status precisa
+        // ser sincronizado aqui porque a tela de Faturamento Mensal esconde registros com
+        // status 'inactive' — sem isso, reativar um paciente só o faria reaparecer na
+        // próxima mudança de status de agendamento (ou no próximo "Gerar Mês").
+        if (data.id) {
             const currentMonth = getCurrentMonthStr();
             const records = await this.repository.listMonthlyRecords(data.tenantId, currentMonth);
             const patientRecord = records.find(r => r.patientId === data.id);
-            if (patientRecord && patientRecord.sessionPriceCents !== data.defaultSessionPriceCents) {
-                await this.repository.saveMonthlyRecord({
-                    ...patientRecord,
-                    sessionPriceCents: data.defaultSessionPriceCents
-                });
+            if (patientRecord) {
+                const needsPriceUpdate = data.defaultSessionPriceCents !== undefined
+                    && patientRecord.sessionPriceCents !== data.defaultSessionPriceCents;
+                const needsStatusUpdate = patientRecord.status !== data.status;
+
+                if (needsPriceUpdate || needsStatusUpdate) {
+                    await this.repository.saveMonthlyRecord({
+                        ...patientRecord,
+                        ...(needsPriceUpdate ? { sessionPriceCents: data.defaultSessionPriceCents } : {}),
+                        ...(needsStatusUpdate ? { status: data.status } : {})
+                    });
+                }
             }
         }
 

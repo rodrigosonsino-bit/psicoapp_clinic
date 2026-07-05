@@ -136,6 +136,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             if (pagination.search) {
                 params.push(`%${pagination.search}%`);
                 whereClause += ` AND name ILIKE $${params.length}`;
+            } else {
+                // Pacientes inativos somem da listagem padrão (mas continuam achável
+                // buscando pelo nome, caso precise reativar).
+                whereClause += ` AND status != 'inactive'`;
             }
 
             if (pagination.scope === 'individual') {
@@ -2515,8 +2519,16 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         const SESSIONS_BY_STATUS: Record<string, number> = {
             weekly: 4, biweekly: 2, one_off: 0, inactive: 0,
         };
-        const defaultSessions  = SESSIONS_BY_STATUS[patient.status] ?? 0;
-        const expectedSessions = Math.max(defaultSessions, activeCount);
+        const defaultSessions = SESSIONS_BY_STATUS[patient.status] ?? 0;
+        // O piso fixo (4/semanal, 2/quinzenal) só se aplica ao "Mensal" — ali o valor
+        // cobrado é fixo independente da contagem, então o piso só serve de lembrete
+        // (agendamento esquecido continua contando). Pro "Por Sessão" o valor escala com
+        // a contagem real: aplicar o mesmo piso inflava o esperado quando a terapia
+        // começava/terminava no meio do mês (paciente novo com só 3 sessões possíveis
+        // em junho ainda era cobrado como se tivesse 4).
+        const expectedSessions = patient.payment_type === 'monthly'
+            ? Math.max(defaultSessions, activeCount)
+            : activeCount;
 
         const sessionPrice = patient.default_session_price_cents ?? 0;
         const expectedAmount = patient.payment_type === 'monthly'
