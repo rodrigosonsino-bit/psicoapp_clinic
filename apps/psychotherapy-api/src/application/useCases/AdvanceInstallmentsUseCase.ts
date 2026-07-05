@@ -12,6 +12,9 @@ export interface AdvanceInstallmentsInput {
 
 export interface AdvanceInstallmentsResult {
     createdCount: number;
+    /** IDs das cobranças efetivamente criadas nesta chamada (não inclui meses que já
+     *  tinham cobrança e foram pulados via ON CONFLICT DO NOTHING). */
+    createdPaymentIds: string[];
 }
 
 @injectable()
@@ -106,6 +109,7 @@ export class AdvanceInstallmentsUseCase {
             }
 
             let createdCount = 0;
+            const createdPaymentIds: string[] = [];
             let currentIterMonth = startMonth;
 
             for (let i = 0; i < monthsToAdvance; i++) {
@@ -124,6 +128,7 @@ export class AdvanceInstallmentsUseCase {
                     ON CONFLICT (tenant_id, group_member_id, reference_month)
                     WHERE charge_type = 'monthly' AND status <> 'voided'
                     DO NOTHING
+                    RETURNING id
                 `, [
                     tenantId, groupId, member.patient_id, groupMemberId,
                     currentIterMonth, group.monthly_fee_cents, dueDate
@@ -131,6 +136,7 @@ export class AdvanceInstallmentsUseCase {
 
                 if (result.rowCount && result.rowCount > 0) {
                     createdCount++;
+                    createdPaymentIds.push(result.rows[0].id);
                 }
 
                 // Increment month
@@ -144,7 +150,7 @@ export class AdvanceInstallmentsUseCase {
             await client.query('COMMIT');
             logger.info({ tenantId, groupMemberId, createdCount }, 'Parcelas adiantadas com sucesso.');
 
-            return { createdCount };
+            return { createdCount, createdPaymentIds };
         } catch (error) {
             await client.query('ROLLBACK');
             throw error;

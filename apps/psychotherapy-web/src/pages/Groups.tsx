@@ -157,6 +157,12 @@ export default function Groups() {
   const [memberToAdvance, setMemberToAdvance] = useState<any | null>(null);
   const [monthsToAdvance, setMonthsToAdvance] = useState('1');
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
+  // Confirmação em lote (opcional): marca como pagas todas as parcelas recém-criadas,
+  // sem precisar navegar mês a mês.
+  const [advanceConfirmNow, setAdvanceConfirmNow] = useState(false);
+  const [advancePaymentMethod, setAdvancePaymentMethod] = useState<'pix' | 'cash' | 'debit_card' | 'credit_card'>('pix');
+  const [advanceNetAmount, setAdvanceNetAmount] = useState('');
+  const [advanceCardInstallments, setAdvanceCardInstallments] = useState(1);
 
   // Inline editing for session history
   const [editingPresenceId, setEditingPresenceId] = useState<string | null>(null);
@@ -1172,6 +1178,71 @@ export default function Groups() {
                   disabled={submittingAdvance}
                 />
               </div>
+
+              <label className="flex items-center gap-2 mb-3" style={{ cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={advanceConfirmNow}
+                  onChange={e => setAdvanceConfirmNow(e.target.checked)}
+                  disabled={submittingAdvance}
+                />
+                <span className="text-small">Já confirmar essas parcelas como pagas</span>
+              </label>
+
+              {advanceConfirmNow && (
+                <>
+                  <div className="form-group mb-3">
+                    <label className="form-label">Forma de Pagamento</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                      {(['pix', 'cash', 'debit_card', 'credit_card'] as const).map(method => (
+                        <button
+                          key={method}
+                          type="button"
+                          className={`btn ${advancePaymentMethod === method ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', padding: '0.5rem' }}
+                          onClick={() => setAdvancePaymentMethod(method)}
+                          disabled={submittingAdvance}
+                        >
+                          {method === 'pix' && <><Wallet size={14} /> PIX</>}
+                          {method === 'cash' && <><Banknote size={14} /> Dinheiro</>}
+                          {method === 'debit_card' && <><CreditCard size={14} /> Débito</>}
+                          {method === 'credit_card' && <><CreditCard size={14} /> Crédito</>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {advancePaymentMethod === 'credit_card' && (
+                    <div className="form-group mb-3">
+                      <label className="form-label">Parcelas no cartão</label>
+                      <select
+                        className="form-control"
+                        value={advanceCardInstallments}
+                        onChange={e => setAdvanceCardInstallments(Number(e.target.value))}
+                        disabled={submittingAdvance}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                          <option key={n} value={n}>{n}x</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="form-group mb-3">
+                    <label className="form-label">Crédito Líquido em Conta por parcela (Opcional)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={advanceNetAmount}
+                      onChange={e => setAdvanceNetAmount(e.target.value)}
+                      min="0.01"
+                      step="0.01"
+                      placeholder={`Deixe em branco se não houve taxa (valor cheio: ${formatCurrency(selectedGroup.monthly_fee_cents ?? 0)})`}
+                      disabled={submittingAdvance}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex justify-end gap-2" style={{ marginTop: '1rem' }}>
               <button className="btn btn-secondary" onClick={() => setShowAdvanceModal(false)}>
@@ -1183,14 +1254,40 @@ export default function Groups() {
                 onClick={async () => {
                   setSubmittingAdvance(true);
                   try {
-                    await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/members/${memberToAdvance.group_member_id}/advance-installments`, {
+                    const netAmountCents = advanceNetAmount.trim() !== ''
+                      ? Math.round(parseFloat(advanceNetAmount) * 100)
+                      : undefined;
+                    const feeBpsForInstallments = advancePaymentMethod === 'credit_card'
+                      ? cardFeeRates?.[String(advanceCardInstallments)]
+                      : undefined;
+
+                    const res: any = await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/members/${memberToAdvance.group_member_id}/advance-installments`, {
                       method: 'POST',
                       body: JSON.stringify({
-                        monthsToAdvance: parseInt(monthsToAdvance)
+                        monthsToAdvance: parseInt(monthsToAdvance),
+                        ...(advanceConfirmNow ? {
+                          confirmPayment: {
+                            paymentMethod: advancePaymentMethod,
+                            ...(netAmountCents !== undefined ? { netAmountCents } : {}),
+                            ...(advancePaymentMethod === 'credit_card' ? { cardInstallments: advanceCardInstallments } : {}),
+                            ...(feeBpsForInstallments !== undefined ? { appliedFeeBps: feeBpsForInstallments } : {})
+                          }
+                        } : {})
                       })
                     });
-                    toast.success('Cobranças antecipadas geradas com sucesso!');
+
+                    const confirmedCount = res?.data?.confirmedPaymentIds?.length ?? 0;
+                    const errorCount = res?.data?.confirmErrors?.length ?? 0;
+                    if (advanceConfirmNow && errorCount > 0) {
+                      toast.error(`${confirmedCount} parcela(s) confirmada(s), mas ${errorCount} falharam. Confirme manualmente pelo histórico do mês correspondente.`);
+                    } else if (advanceConfirmNow) {
+                      toast.success(`Cobranças geradas e ${confirmedCount} parcela(s) já confirmada(s) como paga(s)!`);
+                    } else {
+                      toast.success('Cobranças antecipadas geradas com sucesso!');
+                    }
                     setShowAdvanceModal(false);
+                    setAdvanceConfirmNow(false);
+                    setAdvanceNetAmount('');
                     loadPayments(selectedGroup.id, currentMonth);
                   } catch (err) {
                     toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao adiantar parcelas.');
@@ -1199,7 +1296,7 @@ export default function Groups() {
                   }
                 }}
               >
-                {submittingAdvance ? 'Gerando...' : 'Gerar Cobranças'}
+                {submittingAdvance ? 'Gerando...' : advanceConfirmNow ? 'Gerar e Confirmar' : 'Gerar Cobranças'}
               </button>
             </div>
           </div>

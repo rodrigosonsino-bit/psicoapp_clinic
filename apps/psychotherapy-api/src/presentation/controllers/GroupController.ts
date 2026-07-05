@@ -62,9 +62,10 @@ export class GroupController {
     async advanceMemberInstallments(req: Request, res: Response): Promise<void> {
         const tenantId = (req as any).tenantId as string;
         if (!tenantId) throw new AppError('Não autenticado', 401);
+        const operatorId = (req as any).userId || tenantId;
 
         const { groupId, memberId } = req.params;
-        const { monthsToAdvance } = req.body;
+        const { monthsToAdvance, confirmPayment } = req.body;
 
         const result = await this.advanceInstallments.execute({
             tenantId,
@@ -73,7 +74,41 @@ export class GroupController {
             monthsToAdvance: Number(monthsToAdvance) || 1
         });
 
-        res.status(201).json({ success: true, data: result });
+        // Confirmação em lote: opcional, pra marcar como pagas as cobranças que acabaram
+        // de ser criadas sem precisar navegar mês a mês confirmando uma a uma. Cada
+        // confirmação é uma chamada independente ao mesmo use case do fluxo normal — se
+        // uma falhar no meio, as anteriores já ficam pagas e o operador só precisa
+        // confirmar manualmente a(s) que sobrou(aram), não há corrupção de estado.
+        const confirmedPaymentIds: string[] = [];
+        const confirmErrors: Array<{ groupPaymentId: string; message: string }> = [];
+
+        if (confirmPayment && result.createdPaymentIds.length > 0) {
+            for (const groupPaymentId of result.createdPaymentIds) {
+                try {
+                    await this.confirmGroupPayment.execute({
+                        tenantId,
+                        operatorId,
+                        groupPaymentId,
+                        paymentMethod: confirmPayment.paymentMethod,
+                        amountPaidCents: confirmPayment.amountPaidCents,
+                        netAmountCents: confirmPayment.netAmountCents,
+                        cardInstallments: confirmPayment.cardInstallments,
+                        appliedFeeBps: confirmPayment.appliedFeeBps
+                    });
+                    confirmedPaymentIds.push(groupPaymentId);
+                } catch (err) {
+                    confirmErrors.push({
+                        groupPaymentId,
+                        message: err instanceof AppError ? err.message : 'Erro ao confirmar pagamento.'
+                    });
+                }
+            }
+        }
+
+        res.status(201).json({
+            success: true,
+            data: { ...result, confirmedPaymentIds, confirmErrors }
+        });
     }
 
 
@@ -101,7 +136,7 @@ export class GroupController {
         if (!tenantId) throw new AppError('Não autenticado', 401);
 
         const { id } = req.params;
-        const { paymentMethod, amountPaidCents, netAmountCents, observations } = req.body;
+        const { paymentMethod, amountPaidCents, netAmountCents, observations, cardInstallments, appliedFeeBps } = req.body;
 
         const operatorId = (req as any).userId || tenantId; // fallback for tests
 
@@ -112,7 +147,9 @@ export class GroupController {
             paymentMethod,
             amountPaidCents,
             netAmountCents,
-            observations
+            observations,
+            cardInstallments,
+            appliedFeeBps
         });
 
         res.status(200).json({ success: true });

@@ -290,8 +290,19 @@ export function createPsychotherapyRoutes(): Router {
     // alcançada). Removidos daqui; as versões canônicas ficam só no bloco abaixo.
     router.post('/psychotherapy/groups/:groupId/members-new', validateParams(groupIdParamSchema), validateBody(addGroupMemberIdempotentSchema), asyncHandler((req, res) => groupController.addGroupMemberIdempotent(req, res)));
     router.post('/psychotherapy/groups/:groupId/members/:memberId/advance-installments',
-        validateParams(z.object({ groupId: z.string().uuid(), memberId: z.string().uuid() })), 
-        validateBody(z.object({ monthsToAdvance: z.number().int().min(1).max(24) })),
+        validateParams(z.object({ groupId: z.string().uuid(), memberId: z.string().uuid() })),
+        validateBody(z.object({
+            monthsToAdvance: z.number().int().min(1).max(24),
+            // Opcional: confirma como pagas todas as cobranças recem-criadas nesta mesma
+            // chamada, sem precisar navegar mes a mes confirmando uma a uma.
+            confirmPayment: z.object({
+                paymentMethod: z.enum(['pix', 'cash', 'debit_card', 'credit_card']),
+                amountPaidCents: z.number().int().positive().optional(),
+                netAmountCents: z.number().int().positive().optional(),
+                cardInstallments: z.number().int().min(1).max(12).optional(),
+                appliedFeeBps: z.number().int().min(0).max(10000).optional()
+            }).optional()
+        })),
         asyncHandler((req, res) => groupController.advanceMemberInstallments(req, res)));
     
     // Pagamentos do Grupo
