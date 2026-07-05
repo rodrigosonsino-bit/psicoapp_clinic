@@ -26,9 +26,12 @@ export class PostgresMessageRepository implements IMessageRepository {
         
         if (message.metadata?.recipientName) {
             try {
+                // name é NOT NULL na tabela — em contato novo (nunca sincronizado via evento do
+                // WhatsApp) precisamos de um valor inicial. Usamos o próprio alias; se o contato já
+                // existir, o ON CONFLICT só atualiza alias_name, preservando o name já sincronizado.
                 await this.dbPool.query(`
-                    INSERT INTO whatsapp_contacts (tenant_id, id, alias_name)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO whatsapp_contacts (tenant_id, id, name, alias_name)
+                    VALUES ($1, $2, $3, $3)
                     ON CONFLICT (tenant_id, id) DO UPDATE SET alias_name = EXCLUDED.alias_name;
                 `, [message.userId, message.recipientId, message.metadata.recipientName]);
             } catch (err) {
@@ -77,9 +80,11 @@ export class PostgresMessageRepository implements IMessageRepository {
 
         if (fields.metadata?.recipientName) {
             try {
+                // Mesmo motivo do save(): name é NOT NULL, então um contato novo precisa de um
+                // valor inicial (o próprio alias) para o INSERT não falhar silenciosamente.
                 await this.dbPool.query(`
-                    INSERT INTO whatsapp_contacts (tenant_id, id, alias_name)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO whatsapp_contacts (tenant_id, id, name, alias_name)
+                    VALUES ($1, $2, $3, $3)
                     ON CONFLICT (tenant_id, id) DO UPDATE SET alias_name = EXCLUDED.alias_name;
                 `, [userId, fields.recipientId || row.recipient_id, fields.metadata.recipientName]);
             } catch (err) {
