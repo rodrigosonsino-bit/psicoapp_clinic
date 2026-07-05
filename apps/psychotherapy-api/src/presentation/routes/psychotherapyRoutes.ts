@@ -33,6 +33,15 @@ const monthParamSchema = z.object({
     month: z.string().regex(/^\d{4}-\d{2}$/, 'Mês inválido (esperado formato YYYY-MM)')
 });
 
+const advanceCreditSchema = z.object({
+    targetMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Mês inválido (esperado formato YYYY-MM)'),
+    amountCents: z.number().int().positive('O valor adiantado deve ser maior que zero.')
+});
+
+const advanceCreditPatientIdParamSchema = z.object({
+    patientId: z.string().uuid('ID do paciente inválido')
+});
+
 const listPatientsQuerySchema = z.object({
     page: z.string().transform(val => Math.max(1, parseInt(val, 10) || 1)).optional().default('1'),
     limit: z.string().transform(val => Math.min(100, Math.max(1, parseInt(val, 10) || 20))).optional().default('20'),
@@ -271,6 +280,7 @@ export function createPsychotherapyRoutes(): Router {
     router.get('/psychotherapy/months/:month', validateParams(monthParamSchema), asyncHandler((req, res) => controller.getMonth(req, res)));
     router.post('/psychotherapy/months/:month/generate', validateParams(monthParamSchema), asyncHandler((req, res) => controller.generateMonth(req, res)));
     router.post('/psychotherapy/months/:month/records', validateParams(monthParamSchema), validateBody(monthlyRecordSchema), asyncHandler((req, res) => controller.saveMonthlyRecord(req, res)));
+    router.post('/psychotherapy/patients/:patientId/advance-credit', validateParams(advanceCreditPatientIdParamSchema), validateBody(advanceCreditSchema), asyncHandler((req, res) => controller.addAdvanceCredit(req, res)));
 
     // Profile
     router.get('/profile', asyncHandler((req, res) => profileController.getProfile(req, res)));

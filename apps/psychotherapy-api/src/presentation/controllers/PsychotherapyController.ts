@@ -10,6 +10,7 @@ import { AppError } from '../../domain/errors/AppError';
 import { injectable } from 'tsyringe';
 
 import { ChangePatientModalityUseCase } from '../../application/useCases/ChangePatientModalityUseCase';
+import { AddAdvanceCreditUseCase } from '../../application/useCases/AddAdvanceCreditUseCase';
 
 @injectable()
 export class PsychotherapyController {
@@ -20,7 +21,8 @@ export class PsychotherapyController {
         private readonly listMonthUseCase: ListPsychotherapyMonthUseCase,
         private readonly saveMonthlyRecordUseCase: SavePsychotherapyMonthlyRecordUseCase,
         private readonly generateMonthUseCase: GeneratePsychotherapyMonthUseCase,
-        private readonly changeModalityUseCase: ChangePatientModalityUseCase
+        private readonly changeModalityUseCase: ChangePatientModalityUseCase,
+        private readonly addAdvanceCreditUseCase: AddAdvanceCreditUseCase
     ) {}
 
     async listPatients(req: Request, res: Response): Promise<Response> {
@@ -84,6 +86,19 @@ export class PsychotherapyController {
         const tenantId = this.getTenantId(req);
         const records = await this.generateMonthUseCase.execute(tenantId, req.params.month);
         return res.status(201).json({ data: records });
+    }
+
+    async addAdvanceCredit(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const { patientId } = req.params;
+        const { targetMonth, amountCents } = req.body;
+        const record = await this.addAdvanceCreditUseCase.execute({
+            tenantId,
+            patientId,
+            targetMonth,
+            amountCents
+        });
+        return res.status(201).json({ data: record });
     }
 
     private getTenantId(req: Request): string {

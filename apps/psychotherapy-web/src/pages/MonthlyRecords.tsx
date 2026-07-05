@@ -25,6 +25,11 @@ export default function MonthlyRecords() {
   const [reminderText, setReminderText] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'partial' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // Adiantamento de sessão(ões) para o próximo mês (paciente paga mais do que o
+  // esperado neste mês). Controla qual linha está com o mini-formulário aberto.
+  const [advancingRecordId, setAdvancingRecordId] = useState<string | null>(null);
+  const [advanceSessionsInput, setAdvanceSessionsInput] = useState('1');
+  const [submittingAdvance, setSubmittingAdvance] = useState(false);
 
   const monthStr = format(currentDate, 'yyyy-MM');
   const displayMonth = format(currentDate, 'MM/yyyy');
@@ -214,6 +219,39 @@ export default function MonthlyRecords() {
   };
 
 
+  const handleAddAdvanceCredit = async (record: MonthlyRecord) => {
+    const sessionsCount = parseInt(advanceSessionsInput, 10);
+    if (isNaN(sessionsCount) || sessionsCount <= 0) {
+      toast.error('Número de sessões inválido.');
+      return;
+    }
+    if (!record.patientId) {
+      toast.error('Paciente não identificado neste registro.');
+      return;
+    }
+    const amountCents = sessionsCount * (record.sessionPriceCents || 0);
+    if (amountCents <= 0) {
+      toast.error('Configure o valor da sessão antes de adiantar.');
+      return;
+    }
+    const targetMonth = format(addMonths(currentDate, 1), 'yyyy-MM');
+
+    setSubmittingAdvance(true);
+    try {
+      await fetchApi(`/api/psychotherapy/patients/${record.patientId}/advance-credit`, {
+        method: 'POST',
+        body: JSON.stringify({ targetMonth, amountCents })
+      });
+      toast.success(`${sessionsCount} sessão(ões) (${formatCurrency(amountCents)}) creditada(s) para ${format(addMonths(currentDate, 1), 'MM/yyyy')}.`);
+      setAdvancingRecordId(null);
+      setAdvanceSessionsInput('1');
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao adiantar sessão.');
+    } finally {
+      setSubmittingAdvance(false);
+    }
+  };
+
   const getExpectedAmount = (record: MonthlyRecord) => {
     if (record.paymentType === 'monthly') return record.sessionPriceCents || 0;
     const billableSessions = Math.max(0, (record.expectedSessions || 0) - (record.absences || 0));
@@ -221,9 +259,10 @@ export default function MonthlyRecords() {
   };
 
   const getReceivedAmount = (record: MonthlyRecord) => {
-    // Both monthly and per_session: received = price × paid sessions.
-    // Each paid session = real cash in, regardless of billing cycle.
-    return (record.sessionPriceCents || 0) * (record.paidSessions || 0);
+    // Both monthly and per_session: received = price × paid sessions + crédito adiantado
+    // recebido de um mês anterior (previousMonthPaidCents). Cada sessão paga = dinheiro
+    // real recebido, independente do ciclo de cobrança.
+    return (record.sessionPriceCents || 0) * (record.paidSessions || 0) + (record.previousMonthPaidCents || 0);
   };
 
   const handleSendReminder = (record: MonthlyRecord, patient: Patient) => {
@@ -430,6 +469,47 @@ export default function MonthlyRecords() {
                             / {Math.max(0, r.expectedSessions - r.absences)} sessões
                             {r.absences > 0 && ` (${r.absences} falta${r.absences !== 1 ? 's' : ''})`}
                           </span>
+                          {r.patientId && (
+                            advancingRecordId === r.id ? (
+                              <div className="flex items-center gap-1" style={{ marginTop: '4px' }}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  className="form-control"
+                                  style={{ width: '48px', height: '24px', fontSize: '0.75rem', padding: '2px 4px' }}
+                                  value={advanceSessionsInput}
+                                  onChange={e => setAdvanceSessionsInput(e.target.value)}
+                                  disabled={submittingAdvance}
+                                />
+                                <span className="text-small" style={{ opacity: 0.6 }}>sessão(ões) → mês seguinte</span>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', height: '24px' }}
+                                  onClick={() => handleAddAdvanceCredit(r)}
+                                  disabled={submittingAdvance}
+                                >
+                                  OK
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', height: '24px' }}
+                                  onClick={() => setAdvancingRecordId(null)}
+                                  disabled={submittingAdvance}
+                                >
+                                  X
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '2px 6px', fontSize: '0.7rem', marginTop: '4px' }}
+                                onClick={() => { setAdvancingRecordId(r.id); setAdvanceSessionsInput('1'); }}
+                                title="Registrar pagamento adiantado de sessão(ões) do próximo mês"
+                              >
+                                Adiantar p/ próximo mês
+                              </button>
+                            )
+                          )}
                         </div>
                       )}
                     </td>
@@ -464,6 +544,11 @@ export default function MonthlyRecords() {
                         {r.paymentType !== 'monthly' && r.expectedSessions > 0 && (
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '500' }}>
                             Total: {formatCurrency(getExpectedAmount(r))}
+                          </div>
+                        )}
+                        {r.previousMonthPaidCents > 0 && (
+                          <div className="text-small" style={{ color: 'var(--status-success, #16a34a)' }}>
+                            + {formatCurrency(r.previousMonthPaidCents)} adiantado(s)
                           </div>
                         )}
                       </div>

@@ -43,6 +43,17 @@ export interface SaveMonthlyRecordDTO {
     previousMonthPaidCents?: number;
 }
 
+export interface AddAdvanceCreditDTO {
+    tenantId: string;
+    patientId: string;
+    targetMonth: string;
+    amountCents: number;
+    patientNameSnapshot: string;
+    status: PatientStatus;
+    paymentType: PaymentType | null;
+    sessionPriceCents: number | null;
+}
+
 export interface PsychotherapyMonthSummary {
     month: string;
     totalPatients: number;
@@ -210,6 +221,10 @@ export interface IPsychotherapyRepository {
     deletePatient(tenantId: string, id: string): Promise<void>;
     saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord>;
     bulkSaveMonthlyRecords(records: SaveMonthlyRecordDTO[]): Promise<PsychotherapyMonthlyRecord[]>;
+    /** Credita (soma, não substitui) um valor adiantado no registro mensal de um mês futuro,
+     *  criando o registro se ele ainda não existir. Usado quando o paciente paga adiantado
+     *  por sessão(ões) de um mês que ainda não foi gerado/fechado. */
+    addAdvanceCredit(data: AddAdvanceCreditDTO): Promise<PsychotherapyMonthlyRecord>;
     listMonthlyRecords(tenantId: string, month: string): Promise<PsychotherapyMonthlyRecord[]>;
     getMonthSummary(tenantId: string, month: string): Promise<PsychotherapyMonthSummary>;
     getTenantProfile(tenantId: string): Promise<TenantProfile | null>;

@@ -26,7 +26,7 @@ import { PASTORAL_SENTINEL_EMAIL } from '../../domain/constants/pastoral';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
 import { PsychotherapyFixedExpense } from '../../domain/models/PsychotherapyFixedExpense';
-import { DashboardAnalytics, SaveExpenseDTO, SaveSessionDTO, SaveClinicalNoteDTO, SaveFixedExpenseDTO } from '../../domain/repositories/IPsychotherapyRepository';
+import { DashboardAnalytics, SaveExpenseDTO, SaveSessionDTO, SaveClinicalNoteDTO, SaveFixedExpenseDTO, AddAdvanceCreditDTO } from '../../domain/repositories/IPsychotherapyRepository';
 import { AppointmentStatus, PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../../domain/models/AvailabilitySlot';
@@ -359,6 +359,45 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         `, values);
 
         return result.rows.map(row => this.mapMonthlyRecord(row));
+    }
+
+    async addAdvanceCredit(data: AddAdvanceCreditDTO): Promise<PsychotherapyMonthlyRecord> {
+        const tenantId = this.validateTenantId(data.tenantId);
+        if (data.amountCents <= 0) {
+            throw new AppError('O valor adiantado deve ser maior que zero.', 400);
+        }
+
+        // ON CONFLICT soma (não substitui) previous_month_paid_cents — permite múltiplos
+        // adiantamentos acumularem antes do mês ser gerado/consolidado. Os demais campos só
+        // são usados na criação (INSERT); se o registro já existir, ficam como estão (a
+        // geração normal do mês, via bulkSaveMonthlyRecords, também nunca sobrescreve esse
+        // campo — só soma aqui).
+        const result = await this.dbPool.query(`
+            INSERT INTO psychotherapy_monthly_records (
+                id, tenant_id, patient_id, month, patient_name_snapshot, status, payment_type,
+                session_price_cents, expected_sessions, paid_sessions, absences,
+                payment_status, notes, previous_month_paid_cents
+            ) VALUES (
+                gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+                $7, 0, 0, 0,
+                'pending', NULL, $8
+            )
+            ON CONFLICT (tenant_id, month, patient_id) WHERE patient_id IS NOT NULL DO UPDATE SET
+                previous_month_paid_cents = psychotherapy_monthly_records.previous_month_paid_cents + EXCLUDED.previous_month_paid_cents,
+                updated_at = NOW()
+            RETURNING *;
+        `, [
+            tenantId,
+            data.patientId,
+            data.targetMonth,
+            data.patientNameSnapshot,
+            data.status,
+            data.paymentType,
+            data.sessionPriceCents,
+            data.amountCents
+        ]);
+
+        return this.mapMonthlyRecord(result.rows[0]);
     }
 
     /**
@@ -1179,34 +1218,67 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 WHERE mr.tenant_id = $1 AND mr.month = $2;
             `, [validTenantId, currentMonthStr]);
 
+            // Cobranças de grupo: só conta como inadimplência (não "pendente do mês todo")
+            // quando a data de vencimento já passou. Sem isso, uma cobrança gerada com
+            // vencimento dia 10 aparecia como inadimplência já no dia 1.
             const pendGroupRes = await this.dbPool.query(`
                 SELECT COALESCE(SUM(amount_cents), 0) AS pending
                 FROM group_payments
-                WHERE tenant_id = $1 AND reference_month = $2 AND status = 'pending';
+                WHERE tenant_id = $1 AND reference_month = $2 AND status = 'pending'
+                  AND COALESCE(due_date, CURRENT_DATE) <= CURRENT_DATE;
             `, [validTenantId, currentMonthStr]);
 
             pendingCents = parseInt(pendRes.rows[0].pending, 10) + parseInt(pendGroupRes.rows[0].pending, 10);
         } else {
-            // Pendente legado
+            // Pendente legado (individual): "Inadimplência" deve refletir só sessões que já
+            // ACONTECERAM (data <= hoje) e não foram pagas — não a cota do mês inteiro desde
+            // o dia 1. Sem isso, um paciente com 4 sessões esperadas em julho aparecia devendo
+            // o mês inteiro no dia 4, mesmo sem nenhuma sessão ter ocorrido ainda.
+            // expected_sessions continua intocado em expectedAmountCents/Faturamento Mensal
+            // (que representam o mês inteiro de propósito) — esse cap é só para esta métrica.
             const pendingResult = await this.dbPool.query(`
                 SELECT COALESCE(SUM(
-                    CASE 
-                        WHEN payment_type = 'monthly' THEN
-                            GREATEST(session_price_cents - (session_price_cents * paid_sessions / GREATEST(expected_sessions - absences, 1)), 0)
+                    CASE
+                        WHEN pmr.payment_type = 'monthly' THEN
+                            -- Mensalidade prorateada pelas sessões já ocorridas (não pela cota
+                            -- do mês inteiro): (sessões ocorridas - faltas - pagas) * preço por
+                            -- sessão-efetiva, onde preço-por-sessão-efetiva = mensalidade total
+                            -- / (cota do mês - faltas), menos crédito adiantado de mês anterior.
+                            -- Reduz ao comportamento original quando elapsed >= expected_sessions
+                            -- (mês todo já decorrido) e previous_month_paid_cents = 0.
+                            GREATEST(
+                                (LEAST(pmr.expected_sessions, COALESCE(elapsed.cnt, 0)) - pmr.absences - pmr.paid_sessions)
+                                    * pmr.session_price_cents::numeric / GREATEST(pmr.expected_sessions - pmr.absences, 1)
+                                    - pmr.previous_month_paid_cents,
+                            0)
                         ELSE
-                            GREATEST(expected_sessions - absences - paid_sessions, 0) * COALESCE(session_price_cents, 0)
+                            GREATEST(
+                                GREATEST(LEAST(pmr.expected_sessions, COALESCE(elapsed.cnt, 0)) - pmr.absences - pmr.paid_sessions, 0)
+                                    * COALESCE(pmr.session_price_cents, 0)
+                                    - pmr.previous_month_paid_cents,
+                            0)
                     END
                 ), 0) as pending
-                FROM psychotherapy_monthly_records
-                WHERE tenant_id = $1 AND month = $2 AND payment_status != 'paid'
+                FROM psychotherapy_monthly_records pmr
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS cnt
+                    FROM psychotherapy_sessions ps
+                    WHERE ps.patient_id = pmr.patient_id
+                      AND ps.tenant_id  = pmr.tenant_id
+                      AND TO_CHAR(ps.date, 'YYYY-MM') = pmr.month
+                      AND ps.date <= NOW()
+                      AND ps.status IN ('attended', 'justified_absence', 'unjustified_absence')
+                ) elapsed ON true
+                WHERE pmr.tenant_id = $1 AND pmr.month = $2 AND pmr.payment_status != 'paid'
             `, [validTenantId, currentMonthStr]);
-            
+
             const pendGroupRes = await this.dbPool.query(`
                 SELECT COALESCE(SUM(amount_cents), 0) AS pending
                 FROM group_payments
-                WHERE tenant_id = $1 AND reference_month = $2 AND status = 'pending';
+                WHERE tenant_id = $1 AND reference_month = $2 AND status = 'pending'
+                  AND COALESCE(due_date, CURRENT_DATE) <= CURRENT_DATE;
             `, [validTenantId, currentMonthStr]);
-            
+
             pendingCents = parseInt(pendingResult.rows[0].pending, 10) + parseInt(pendGroupRes.rows[0].pending, 10);
         }
 
