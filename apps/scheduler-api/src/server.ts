@@ -96,6 +96,14 @@ async function bootstrap() {
         logger.info('🔌 Conectando ao banco de dados...');
         await connectWithRetry(dbPool);
 
+        // FORCED SCHEMA UPDATE (bypass Railway not running migrations)
+        try {
+            await dbPool.query('ALTER TABLE whatsapp_contacts ADD COLUMN IF NOT EXISTS alias_name TEXT;');
+            logger.info('✅ Schema de whatsapp_contacts atualizado.');
+        } catch (err) {
+            logger.error({ err }, 'Erro ignorado ao atualizar schema no startup');
+        }
+
         // 3. Conectar Canais de Comunicação (WhatsApp e Telegram) e IA
         const sessionManager = new WhatsappSessionManager('scheduler');
         const geminiClient = new GeminiClient(dbPool, sessionManager);
