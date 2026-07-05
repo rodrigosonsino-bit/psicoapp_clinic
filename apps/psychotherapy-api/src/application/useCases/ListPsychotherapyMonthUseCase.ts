@@ -1,5 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
+import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { IPsychotherapyRepository, PsychotherapyMonthSummary } from '../../domain/repositories/IPsychotherapyRepository';
 
 export interface PsychotherapyMonthView {
@@ -15,22 +16,39 @@ export class ListPsychotherapyMonthUseCase {
     // Fix #5: single DB round-trip. Summary is computed in memory from the
     // records already fetched, instead of issuing a second identical query.
     async execute(tenantId: string, month: string): Promise<PsychotherapyMonthView> {
-        const [allRecords, patients] = await Promise.all([
+        const [allRecords, allPatients] = await Promise.all([
             this.repository.listMonthlyRecords(tenantId, month),
-            this.repository.listIndividualPatientsForBilling(tenantId)
+            this.repository.listPatients(tenantId) as Promise<PsychotherapyPatient[]>
         ]);
 
-        // Pacientes inativos somem da tela de Faturamento Mensal (mas continuam existindo
-        // no banco/CSV export/emissão de recibo — só a listagem exibida aqui é filtrada).
-        // Usa o status ATUAL do paciente, não o snapshot congelado em monthly_records.status
-        // — esse snapshot só é resincronizado quando algo dispara syncMonthlyRecord (mudança
-        // de status de agendamento) ou quando o paciente é salvo no mês CORRENTE; meses
-        // passados (ou pacientes cujo status mudou sem nenhum desses gatilhos) ficavam com o
-        // snapshot desatualizado indefinidamente (achado em 2026-07-05, caso Letícia Deolin).
-        const statusByPatientId = new Map(patients.map(p => [p.id, p.status]));
+        // Pacientes inativos e membros só-de-grupo (individual_therapy_enabled=false) somem
+        // da tela de Faturamento Mensal (mas continuam existindo no banco/CSV export/emissão
+        // de recibo — só a listagem exibida aqui é filtrada). Usa o status/flag ATUAIS do
+        // paciente, não o snapshot congelado em monthly_records.status — esse snapshot só é
+        // resincronizado quando algo dispara syncMonthlyRecord (mudança de status de
+        // agendamento) ou quando o paciente é salvo no mês CORRENTE; meses passados (ou
+        // pacientes cujo status/flag mudou sem nenhum desses gatilhos) ficavam desatualizados
+        // indefinidamente (achado em 2026-07-05: caso Letícia Deolin, e 17 membros do grupo
+        // CURSOTERAPIA_QUINTA_TURMA02 criados sem individual_therapy_enabled=false).
+        // Busca todos os pacientes (não só listIndividualPatientsForBilling) porque aqui
+        // precisamos decidir se ESCONDE um paciente com o flag false — o outro método já
+        // filtra esses fora antes de eu conseguir checar o flag dele.
+        const patientById = new Map(allPatients.map(p => [p.id, p]));
         const records = allRecords.filter(r => {
-            const liveStatus = r.patientId ? statusByPatientId.get(r.patientId) : undefined;
-            return (liveStatus ?? r.status) !== 'inactive';
+            // Registro sem paciente vinculado (patientId null): não há paciente "atual" pra
+            // checar, então o próprio snapshot do registro é a única fonte de verdade.
+            if (!r.patientId) return r.status !== 'inactive';
+
+            const patient = patientById.get(r.patientId);
+            // patientId aponta pra um paciente que não existe mais em listPatients (excluído/
+            // soft-deleted) — o registro ficou órfão. Esconde: paciente excluído não deveria
+            // aparecer no Faturamento Mensal independente do snapshot congelado (achado em
+            // 2026-07-05 — vários membros do grupo CURSOTERAPIA_QUINTA_TURMA02 foram excluídos
+            // como pacientes individuais em 03/07, mas os registros mensais deles continuaram
+            // órfãos no banco com o snapshot antigo "weekly").
+            if (!patient) return false;
+
+            return patient.status !== 'inactive' && patient.individualTherapyEnabled;
         });
 
         const summary = this.computeSummary(month, records);
