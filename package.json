@@ -16,6 +16,6 @@
     "start:psychotherapy-api": "npm run start --workspace=apps/psychotherapy-api",
     "start:scheduler-api": "npm run start --workspace=apps/scheduler-api",
     "lint": "echo no linting",
-    "build": "echo no root build"
+    "build": "npm run build --workspace=apps/psychotherapy-web && rm -rf dist && cp -r apps/psychotherapy-web/dist dist"
   }
 }
