@@ -23,6 +23,19 @@ export class PostgresMessageRepository implements IMessageRepository {
         ];
         const result = await this.dbPool.query(query, values);
         const row = result.rows[0];
+        
+        if (message.metadata?.recipientName) {
+            try {
+                await this.dbPool.query(`
+                    INSERT INTO whatsapp_contacts (tenant_id, id, alias_name)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (tenant_id, id) DO UPDATE SET alias_name = EXCLUDED.alias_name;
+                `, [message.userId, message.recipientId, message.metadata.recipientName]);
+            } catch (err) {
+                console.error("Error upserting contact alias:", err);
+            }
+        }
+
         return new ScheduledMessage(
             row.id, row.user_id, row.content, row.recipient_id, new Date(row.send_at), row.status, row.platform, new Date(row.created_at), row.metadata
         );
@@ -61,6 +74,19 @@ export class PostgresMessageRepository implements IMessageRepository {
             throw new Error('Message not found or unauthorized');
         }
         const row = result.rows[0];
+
+        if (fields.metadata?.recipientName) {
+            try {
+                await this.dbPool.query(`
+                    INSERT INTO whatsapp_contacts (tenant_id, id, alias_name)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (tenant_id, id) DO UPDATE SET alias_name = EXCLUDED.alias_name;
+                `, [userId, fields.recipientId || row.recipient_id, fields.metadata.recipientName]);
+            } catch (err) {
+                console.error("Error upserting contact alias:", err);
+            }
+        }
+
         return new ScheduledMessage(
             row.id, row.user_id, row.content, row.recipient_id, new Date(row.send_at), row.status, row.platform, new Date(row.created_at), row.metadata
         );

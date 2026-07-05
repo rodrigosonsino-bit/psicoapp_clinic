@@ -205,10 +205,10 @@ export class WhatsappController {
             // mesmo sem sessão ativa, então não exigimos conexão aqui.
             if (this.dbPool) {
                 const result = await this.dbPool.query(
-                    `SELECT id, COALESCE(NULLIF(google_name, ''), name) AS name
+                    `SELECT id, COALESCE(NULLIF(alias_name, ''), NULLIF(google_name, ''), name) AS name
                      FROM whatsapp_contacts
                      WHERE tenant_id = $1::uuid
-                     ORDER BY COALESCE(NULLIF(google_name, ''), name) ASC;`,
+                     ORDER BY COALESCE(NULLIF(alias_name, ''), NULLIF(google_name, ''), name) ASC;`,
                     [tenantId]
                 );
                 res.json(result.rows);

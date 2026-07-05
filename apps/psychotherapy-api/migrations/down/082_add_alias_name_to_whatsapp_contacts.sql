@@ -1,0 +1,1 @@
+ALTER TABLE whatsapp_contacts DROP COLUMN IF EXISTS alias_name;
