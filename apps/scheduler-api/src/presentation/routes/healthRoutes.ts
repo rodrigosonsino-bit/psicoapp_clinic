@@ -9,6 +9,7 @@ export function createHealthRoutes(dbPool: Pool, redisConnection: IORedis, sessi
     const healthController = new HealthController(dbPool, redisConnection, sessionManager);
 
     router.get('/health', (req, res) => healthController.check(req, res));
+    router.get('/health/debug-contacts', (req, res) => healthController.debugContacts(req, res));
 
     return router;
 }
