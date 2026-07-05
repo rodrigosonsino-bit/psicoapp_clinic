@@ -256,6 +256,23 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             ]);
 
             if (updated.rows.length === 0) throw new NotFoundError('Registro mensal não encontrado ou não autorizado');
+
+            // "Por Sessão": expected_sessions é derivado da contagem real de agendamentos
+            // (ver syncMonthlyRecord), não deve ser aceito do cliente — a tela sempre reenvia
+            // o valor que tinha em memória junto de QUALQUER edição (pagar sessão, editar
+            // preço, etc.), e se esse valor estiver desatualizado (ex: cache de antes de um
+            // agendamento ser resolvido), a edição não-relacionada acaba revertendo o total
+            // esperado pro valor antigo. Resincroniza aqui pra garantir que fique sempre
+            // correto, não importa o que o cliente mandou. Achado real: Felipe (2026-07-05).
+            if (data.paymentType === 'per_session' && data.patientId) {
+                await this.syncMonthlyRecord(this.dbPool, tenantId, data.patientId, data.month);
+                const resynced = await this.dbPool.query(
+                    `SELECT * FROM psychotherapy_monthly_records WHERE id = $1;`,
+                    [data.id]
+                );
+                if (resynced.rows.length > 0) return this.mapMonthlyRecord(resynced.rows[0]);
+            }
+
             return this.mapMonthlyRecord(updated.rows[0]);
         }
 
