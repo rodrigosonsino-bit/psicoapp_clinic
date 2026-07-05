@@ -15,10 +15,24 @@ export class ListPsychotherapyMonthUseCase {
     // Fix #5: single DB round-trip. Summary is computed in memory from the
     // records already fetched, instead of issuing a second identical query.
     async execute(tenantId: string, month: string): Promise<PsychotherapyMonthView> {
-        const allRecords = await this.repository.listMonthlyRecords(tenantId, month);
+        const [allRecords, patients] = await Promise.all([
+            this.repository.listMonthlyRecords(tenantId, month),
+            this.repository.listIndividualPatientsForBilling(tenantId)
+        ]);
+
         // Pacientes inativos somem da tela de Faturamento Mensal (mas continuam existindo
         // no banco/CSV export/emissão de recibo — só a listagem exibida aqui é filtrada).
-        const records = allRecords.filter(r => r.status !== 'inactive');
+        // Usa o status ATUAL do paciente, não o snapshot congelado em monthly_records.status
+        // — esse snapshot só é resincronizado quando algo dispara syncMonthlyRecord (mudança
+        // de status de agendamento) ou quando o paciente é salvo no mês CORRENTE; meses
+        // passados (ou pacientes cujo status mudou sem nenhum desses gatilhos) ficavam com o
+        // snapshot desatualizado indefinidamente (achado em 2026-07-05, caso Letícia Deolin).
+        const statusByPatientId = new Map(patients.map(p => [p.id, p.status]));
+        const records = allRecords.filter(r => {
+            const liveStatus = r.patientId ? statusByPatientId.get(r.patientId) : undefined;
+            return (liveStatus ?? r.status) !== 'inactive';
+        });
+
         const summary = this.computeSummary(month, records);
         return { month, summary, records };
     }
