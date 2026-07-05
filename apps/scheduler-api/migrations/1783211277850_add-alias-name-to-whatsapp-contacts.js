@@ -9,9 +9,7 @@ exports.shorthands = undefined;
  * @returns {Promise<void> | void}
  */
 exports.up = (pgm) => {
-    pgm.addColumn('whatsapp_contacts', {
-        alias_name: { type: 'text', notNull: false },
-    }, { ifNotExists: true });
+    pgm.sql(`ALTER TABLE whatsapp_contacts ADD COLUMN IF NOT EXISTS alias_name TEXT;`);
 };
 
 /**
@@ -20,5 +18,5 @@ exports.up = (pgm) => {
  * @returns {Promise<void> | void}
  */
 exports.down = (pgm) => {
-    pgm.dropColumn('whatsapp_contacts', 'alias_name', { ifExists: true });
+    pgm.sql(`ALTER TABLE whatsapp_contacts DROP COLUMN IF EXISTS alias_name;`);
 };
