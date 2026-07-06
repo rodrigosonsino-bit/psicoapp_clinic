@@ -225,23 +225,23 @@ export default function Dashboard() {
               </div>
             ) : !pendingDetails || (pendingDetails.individualPatients.length === 0 && pendingDetails.groupCharges.length === 0) ? (
               <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>
-                <p>Nenhuma inadimplência no mês corrente. 🎉</p>
+                <p>Nenhum mês vencido em aberto. 🎉</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {pendingDetails.individualPatients.map(p => (
-                  <div key={p.patientId} className="card" style={{ padding: '1rem' }}>
+                  <div key={`${p.patientId}-${p.month}`} className="card" style={{ padding: '1rem' }}>
                     <div className="flex justify-between items-center mb-2">
                       <strong>{p.patientName}</strong>
                       <span className="text-warning" style={{ fontWeight: 700 }}>{formatCurrency(p.pendingAmountCents)}</span>
                     </div>
                     <div className="text-small mb-2" style={{ color: 'var(--text-muted)' }}>
-                      {p.paymentType === 'monthly' ? 'Mensal' : 'Por Sessão'}
+                      {p.paymentType === 'monthly' ? 'Mensal' : 'Por Sessão'} · {format(new Date(`${p.month}-01T12:00:00`), 'MMMM/yyyy')}
                     </div>
                     {p.sessions.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                         {p.sessions.map(s => {
-                          const isFalta = s.status !== 'attended';
+                          const isFalta = s.status === 'no_show';
                           const label = format(new Date(s.date), 'dd/MM');
                           const badgeClass = isFalta ? 'badge-info' : s.covered ? 'badge-success' : 'badge-warning';
                           const suffix = isFalta ? ' (Falta)' : s.covered ? ' (Paga)' : ' (Pendente)';

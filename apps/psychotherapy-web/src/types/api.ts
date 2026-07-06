@@ -199,7 +199,7 @@ export interface DashboardAnalytics {
 export interface PendingSessionDetail {
   id: string;
   date: string;
-  status: 'attended' | 'justified_absence' | 'unjustified_absence';
+  status: 'attended' | 'no_show' | 'scheduled' | 'confirmed';
   covered: boolean;
 }
 
@@ -207,6 +207,7 @@ export interface PendingPatientDetail {
   patientId: string;
   patientName: string;
   paymentType: 'monthly' | 'per_session';
+  month: string;
   pendingAmountCents: number;
   sessions: PendingSessionDetail[];
 }

@@ -202,7 +202,7 @@ export interface DashboardAnalytics {
 export interface PendingSessionDetail {
     id: string;
     date: string; // ISO
-    status: string; // 'attended' | 'justified_absence' | 'unjustified_absence'
+    status: string; // status do agendamento: 'attended' | 'no_show' | 'scheduled' | 'confirmed'
     covered: boolean; // true = já coberta por paid_sessions; false = pendente; sempre false se falta
 }
 
@@ -210,6 +210,7 @@ export interface PendingPatientDetail {
     patientId: string;
     patientName: string;
     paymentType: 'monthly' | 'per_session';
+    month: string; // YYYY-MM do registro mensal a que essa pendência se refere
     pendingAmountCents: number;
     sessions: PendingSessionDetail[];
 }
