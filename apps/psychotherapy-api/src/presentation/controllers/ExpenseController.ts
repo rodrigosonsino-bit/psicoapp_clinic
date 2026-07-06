@@ -5,6 +5,7 @@ import { SavePsychotherapyExpenseUseCase } from '../../application/useCases/Save
 import { ListPsychotherapyExpensesUseCase } from '../../application/useCases/ListPsychotherapyExpensesUseCase';
 import { DeletePsychotherapyExpenseUseCase } from '../../application/useCases/DeletePsychotherapyExpenseUseCase';
 import { GetDashboardAnalyticsUseCase } from '../../application/useCases/GetDashboardAnalyticsUseCase';
+import { GetPendingDetailsUseCase } from '../../application/useCases/GetPendingDetailsUseCase';
 import { IPsychotherapyRepository } from '../../domain/repositories/IPsychotherapyRepository';
 
 @injectable()
@@ -14,6 +15,7 @@ export class ExpenseController {
         @inject(ListPsychotherapyExpensesUseCase) private listExpensesUseCase: ListPsychotherapyExpensesUseCase,
         @inject(DeletePsychotherapyExpenseUseCase) private deleteExpenseUseCase: DeletePsychotherapyExpenseUseCase,
         @inject(GetDashboardAnalyticsUseCase) private getDashboardAnalyticsUseCase: GetDashboardAnalyticsUseCase,
+        @inject(GetPendingDetailsUseCase) private getPendingDetailsUseCase: GetPendingDetailsUseCase,
         @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository
     ) {}
 
@@ -58,6 +60,13 @@ export class ExpenseController {
         const { month } = req.query; // YYYY-MM
         const analytics = await this.getDashboardAnalyticsUseCase.execute(tenantId, month as string | undefined);
         res.status(200).json(analytics);
+    }
+
+    async getPendingDetails(req: AuthenticatedRequest, res: Response): Promise<void> {
+        const tenantId = req.tenantId!;
+        const { month } = req.query; // YYYY-MM
+        const details = await this.getPendingDetailsUseCase.execute(tenantId, month as string | undefined);
+        res.status(200).json(details);
     }
 
     async listFixedExpenses(req: AuthenticatedRequest, res: Response): Promise<void> {

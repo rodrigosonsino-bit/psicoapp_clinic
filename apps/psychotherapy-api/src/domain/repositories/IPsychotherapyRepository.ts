@@ -199,6 +199,35 @@ export interface DashboardAnalytics {
     }[];
 }
 
+export interface PendingSessionDetail {
+    id: string;
+    date: string; // ISO
+    status: string; // 'attended' | 'justified_absence' | 'unjustified_absence'
+    covered: boolean; // true = já coberta por paid_sessions; false = pendente; sempre false se falta
+}
+
+export interface PendingPatientDetail {
+    patientId: string;
+    patientName: string;
+    paymentType: 'monthly' | 'per_session';
+    pendingAmountCents: number;
+    sessions: PendingSessionDetail[];
+}
+
+export interface PendingGroupChargeDetail {
+    groupPaymentId: string;
+    groupName: string;
+    memberName: string | null;
+    amountCents: number;
+    dueDate: string | null;
+}
+
+export interface PendingDetails {
+    month: string;
+    individualPatients: PendingPatientDetail[];
+    groupCharges: PendingGroupChargeDetail[];
+}
+
 export interface PaginationOptions {
     page: number;
     limit: number;
@@ -244,6 +273,7 @@ export interface IPsychotherapyRepository {
     toggleFixedExpense(tenantId: string, id: string, active: boolean): Promise<PsychotherapyFixedExpense>;
     expenseExistsForMonth(tenantId: string, fixedExpenseId: string, month: string): Promise<boolean>;
     getDashboardAnalytics(tenantId: string, currentMonthStr: string): Promise<DashboardAnalytics>;
+    getPendingDetails(tenantId: string, currentMonthStr: string): Promise<PendingDetails>;
     saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment>;
     listAppointments(tenantId: string, options?: ListAppointmentsOptions): Promise<PaginatedResult<PsychotherapyAppointment>>;
     findAppointmentById(tenantId: string, id: string): Promise<PsychotherapyAppointment | null>;

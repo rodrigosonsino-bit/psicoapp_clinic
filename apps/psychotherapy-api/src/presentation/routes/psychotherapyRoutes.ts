@@ -335,6 +335,7 @@ export function createPsychotherapyRoutes(): Router {
     router.get('/psychotherapy/expenses', validateQuery(listExpensesQuerySchema), asyncHandler((req, res) => expenseController.listExpenses(req, res)));
     router.delete('/psychotherapy/expenses/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => expenseController.deleteExpense(req, res)));
     router.get('/psychotherapy/analytics/dashboard', validateQuery(analyticsQuerySchema), asyncHandler((req, res) => expenseController.getAnalytics(req, res)));
+    router.get('/psychotherapy/analytics/pending-details', validateQuery(analyticsQuerySchema), asyncHandler((req, res) => expenseController.getPendingDetails(req, res)));
 
     router.get('/psychotherapy/fixed-expenses', asyncHandler((req, res) => expenseController.listFixedExpenses(req, res)));
     router.post('/psychotherapy/fixed-expenses', validateBody(fixedExpenseSchema), asyncHandler((req, res) => expenseController.saveFixedExpense(req, res)));

@@ -196,6 +196,35 @@ export interface DashboardAnalytics {
   }[];
 }
 
+export interface PendingSessionDetail {
+  id: string;
+  date: string;
+  status: 'attended' | 'justified_absence' | 'unjustified_absence';
+  covered: boolean;
+}
+
+export interface PendingPatientDetail {
+  patientId: string;
+  patientName: string;
+  paymentType: 'monthly' | 'per_session';
+  pendingAmountCents: number;
+  sessions: PendingSessionDetail[];
+}
+
+export interface PendingGroupChargeDetail {
+  groupPaymentId: string;
+  groupName: string;
+  memberName: string | null;
+  amountCents: number;
+  dueDate: string | null;
+}
+
+export interface PendingDetails {
+  month: string;
+  individualPatients: PendingPatientDetail[];
+  groupCharges: PendingGroupChargeDetail[];
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {

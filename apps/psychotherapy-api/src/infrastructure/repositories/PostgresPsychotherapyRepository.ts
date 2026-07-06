@@ -26,7 +26,7 @@ import { PASTORAL_SENTINEL_EMAIL } from '../../domain/constants/pastoral';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
 import { PsychotherapyFixedExpense } from '../../domain/models/PsychotherapyFixedExpense';
-import { DashboardAnalytics, SaveExpenseDTO, SaveSessionDTO, SaveClinicalNoteDTO, SaveFixedExpenseDTO, AddAdvanceCreditDTO } from '../../domain/repositories/IPsychotherapyRepository';
+import { DashboardAnalytics, PendingDetails, PendingPatientDetail, PendingSessionDetail, SaveExpenseDTO, SaveSessionDTO, SaveClinicalNoteDTO, SaveFixedExpenseDTO, AddAdvanceCreditDTO } from '../../domain/repositories/IPsychotherapyRepository';
 import { AppointmentStatus, PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../../domain/models/AvailabilitySlot';
@@ -1316,6 +1316,160 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 pendingCents
             },
             sixMonthsTrend
+        };
+    }
+
+    /**
+     * Detalhamento por paciente/cobrança do valor de "Inadimplência" do Dashboard —
+     * mesmos números que getDashboardAnalytics, mas explodidos por linha em vez de somados.
+     * Reusa exatamente a mesma fórmula de pendência (ver comentário em getDashboardAnalytics)
+     * pra nunca divergir do total exibido no card.
+     */
+    async getPendingDetails(tenantId: string, currentMonthStr: string): Promise<PendingDetails> {
+        const validTenantId = this.validateTenantId(tenantId);
+
+        const [year, month] = currentMonthStr.split('-');
+        const currentMonthStart = new Date(Date.UTC(parseInt(year, 10), parseInt(month, 10) - 1, 1));
+
+        const cutoverRes = await this.dbPool.query(`
+            SELECT cutover_at FROM tenant_financial_cutovers
+            WHERE tenant_id = $1 AND status = 'approved';
+        `, [validTenantId]);
+        const cutoverAt = cutoverRes.rows[0]?.cutover_at ? new Date(cutoverRes.rows[0].cutover_at) : null;
+        const isPostCutover = cutoverAt && (currentMonthStart.getTime() >= cutoverAt.getTime());
+
+        const individualPatients: PendingPatientDetail[] = [];
+
+        if (isPostCutover) {
+            // Modo Ledger: pendência é amount-based (expected_amount_cents - pago), não há
+            // contagem de sessão 1:1 tão direta quanto no fluxo legado — lista os pacientes
+            // com pendência e as sessões decorridas do mês, sem marcar "coberta" por sessão
+            // individual (o pagamento no ledger não se amarra a uma sessão específica).
+            const pendRes = await this.dbPool.query(`
+                SELECT
+                    mr.patient_id, mr.patient_name_snapshot, mr.payment_type,
+                    GREATEST(COALESCE(mr.expected_amount_cents, 0) - COALESCE((
+                        SELECT SUM(amount_cents) FROM financial_payments
+                        WHERE monthly_record_id = mr.id AND status = 'confirmed'
+                    ), 0), 0) AS pending_amount_cents
+                FROM psychotherapy_monthly_records mr
+                WHERE mr.tenant_id = $1 AND mr.month = $2 AND mr.patient_id IS NOT NULL;
+            `, [validTenantId, currentMonthStr]);
+
+            for (const row of pendRes.rows) {
+                const pendingAmountCents = parseInt(row.pending_amount_cents, 10);
+                if (pendingAmountCents <= 0) continue;
+
+                const sessRes = await this.dbPool.query(`
+                    SELECT id, date, status FROM psychotherapy_sessions
+                    WHERE patient_id = $1 AND tenant_id = $2
+                      AND TO_CHAR(date, 'YYYY-MM') = $3 AND date <= NOW()
+                      AND status IN ('attended', 'justified_absence', 'unjustified_absence')
+                    ORDER BY date ASC;
+                `, [row.patient_id, validTenantId, currentMonthStr]);
+
+                individualPatients.push({
+                    patientId: row.patient_id,
+                    patientName: row.patient_name_snapshot,
+                    paymentType: row.payment_type,
+                    pendingAmountCents,
+                    sessions: sessRes.rows.map((s: any) => ({
+                        id: s.id, date: s.date, status: s.status, covered: false
+                    }))
+                });
+            }
+        } else {
+            // Modo legado: mesma fórmula de getDashboardAnalytics, agora por linha.
+            const pendRes = await this.dbPool.query(`
+                SELECT
+                    pmr.patient_id, pmr.patient_name_snapshot, pmr.payment_type,
+                    pmr.session_price_cents, pmr.expected_sessions, pmr.absences,
+                    pmr.paid_sessions, pmr.previous_month_paid_cents,
+                    CASE
+                        WHEN pmr.payment_type = 'monthly' THEN
+                            GREATEST(
+                                (LEAST(pmr.expected_sessions, COALESCE(elapsed.cnt, 0)) - pmr.absences - pmr.paid_sessions)
+                                    * pmr.session_price_cents::numeric / GREATEST(pmr.expected_sessions - pmr.absences, 1)
+                                    - pmr.previous_month_paid_cents,
+                            0)
+                        ELSE
+                            GREATEST(
+                                GREATEST(LEAST(pmr.expected_sessions, COALESCE(elapsed.cnt, 0)) - pmr.absences - pmr.paid_sessions, 0)
+                                    * COALESCE(pmr.session_price_cents, 0)
+                                    - pmr.previous_month_paid_cents,
+                            0)
+                    END AS pending_amount_cents
+                FROM psychotherapy_monthly_records pmr
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS cnt
+                    FROM psychotherapy_sessions ps
+                    WHERE ps.patient_id = pmr.patient_id
+                      AND ps.tenant_id  = pmr.tenant_id
+                      AND TO_CHAR(ps.date, 'YYYY-MM') = pmr.month
+                      AND ps.date <= NOW()
+                      AND ps.status IN ('attended', 'justified_absence', 'unjustified_absence')
+                ) elapsed ON true
+                WHERE pmr.tenant_id = $1 AND pmr.month = $2 AND pmr.payment_status != 'paid'
+                  AND pmr.patient_id IS NOT NULL;
+            `, [validTenantId, currentMonthStr]);
+
+            for (const row of pendRes.rows) {
+                const pendingAmountCents = Math.round(parseFloat(row.pending_amount_cents));
+                if (pendingAmountCents <= 0) continue;
+
+                const paidSessions = parseInt(row.paid_sessions, 10);
+
+                const sessRes = await this.dbPool.query(`
+                    SELECT id, date, status FROM psychotherapy_sessions
+                    WHERE patient_id = $1 AND tenant_id = $2
+                      AND TO_CHAR(date, 'YYYY-MM') = $3 AND date <= NOW()
+                      AND status IN ('attended', 'justified_absence', 'unjustified_absence')
+                    ORDER BY date ASC;
+                `, [row.patient_id, validTenantId, currentMonthStr]);
+
+                // Faltas nunca são "cobertas" nem "pendentes" (não entram na conta). Entre as
+                // sessões com presença (attended), as primeiras `paidSessions` (em ordem
+                // cronológica) contam como já pagas — mesma ordinalidade usada na fórmula
+                // agregada acima, só que explicitada sessão a sessão.
+                let attendedSeen = 0;
+                const sessions: PendingSessionDetail[] = sessRes.rows.map((s: any) => {
+                    if (s.status !== 'attended') {
+                        return { id: s.id, date: s.date, status: s.status, covered: false };
+                    }
+                    attendedSeen++;
+                    return { id: s.id, date: s.date, status: s.status, covered: attendedSeen <= paidSessions };
+                });
+
+                individualPatients.push({
+                    patientId: row.patient_id,
+                    patientName: row.patient_name_snapshot,
+                    paymentType: row.payment_type,
+                    pendingAmountCents,
+                    sessions
+                });
+            }
+        }
+
+        const groupRes = await this.dbPool.query(`
+            SELECT gp.id, gp.amount_cents, gp.due_date, tg.name AS group_name, p.name AS patient_name
+            FROM group_payments gp
+            JOIN therapy_groups tg ON tg.id = gp.group_id
+            LEFT JOIN psychotherapy_patients p ON p.id = gp.patient_id
+            WHERE gp.tenant_id = $1 AND gp.reference_month = $2 AND gp.status = 'pending'
+              AND COALESCE(gp.due_date, CURRENT_DATE) <= CURRENT_DATE
+            ORDER BY tg.name, p.name;
+        `, [validTenantId, currentMonthStr]);
+
+        return {
+            month: currentMonthStr,
+            individualPatients: individualPatients.sort((a, b) => b.pendingAmountCents - a.pendingAmountCents),
+            groupCharges: groupRes.rows.map((r: any) => ({
+                groupPaymentId: r.id,
+                groupName: r.group_name,
+                memberName: r.patient_name,
+                amountCents: r.amount_cents,
+                dueDate: r.due_date
+            }))
         };
     }
 
