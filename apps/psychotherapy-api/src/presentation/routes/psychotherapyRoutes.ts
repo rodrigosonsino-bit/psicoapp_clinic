@@ -19,7 +19,7 @@ import { asyncHandler } from '../middlewares/asyncHandler';
 import { container } from '../../container';
 
 // Zod Enum schemas
-const patientStatusSchema = z.enum(['weekly', 'biweekly', 'one_off', 'inactive']);
+const patientStatusSchema = z.enum(['weekly', 'biweekly', 'monthly', 'one_off', 'inactive']);
 const paymentTypeSchema = z.enum(['monthly', 'per_session']);
 const reminderChannelSchema = z.enum(['whatsapp', 'email', 'both', 'none']);
 const paymentStatusSchema = z.enum(['paid', 'pending', 'partial']);
@@ -79,7 +79,7 @@ const analyticsQuerySchema = z.object({
 // Body Validation schemas
 const changePatientModalitySchema = z.object({
     individualTherapyEnabled: z.boolean(),
-    status: z.enum(['weekly', 'biweekly', 'one_off', 'inactive']).optional()
+    status: z.enum(['weekly', 'biweekly', 'monthly', 'one_off', 'inactive']).optional()
 });
 
 const groupIdParamSchema = z.object({
@@ -359,7 +359,7 @@ export function createPsychotherapyRoutes(): Router {
         scheduledAt: z.string().datetime().transform(val => new Date(val)),
         durationMinutes: z.number().int().min(10).max(240).optional().default(50),
         status: z.enum(['scheduled', 'confirmed', 'attended', 'canceled', 'no_show']).optional(),
-        recurrence: z.enum(['none', 'weekly', 'biweekly']).optional().default('none'),
+        recurrence: z.enum(['none', 'weekly', 'biweekly', 'monthly']).optional().default('none'),
         recurrenceEndDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).transform(val => new Date(val)).nullable().optional(),
         notes: z.string().nullable().optional(),
         mode: z.enum(['single', 'future', 'all']).optional(),

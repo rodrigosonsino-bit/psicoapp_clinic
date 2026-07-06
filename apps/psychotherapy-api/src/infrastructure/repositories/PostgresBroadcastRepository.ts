@@ -11,7 +11,7 @@ import {
     BroadcastRecipientStatus
 } from '../../domain/models/PsychotherapyBroadcast';
 
-const ACTIVE_STATUSES = ['weekly', 'biweekly', 'one_off'];
+const ACTIVE_STATUSES = ['weekly', 'biweekly', 'monthly', 'one_off'];
 
 function mapBroadcast(row: any): PsychotherapyBroadcast {
     return new PsychotherapyBroadcast(
@@ -69,16 +69,16 @@ export class PostgresBroadcastRepository implements IBroadcastRepository {
     async countExclusions(tenantId: string): Promise<ExclusionCounts> {
         const { rows } = await this.dbPool.query(
             `SELECT
-                COUNT(*) FILTER (WHERE deleted_at IS NULL AND status NOT IN ('weekly', 'biweekly', 'one_off')) AS inactive,
+                COUNT(*) FILTER (WHERE deleted_at IS NULL AND status NOT IN ('weekly', 'biweekly', 'monthly', 'one_off')) AS inactive,
                 COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) AS deleted,
                 COUNT(*) FILTER (
                     WHERE deleted_at IS NULL
-                      AND status IN ('weekly', 'biweekly', 'one_off')
+                      AND status IN ('weekly', 'biweekly', 'monthly', 'one_off')
                       AND (phone IS NULL OR btrim(phone) = '')
                 ) AS without_phone,
                 COUNT(*) FILTER (
                     WHERE deleted_at IS NULL
-                      AND status IN ('weekly', 'biweekly', 'one_off')
+                      AND status IN ('weekly', 'biweekly', 'monthly', 'one_off')
                       AND phone IS NOT NULL AND btrim(phone) <> ''
                       AND whatsapp_bulk_opt_in = FALSE
                 ) AS without_opt_in

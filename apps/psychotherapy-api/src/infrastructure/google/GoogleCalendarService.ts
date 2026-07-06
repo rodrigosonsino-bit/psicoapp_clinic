@@ -203,8 +203,12 @@ export class GoogleCalendarService {
             const until = new Date(appointment.recurrenceEndDate);
             until.setUTCHours(23, 59, 59, 0);
             const untilStr = until.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-            const interval = appointment.recurrence === 'biweekly' ? ';INTERVAL=2' : '';
-            eventBody.recurrence = [`RRULE:FREQ=WEEKLY${interval};UNTIL=${untilStr}`];
+            if (appointment.recurrence === 'monthly') {
+                eventBody.recurrence = [`RRULE:FREQ=MONTHLY;UNTIL=${untilStr}`];
+            } else {
+                const interval = appointment.recurrence === 'biweekly' ? ';INTERVAL=2' : '';
+                eventBody.recurrence = [`RRULE:FREQ=WEEKLY${interval};UNTIL=${untilStr}`];
+            }
         }
 
         try {

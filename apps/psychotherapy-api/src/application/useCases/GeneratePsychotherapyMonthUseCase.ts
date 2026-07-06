@@ -6,6 +6,7 @@ import { PASTORAL_SENTINEL_EMAIL } from '../../domain/constants/pastoral';
 const EXPECTED_SESSIONS_BY_STATUS = {
     weekly: 4,
     biweekly: 2,
+    monthly: 1,
     one_off: 0,
     inactive: 0
 } as const;

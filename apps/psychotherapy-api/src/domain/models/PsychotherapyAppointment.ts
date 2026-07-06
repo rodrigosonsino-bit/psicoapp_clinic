@@ -1,5 +1,5 @@
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'attended' | 'canceled' | 'no_show';
-export type RecurrenceType = 'none' | 'weekly' | 'biweekly';
+export type RecurrenceType = 'none' | 'weekly' | 'biweekly' | 'monthly';
 
 export class PsychotherapyAppointment {
     constructor(

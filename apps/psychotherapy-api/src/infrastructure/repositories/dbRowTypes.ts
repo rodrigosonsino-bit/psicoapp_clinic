@@ -3,7 +3,7 @@ export interface PatientRow {
     id: string;
     tenant_id: string;
     name: string;
-    status: 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+    status: 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
     payment_type: 'monthly' | 'per_session' | null;
     default_session_price_cents: number | null;
     notes: string | null;
@@ -25,7 +25,7 @@ export interface MonthlyRecordRow {
     patient_id: string | null;
     month: string;
     patient_name_snapshot: string;
-    status: 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+    status: 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
     payment_type: 'monthly' | 'per_session' | null;
     session_price_cents: number | null;
     expected_sessions: number;

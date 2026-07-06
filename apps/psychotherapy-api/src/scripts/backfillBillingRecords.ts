@@ -6,6 +6,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const SESSIONS_BY_STATUS: Record<string, number> = {
     weekly: 4,
     biweekly: 2,
+    monthly: 1,
     one_off: 1,
     inactive: 0
 };

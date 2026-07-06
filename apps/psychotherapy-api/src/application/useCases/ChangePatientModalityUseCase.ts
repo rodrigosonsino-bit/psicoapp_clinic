@@ -8,7 +8,7 @@ export interface ChangePatientModalityInput {
     tenantId: string;
     patientId: string;
     individualTherapyEnabled: boolean;
-    status?: 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+    status?: 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
 }
 
 @injectable()

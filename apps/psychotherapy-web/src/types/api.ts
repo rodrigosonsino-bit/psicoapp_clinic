@@ -25,7 +25,7 @@ export interface Patient {
   id: string;
   tenantId: string;
   name: string;
-  status: 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+  status: 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
   paymentType: 'monthly' | 'per_session' | null;
   defaultSessionPriceCents: number | null;
   notes: string | null;
@@ -84,7 +84,7 @@ export interface MonthlyRecord {
   patientId: string | null;
   month: string;
   patientNameSnapshot: string;
-  status: 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+  status: 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
   paymentType: 'monthly' | 'per_session' | null;
   sessionPriceCents: number | null;
   expectedSessions: number;
@@ -207,7 +207,7 @@ export interface PaginatedResponse<T> {
 }
 
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'attended' | 'canceled' | 'no_show';
-export type RecurrenceType = 'none' | 'weekly' | 'biweekly';
+export type RecurrenceType = 'none' | 'weekly' | 'biweekly' | 'monthly';
 
 export interface Appointment {
   id: string;

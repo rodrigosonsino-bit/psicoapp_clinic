@@ -1,4 +1,4 @@
-export type PatientStatus = 'weekly' | 'biweekly' | 'one_off' | 'inactive';
+export type PatientStatus = 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
 export type PaymentType = 'monthly' | 'per_session';
 export type ReminderChannel = 'whatsapp' | 'email' | 'both' | 'none';
 

@@ -1,5 +1,5 @@
 import { injectable, inject } from 'tsyringe';
-import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
+import { PsychotherapyAppointment, RecurrenceType } from '../../domain/models/PsychotherapyAppointment';
 import { IPsychotherapyRepository, SaveAppointmentDTO } from '../../domain/repositories/IPsychotherapyRepository';
 import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalendarService';
 import { DeletePsychotherapyAppointmentUseCase } from './DeletePsychotherapyAppointmentUseCase';
@@ -145,15 +145,13 @@ export class SavePsychotherapyAppointmentUseCase {
     private async pruneStraySiblings(anchor: PsychotherapyAppointment): Promise<void> {
         const rootId = anchor.parentId ?? anchor.id;
         const series = await this.repository.listSeriesAppointments(anchor.tenantId, rootId);
-        const intervalDays = anchor.recurrence === 'weekly' ? 7 : anchor.recurrence === 'biweekly' ? 14 : null;
 
         for (const sibling of series) {
             if (sibling.id === anchor.id) continue;
             if (sibling.scheduledAt.getTime() <= anchor.scheduledAt.getTime()) continue;
             if (sibling.status !== 'scheduled' && sibling.status !== 'confirmed') continue;
 
-            const diffDays = Math.round((sibling.scheduledAt.getTime() - anchor.scheduledAt.getTime()) / (1000 * 60 * 60 * 24));
-            const fitsNewPattern = intervalDays !== null && diffDays % intervalDays === 0;
+            const fitsNewPattern = this.fitsRecurrencePattern(anchor.scheduledAt, sibling.scheduledAt, anchor.recurrence);
 
             if (!fitsNewPattern) {
                 await this.deleteUseCase.execute(anchor.tenantId, sibling.id, 'single');
@@ -165,13 +163,36 @@ export class SavePsychotherapyAppointmentUseCase {
         }
     }
 
-    private calculateOccurrences(start: Date, endDate: Date, recurrence: 'weekly' | 'biweekly'): Date[] {
-        const intervalDays = recurrence === 'weekly' ? 7 : 14;
+    /**
+     * Verifica se `candidate` cai exatamente numa ocorrência da recorrência `recurrence`
+     * ancorada em `anchor` (candidate deve ser posterior à âncora). 'weekly'/'biweekly' usam
+     * intervalo fixo em dias; 'monthly' não pode usar dias fixos (meses têm duração
+     * variável) — compara o dia-do-mês e a diferença inteira de meses em vez disso.
+     */
+    private fitsRecurrencePattern(anchor: Date, candidate: Date, recurrence: RecurrenceType): boolean {
+        if (recurrence === 'weekly' || recurrence === 'biweekly') {
+            const intervalDays = recurrence === 'weekly' ? 7 : 14;
+            const diffDays = Math.round((candidate.getTime() - anchor.getTime()) / (1000 * 60 * 60 * 24));
+            return diffDays % intervalDays === 0;
+        }
+        if (recurrence === 'monthly') {
+            if (candidate.getDate() !== anchor.getDate()) return false;
+            const monthsDiff = (candidate.getFullYear() - anchor.getFullYear()) * 12 + (candidate.getMonth() - anchor.getMonth());
+            return monthsDiff > 0;
+        }
+        return false;
+    }
+
+    private calculateOccurrences(start: Date, endDate: Date, recurrence: 'weekly' | 'biweekly' | 'monthly'): Date[] {
         const occurrences: Date[] = [start];
         let current = new Date(start);
         while (true) {
             const next = new Date(current);
-            next.setDate(next.getDate() + intervalDays);
+            if (recurrence === 'monthly') {
+                next.setMonth(next.getMonth() + 1);
+            } else {
+                next.setDate(next.getDate() + (recurrence === 'weekly' ? 7 : 14));
+            }
             if (next > endDate) break;
             occurrences.push(next);
             current = next;

@@ -1,8 +1,10 @@
 export const MODALIDADE_OPTIONS = [
   { value: 'mensal-semanal',    label: 'Mensal (Semanal)',       status: 'weekly'   as const, paymentType: 'monthly'     as const, sessions: 4 },
   { value: 'mensal-quinzenal',  label: 'Mensal (Quinzenal)',     status: 'biweekly' as const, paymentType: 'monthly'     as const, sessions: 2 },
+  { value: 'mensal-mensal',     label: 'Mensal (Mensal)',        status: 'monthly'  as const, paymentType: 'monthly'     as const, sessions: 1 },
   { value: 'sessao-semanal',    label: 'Por Sessão (Semanal)',   status: 'weekly'   as const, paymentType: 'per_session' as const, sessions: 4 },
   { value: 'sessao-quinzenal',  label: 'Por Sessão (Quinzenal)', status: 'biweekly' as const, paymentType: 'per_session' as const, sessions: 2 },
+  { value: 'sessao-mensal',     label: 'Por Sessão (Mensal)',    status: 'monthly'  as const, paymentType: 'per_session' as const, sessions: 1 },
   { value: 'avulsa',            label: 'Avulsa',                 status: 'one_off'  as const, paymentType: 'per_session' as const, sessions: 0 },
 ] as const;
 

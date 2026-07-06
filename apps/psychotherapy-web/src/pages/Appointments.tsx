@@ -404,6 +404,7 @@ export default function Appointments() {
                         <option value="none">Avulsa</option>
                         <option value="weekly">Semanal</option>
                         <option value="biweekly">Quinzenal</option>
+                        <option value="monthly">Mensal</option>
                       </select>
                     </td>
                     <td>
@@ -555,7 +556,7 @@ export default function Appointments() {
         message={
           confirmRecurrence.newRecurrence === 'none'
             ? 'Esta sessão passará a ser avulsa. Todas as sessões futuras desta série (ainda não realizadas) serão excluídas automaticamente. Sessões já realizadas ou canceladas não são afetadas.'
-            : `A recorrência será alterada para "${confirmRecurrence.newRecurrence === 'weekly' ? 'Semanal' : 'Quinzenal'}" a partir desta sessão. As sessões futuras que não se encaixarem no novo padrão (ainda não realizadas) serão excluídas automaticamente. Sessões já realizadas ou canceladas não são afetadas.`
+            : `A recorrência será alterada para "${confirmRecurrence.newRecurrence === 'weekly' ? 'Semanal' : confirmRecurrence.newRecurrence === 'biweekly' ? 'Quinzenal' : 'Mensal'}" a partir desta sessão. As sessões futuras que não se encaixarem no novo padrão (ainda não realizadas) serão excluídas automaticamente. Sessões já realizadas ou canceladas não são afetadas.`
         }
         confirmLabel="Confirmar" cancelLabel="Cancelar" variant="danger"
         onConfirm={() => {
@@ -689,6 +690,7 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
     if (selected) {
       if (selected.status === 'weekly') newRecurrence = 'weekly';
       else if (selected.status === 'biweekly') newRecurrence = 'biweekly';
+      else if (selected.status === 'monthly') newRecurrence = 'monthly';
       
       if (newRecurrence !== 'none') {
         newEndDate = getDefaultEndDate(formData.scheduledAt);
@@ -848,6 +850,7 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
                 <option value="none">Avulsa</option>
                 <option value="weekly">Semanal</option>
                 <option value="biweekly">Quinzenal</option>
+                <option value="monthly">Mensal</option>
               </select>
             </div>
             {formData.recurrence !== 'none' && (
