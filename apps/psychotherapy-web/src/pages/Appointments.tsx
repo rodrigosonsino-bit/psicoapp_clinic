@@ -32,6 +32,14 @@ function formatDateTime(iso: string) {
   });
 }
 
+// Formata em hora LOCAL (não UTC) no formato exigido pelo <input type="datetime-local">.
+// toISOString() sempre retorna UTC — usá-la aqui faria o campo mostrar um horário
+// diferente do que foi de fato agendado (ex: 16:30 local exibido como 19:30).
+function toLocalDatetimeInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function Appointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [total, setTotal] = useState(0);
@@ -233,7 +241,7 @@ export default function Appointments() {
 
   const handleSlotClick = (date: Date) => {
     setEditAppointment(null);
-    setPrefilledDate(date.toISOString().slice(0, 16));
+    setPrefilledDate(toLocalDatetimeInputValue(date));
     setShowModal(true);
   };
 
@@ -669,7 +677,7 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
     id: appointment?.id,
     patientId: appointment?.patientId || (patients[0]?.id ?? ''),
     scheduledAt: appointment
-      ? new Date(appointment.scheduledAt).toISOString().slice(0, 16)
+      ? toLocalDatetimeInputValue(new Date(appointment.scheduledAt))
       : (initialScheduledAt || now.toISOString().slice(0, 16)),
     durationMinutes: appointment?.durationMinutes ?? 50,
     status: appointment?.status ?? 'scheduled',
