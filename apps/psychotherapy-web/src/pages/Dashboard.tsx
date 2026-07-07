@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
-import { TrendingUp, TrendingDown, DollarSign, AlertCircle, User, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, AlertCircle, User, X, CheckCircle } from 'lucide-react';
 import { fetchApi } from '../services/api';
-import type { DashboardAnalytics, Appointment, Patient, PaginatedResponse, PendingDetails } from '../types/api';
+import type { DashboardAnalytics, Appointment, Patient, PaginatedResponse, PendingDetails, PendingPatientDetail } from '../types/api';
 import { formatCurrency, translateAppointmentStatus } from '../utils/formatters';
 import Skeleton, { SkeletonCard } from '../components/Skeleton';
 import { startOfDay, endOfDay } from 'date-fns';
 import ErrorState from '../components/ErrorState';
+import { useToast } from '../context/ToastContext';
 import {
   BarChart,
   Bar,
@@ -29,7 +30,9 @@ export default function Dashboard() {
   const [pendingDetails, setPendingDetails] = useState<PendingDetails | null>(null);
   const [loadingPendingDetails, setLoadingPendingDetails] = useState(false);
   const [pendingDetailsError, setPendingDetailsError] = useState(false);
+  const [settlingRecordId, setSettlingRecordId] = useState<string | null>(null);
   const currentMonth = format(new Date(), 'yyyy-MM');
+  const toast = useToast();
 
   const openPendingDetails = useCallback(async () => {
     setShowPendingModal(true);
@@ -74,6 +77,39 @@ export default function Dashboard() {
       setLoading(false);
     }
   }, [currentMonth]);
+
+  // Registra o pagamento usando o MESMO endpoint que o Faturamento Mensal (POST
+  // /psychotherapy/months/:month/records) — garante que os dois telas fiquem sempre
+  // espelhadas, sem duplicar a lógica de payment_status/paid_sessions em dois lugares.
+  const handleMarkPaid = useCallback(async (p: PendingPatientDetail) => {
+    setSettlingRecordId(p.recordId);
+    try {
+      const newPaidSessions = Math.max(0, p.expectedSessions - p.absences);
+      await fetchApi(`/api/psychotherapy/months/${p.month}/records`, {
+        method: 'POST',
+        body: JSON.stringify({
+          id: p.recordId,
+          patientId: p.patientId,
+          patientNameSnapshot: p.patientName,
+          status: p.status,
+          paymentType: p.paymentType,
+          sessionPriceCents: p.sessionPriceCents,
+          expectedSessions: p.expectedSessions,
+          paidSessions: newPaidSessions,
+          absences: p.absences,
+          paymentStatus: 'paid',
+          notes: p.notes,
+          previousMonthPaidCents: p.previousMonthPaidCents
+        })
+      });
+      toast.success(`Pagamento de ${p.patientName} (${p.month}) registrado.`);
+      await Promise.all([openPendingDetails(), loadAnalytics()]);
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao registrar pagamento.');
+    } finally {
+      setSettlingRecordId(null);
+    }
+  }, [toast, openPendingDetails, loadAnalytics]);
 
   useEffect(() => {
     loadAnalytics();
@@ -237,9 +273,10 @@ export default function Dashboard() {
                     </div>
                     <div className="text-small mb-2" style={{ color: 'var(--text-muted)' }}>
                       {p.paymentType === 'monthly' ? 'Mensal' : 'Por Sessão'} · {format(new Date(`${p.month}-01T12:00:00`), 'MMMM/yyyy')}
+                      {' · '}Pago até agora: {formatCurrency(p.receivedAmountCents)}
                     </div>
                     {p.sessions.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.75rem' }}>
                         {p.sessions.map(s => {
                           const isFalta = s.status === 'no_show';
                           const label = format(new Date(s.date), 'dd/MM');
@@ -253,6 +290,17 @@ export default function Dashboard() {
                         })}
                       </div>
                     )}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '0.4rem 0.9rem', fontSize: '0.8rem' }}
+                        disabled={settlingRecordId === p.recordId}
+                        onClick={() => handleMarkPaid(p)}
+                      >
+                        <CheckCircle size={14} className="text-success" /> {settlingRecordId === p.recordId ? 'Registrando...' : 'Dar Baixa'}
+                      </button>
+                    </div>
                   </div>
                 ))}
 
