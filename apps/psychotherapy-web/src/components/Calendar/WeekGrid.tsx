@@ -9,13 +9,14 @@ interface Props {
   days: Date[]; // 7 days for week view, 1 day for day view
   appointments: Appointment[];
   patients: Patient[];
+  groups: { id: string; name: string }[];
   onSlotClick: (date: Date) => void;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
 }
 
-export default function WeekGrid({ days, appointments, patients, onSlotClick, onStatusUpdate, onEdit, onDelete }: Props) {
+export default function WeekGrid({ days, appointments, patients, groups, onSlotClick, onStatusUpdate, onEdit, onDelete }: Props) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [nowTop, setNowTop] = useState(() => topPx(new Date().toISOString()));
 
@@ -44,6 +45,11 @@ export default function WeekGrid({ days, appointments, patients, onSlotClick, on
   const getPatientName = (appt: Appointment) => {
     if (appt.notes?.startsWith('[PASTORAL_SUMMARY]:')) {
       return appt.notes.replace('[PASTORAL_SUMMARY]:', '').split('\n')[0].trim();
+    }
+    // Agendamento de grupo: mostra o nome do grupo, não tenta achar um paciente individual
+    // (o patientId nesse caso não corresponde a um paciente com registro próprio na lista).
+    if (appt.groupId) {
+      return groups.find(g => g.id === appt.groupId)?.name ?? 'Grupo';
     }
     return patients.find(p => p.id === appt.patientId)?.name ?? appt.patientId.slice(0, 8);
   };

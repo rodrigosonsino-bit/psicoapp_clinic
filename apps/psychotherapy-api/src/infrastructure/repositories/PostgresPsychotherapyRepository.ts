@@ -1344,11 +1344,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             // no ledger não se amarra a uma sessão específica).
             const pendRes = await this.dbPool.query(`
                 SELECT
-                    mr.patient_id, mr.patient_name_snapshot, mr.payment_type, mr.month,
-                    GREATEST(COALESCE(mr.expected_amount_cents, 0) - COALESCE((
+                    mr.id, mr.patient_id, mr.patient_name_snapshot, mr.status, mr.payment_type, mr.month,
+                    mr.session_price_cents, mr.expected_sessions, mr.absences, mr.paid_sessions,
+                    mr.previous_month_paid_cents, mr.payment_status, mr.notes,
+                    COALESCE(mr.expected_amount_cents, 0) AS expected_amount_cents,
+                    COALESCE((
                         SELECT SUM(amount_cents) FROM financial_payments
                         WHERE monthly_record_id = mr.id AND status = 'confirmed'
-                    ), 0), 0) AS pending_amount_cents
+                    ), 0) AS received_amount_cents
                 FROM psychotherapy_monthly_records mr
                 WHERE mr.tenant_id = $1 AND mr.patient_id IS NOT NULL
                   AND (to_date(mr.month, 'YYYY-MM') + INTERVAL '1 month' + INTERVAL '10 days')::date <= CURRENT_DATE
@@ -1356,7 +1359,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             `, [validTenantId]);
 
             for (const row of pendRes.rows) {
-                const pendingAmountCents = parseInt(row.pending_amount_cents, 10);
+                const receivedAmountCents = parseInt(row.received_amount_cents, 10);
+                const pendingAmountCents = Math.max(parseInt(row.expected_amount_cents, 10) - receivedAmountCents, 0);
                 if (pendingAmountCents <= 0) continue;
 
                 const apptRes = await this.dbPool.query(`
@@ -1368,10 +1372,20 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 `, [row.patient_id, validTenantId, row.month]);
 
                 individualPatients.push({
+                    recordId: row.id,
                     patientId: row.patient_id,
                     patientName: row.patient_name_snapshot,
+                    status: row.status,
                     paymentType: row.payment_type,
                     month: row.month,
+                    sessionPriceCents: row.session_price_cents,
+                    expectedSessions: row.expected_sessions,
+                    absences: row.absences,
+                    paidSessions: row.paid_sessions,
+                    previousMonthPaidCents: row.previous_month_paid_cents,
+                    paymentStatus: row.payment_status,
+                    notes: row.notes,
+                    receivedAmountCents,
                     pendingAmountCents,
                     sessions: apptRes.rows.map((s: any) => ({
                         id: s.id, date: s.date, status: s.status, covered: false
@@ -1379,29 +1393,13 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 });
             }
         } else {
-            // Modo legado: mesma fórmula de getDashboardAnalytics (ver comentário lá sobre a
-            // regra do dia 11), agora por linha em vez de somada. Só meses já VENCIDOS entram
-            // aqui, então sempre usa expected_sessions inteiro (o mês já decorreu por
-            // completo e já passou até do prazo de pagamento).
+            // Modo legado: busca as linhas cruas e reusa PsychotherapyMonthlyRecord (mesma
+            // classe de domínio que Faturamento Mensal usa) pra calcular pendingAmountCents/
+            // receivedAmountCents — em vez de reimplementar a fórmula em SQL, garante que os
+            // dois telas nunca divirjam (são literalmente o mesmo cálculo). Só meses já
+            // VENCIDOS entram aqui (ver regra do dia 11 no comentário de getDashboardAnalytics).
             const pendRes = await this.dbPool.query(`
-                SELECT
-                    pmr.patient_id, pmr.patient_name_snapshot, pmr.payment_type, pmr.month,
-                    pmr.session_price_cents, pmr.expected_sessions, pmr.absences,
-                    pmr.paid_sessions, pmr.previous_month_paid_cents,
-                    CASE
-                        WHEN pmr.payment_type = 'monthly' THEN
-                            GREATEST(
-                                (pmr.expected_sessions - pmr.absences - pmr.paid_sessions)
-                                    * pmr.session_price_cents::numeric / GREATEST(pmr.expected_sessions - pmr.absences, 1)
-                                    - pmr.previous_month_paid_cents,
-                            0)
-                        ELSE
-                            GREATEST(
-                                GREATEST(pmr.expected_sessions - pmr.absences - pmr.paid_sessions, 0)
-                                    * COALESCE(pmr.session_price_cents, 0)
-                                    - pmr.previous_month_paid_cents,
-                            0)
-                    END AS pending_amount_cents
+                SELECT pmr.*
                 FROM psychotherapy_monthly_records pmr
                 WHERE pmr.tenant_id = $1 AND pmr.payment_status != 'paid'
                   AND pmr.patient_id IS NOT NULL
@@ -1410,10 +1408,9 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             `, [validTenantId]);
 
             for (const row of pendRes.rows) {
-                const pendingAmountCents = Math.round(parseFloat(row.pending_amount_cents));
+                const record = this.mapMonthlyRecord(row);
+                const pendingAmountCents = record.pendingAmountCents;
                 if (pendingAmountCents <= 0) continue;
-
-                const paidSessions = parseInt(row.paid_sessions, 10);
 
                 const apptRes = await this.dbPool.query(`
                     SELECT id, scheduled_at AS date, status FROM psychotherapy_appointments
@@ -1421,12 +1418,12 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                       AND TO_CHAR(scheduled_at, 'YYYY-MM') = $3 AND status != 'canceled'
                       AND scheduled_at <= NOW()
                     ORDER BY scheduled_at ASC;
-                `, [row.patient_id, validTenantId, row.month]);
+                `, [record.patientId, validTenantId, record.month]);
 
                 // Faltas (no_show) nunca são "cobertas" nem "pendentes" (não entram na conta,
-                // já descontadas via pmr.absences). Entre as demais (attended/scheduled/
+                // já descontadas via absences). Entre as demais (attended/scheduled/
                 // confirmed), as primeiras `paidSessions` (em ordem cronológica) contam como
-                // já pagas — mesma ordinalidade usada na fórmula agregada acima, só que
+                // já pagas — mesma ordinalidade usada em receivedAmountCents, só que
                 // explicitada sessão a sessão.
                 let billableSeen = 0;
                 const sessions: PendingSessionDetail[] = apptRes.rows.map((s: any) => {
@@ -1434,14 +1431,24 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                         return { id: s.id, date: s.date, status: s.status, covered: false };
                     }
                     billableSeen++;
-                    return { id: s.id, date: s.date, status: s.status, covered: billableSeen <= paidSessions };
+                    return { id: s.id, date: s.date, status: s.status, covered: billableSeen <= record.paidSessions };
                 });
 
                 individualPatients.push({
-                    patientId: row.patient_id,
-                    patientName: row.patient_name_snapshot,
-                    paymentType: row.payment_type,
-                    month: row.month,
+                    recordId: record.id,
+                    patientId: record.patientId!,
+                    patientName: record.patientNameSnapshot,
+                    status: record.status,
+                    paymentType: record.paymentType!,
+                    month: record.month,
+                    sessionPriceCents: record.sessionPriceCents,
+                    expectedSessions: record.expectedSessions,
+                    absences: record.absences,
+                    paidSessions: record.paidSessions,
+                    previousMonthPaidCents: record.previousMonthPaidCents,
+                    paymentStatus: record.paymentStatus,
+                    notes: record.notes,
+                    receivedAmountCents: record.receivedAmountCents,
                     pendingAmountCents,
                     sessions
                 });
@@ -2832,7 +2839,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.confirmed_at ? new Date(row.confirmed_at) : null,
             row.parent_id ?? null,
             new Date(row.created_at),
-            new Date(row.updated_at)
+            new Date(row.updated_at),
+            row.group_id ?? null
         );
     }
 

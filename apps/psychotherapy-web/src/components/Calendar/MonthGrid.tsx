@@ -5,6 +5,7 @@ interface Props {
   currentDate: Date;
   appointments: Appointment[];
   patients: Patient[];
+  groups: { id: string; name: string }[];
   onDayClick: (date: Date) => void;
 }
 
@@ -16,7 +17,7 @@ const STATUS_COLOR: Record<string, string> = {
   no_show: 'var(--status-danger)',
 };
 
-export default function MonthGrid({ currentDate, appointments, patients, onDayClick }: Props) {
+export default function MonthGrid({ currentDate, appointments, patients, groups, onDayClick }: Props) {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
   
@@ -31,6 +32,9 @@ export default function MonthGrid({ currentDate, appointments, patients, onDayCl
     if (a.notes?.startsWith('[PASTORAL_SUMMARY]:')) {
       const summary = a.notes.replace('[PASTORAL_SUMMARY]:', '').split('\n')[0].trim();
       return summary.split(' ')[0];
+    }
+    if (a.groupId) {
+      return groups.find(g => g.id === a.groupId)?.name ?? 'Grupo';
     }
     const name = patients.find(p => p.id === a.patientId)?.name ?? 'Paciente';
     return name.split(' ')[0];

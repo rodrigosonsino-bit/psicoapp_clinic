@@ -184,4 +184,5 @@ export interface AppointmentRow {
     parent_id: string | null;
     created_at: Date;
     updated_at: Date;
+    group_id: string | null;
 }

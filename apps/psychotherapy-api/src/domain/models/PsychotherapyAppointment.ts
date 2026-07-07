@@ -18,6 +18,7 @@ export class PsychotherapyAppointment {
         public readonly confirmedAt: Date | null,
         public readonly parentId: string | null = null,
         public readonly createdAt: Date = new Date(),
-        public readonly updatedAt: Date = new Date()
+        public readonly updatedAt: Date = new Date(),
+        public readonly groupId: string | null = null
     ) {}
 }

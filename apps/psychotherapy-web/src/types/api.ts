@@ -204,10 +204,20 @@ export interface PendingSessionDetail {
 }
 
 export interface PendingPatientDetail {
+  recordId: string;
   patientId: string;
   patientName: string;
+  status: 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
   paymentType: 'monthly' | 'per_session';
   month: string;
+  sessionPriceCents: number | null;
+  expectedSessions: number;
+  absences: number;
+  paidSessions: number;
+  previousMonthPaidCents: number;
+  paymentStatus: 'paid' | 'pending' | 'partial';
+  notes: string | null;
+  receivedAmountCents: number;
   pendingAmountCents: number;
   sessions: PendingSessionDetail[];
 }
@@ -256,6 +266,8 @@ export interface Appointment {
   parentId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Presente quando o agendamento é de uma sessão de grupo (não de um paciente individual). */
+  groupId: string | null;
 }
 
 export type AvailabilityRecurrenceType = 'weekly' | 'biweekly' | 'once';

@@ -46,6 +46,7 @@ export default function Appointments() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [filterPatientId, setFilterPatientId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -69,6 +70,13 @@ export default function Appointments() {
       // O backend já ordena os inativos por último, então os ativos vêm primeiro.
       setPatients(res.data);
     } catch { /* silently ignore */ }
+  }, []);
+
+  const loadGroups = useCallback(async () => {
+    try {
+      const res = await fetchApi<{ data: { id: string; name: string }[] }>('/api/psychotherapy/groups');
+      setGroups(res.data);
+    } catch { /* silently ignore — agendamentos de grupo mostram um rótulo genérico se isso falhar */ }
   }, []);
 
   const loadAppointments = useCallback(async (pg = page, patientId = filterPatientId, vt = viewType, dt = currentDate) => {
@@ -128,6 +136,7 @@ export default function Appointments() {
   }, [page, filterPatientId, viewType, currentDate, toast]);
 
   useEffect(() => { loadPatients(); }, [loadPatients]);
+  useEffect(() => { loadGroups(); }, [loadGroups]);
   useEffect(() => { loadAppointments(page, filterPatientId, viewType, currentDate); }, [page, filterPatientId, viewType, currentDate, loadAppointments]);
 
   const handleStatusUpdate = async (id: string, status: AppointmentStatus) => {
@@ -220,6 +229,10 @@ export default function Appointments() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const patientName = (id: string) => patients.find(p => p.id === id)?.name ?? id.slice(0, 8);
   const patientPhone = (id: string) => patients.find(p => p.id === id)?.phone ?? null;
+  // Rótulo pra listagem "Todos": mostra o nome do grupo em agendamentos de grupo, em vez de
+  // tentar achar um paciente individual (que não existe nesse caso — mesmo bug do calendário).
+  const appointmentLabel = (a: Appointment) =>
+    a.groupId ? (groups.find(g => g.id === a.groupId)?.name ?? 'Grupo') : patientName(a.patientId);
 
   const copyConfirmLink = (token: string) => {
     const url = `${window.location.origin}/confirm/${token}`;
@@ -410,7 +423,7 @@ export default function Appointments() {
                       <strong>{formatDateTime(a.scheduledAt)}</strong>
                       {a.notes && <div className="text-small" style={{ color: 'var(--text-muted)' }}>{a.notes}</div>}
                     </td>
-                    <td>{patientName(a.patientId)}</td>
+                    <td>{appointmentLabel(a)}</td>
                     <td><Clock size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />{a.durationMinutes} min</td>
                     <td>
                       <select
@@ -550,6 +563,7 @@ export default function Appointments() {
           currentDate={currentDate}
           appointments={appointments}
           patients={patients}
+          groups={groups}
           onSlotClick={handleSlotClick}
           onStatusUpdate={handleStatusUpdate}
           onEdit={a => { setEditAppointment(a); setShowModal(true); }}
