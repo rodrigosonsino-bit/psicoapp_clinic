@@ -81,6 +81,14 @@ export class SavePsychotherapyAppointmentUseCase {
                 } catch (err) {
                     logger.error({ err, appointmentId: appointment.id }, 'Falha ao remover sessões futuras fora do novo padrão de recorrência');
                 }
+
+                if (appointment.recurrence !== 'none' && appointment.recurrenceEndDate) {
+                    try {
+                        await this.generateMissingOccurrences(appointment);
+                    } catch (err) {
+                        logger.error({ err, appointmentId: appointment.id }, 'Falha ao gerar novas sessões futuras da série recorrente');
+                    }
+                }
             }
 
             return appointment;
@@ -160,6 +168,51 @@ export class SavePsychotherapyAppointmentUseCase {
                     '🗑️ Sessão futura removida automaticamente (fora do novo padrão de recorrência)'
                 );
             }
+        }
+    }
+
+    /**
+     * Quando a recorrência de um agendamento existente é alterada (ex.: avulso → semanal,
+     * ou semanal → quinzenal), gera as ocorrências futuras que ainda faltam no novo padrão,
+     * a partir da data do agendamento editado (âncora) até `recurrenceEndDate`. Idempotente:
+     * só cria o que ainda não existe — `pruneStraySiblings` já roda antes e remove o que não
+     * se encaixa mais no novo padrão, então aqui só preenchemos as lacunas restantes.
+     */
+    private async generateMissingOccurrences(anchor: PsychotherapyAppointment): Promise<void> {
+        if (anchor.recurrence === 'none' || !anchor.recurrenceEndDate) return;
+
+        const occurrences = this.calculateOccurrences(anchor.scheduledAt, anchor.recurrenceEndDate, anchor.recurrence);
+        if (occurrences.length > 52) {
+            throw new AppError('Máximo de 52 ocorrências por série recorrente', 400);
+        }
+
+        const rootId = anchor.parentId ?? anchor.id;
+        const series = await this.repository.listSeriesAppointments(anchor.tenantId, rootId);
+        const existingTimes = new Set(
+            series
+                .filter(s => s.id !== anchor.id && (s.status === 'scheduled' || s.status === 'confirmed'))
+                .map(s => s.scheduledAt.getTime())
+        );
+
+        for (let i = 1; i < occurrences.length; i++) {
+            const occurrenceDate = occurrences[i];
+            if (existingTimes.has(occurrenceDate.getTime())) continue;
+
+            await this.repository.saveAppointment({
+                tenantId: anchor.tenantId,
+                patientId: anchor.patientId,
+                scheduledAt: occurrenceDate,
+                durationMinutes: anchor.durationMinutes,
+                status: 'scheduled',
+                recurrence: 'none',
+                recurrenceEndDate: null,
+                notes: anchor.notes,
+                parentId: rootId
+            });
+            logger.info(
+                { tenantId: anchor.tenantId, anchorId: anchor.id, rootId, occurrenceDate },
+                '➕ Sessão futura criada automaticamente (novo padrão de recorrência aplicado na edição)'
+            );
         }
     }
 
