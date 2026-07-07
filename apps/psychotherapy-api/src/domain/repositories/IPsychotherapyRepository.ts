@@ -207,10 +207,20 @@ export interface PendingSessionDetail {
 }
 
 export interface PendingPatientDetail {
+    recordId: string; // id de psychotherapy_monthly_records — usado pra registrar pagamento
     patientId: string;
     patientName: string;
+    status: 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
     paymentType: 'monthly' | 'per_session';
     month: string; // YYYY-MM do registro mensal a que essa pendência se refere
+    sessionPriceCents: number | null;
+    expectedSessions: number;
+    absences: number;
+    paidSessions: number;
+    previousMonthPaidCents: number;
+    paymentStatus: 'paid' | 'pending' | 'partial';
+    notes: string | null;
+    receivedAmountCents: number; // quanto já foi registrado como pago neste registro
     pendingAmountCents: number;
     sessions: PendingSessionDetail[];
 }
