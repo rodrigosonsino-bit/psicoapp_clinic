@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw, MessageCircle } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { Appointment, AppointmentStatus, Patient, PaginatedResponse } from '../types/api';
 import { useToast } from '../context/ToastContext';
@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonTable } from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
 import { CalendarView } from '../components/Calendar';
+import { buildAppointmentConfirmMessage, buildWhatsAppSendUrl } from '../utils/whatsapp';
 import './Appointments.css';
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
@@ -218,10 +219,19 @@ export default function Appointments() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const patientName = (id: string) => patients.find(p => p.id === id)?.name ?? id.slice(0, 8);
+  const patientPhone = (id: string) => patients.find(p => p.id === id)?.phone ?? null;
 
   const copyConfirmLink = (token: string) => {
     const url = `${window.location.origin}/confirm/${token}`;
     navigator.clipboard.writeText(url).then(() => toast.success('Link copiado! Envie para o paciente.'));
+  };
+
+  const sendConfirmWhatsApp = (a: Appointment) => {
+    const phone = patientPhone(a.patientId);
+    if (!phone || !a.confirmToken) return;
+    const confirmUrl = `${window.location.origin}/confirm/${a.confirmToken}`;
+    const message = buildAppointmentConfirmMessage(patientName(a.patientId), a.scheduledAt, confirmUrl);
+    window.open(buildWhatsAppSendUrl(phone, message), '_blank', 'noopener,noreferrer');
   };
 
   const handleSyncNow = async () => {
@@ -473,6 +483,15 @@ export default function Appointments() {
                                 onClick={() => copyConfirmLink(a.confirmToken!)}
                               >
                                 <Link2 size={14} />
+                              </button>
+                            )}
+                            {a.confirmToken && patientPhone(a.patientId) && (
+                              <button
+                                className="btn-icon"
+                                title="Enviar confirmação por WhatsApp"
+                                onClick={() => sendConfirmWhatsApp(a)}
+                              >
+                                <MessageCircle size={14} style={{ color: '#25D366' }} />
                               </button>
                             )}
                           </>

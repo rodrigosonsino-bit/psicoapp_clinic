@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Check, Edit2, Trash2, X, CheckCircle2, UserX, XCircle, Ban } from 'lucide-react';
+import { Check, Edit2, Trash2, X, CheckCircle2, UserX, XCircle, Ban, MessageCircle } from 'lucide-react';
 import type { Appointment, AppointmentStatus } from '../../types/api';
 import type { PositionedAppointment } from './calendarUtils';
 import { topPx, heightPx } from './calendarUtils';
+import { buildAppointmentConfirmMessage, buildWhatsAppSendUrl } from '../../utils/whatsapp';
 
 interface Props {
   appointment: PositionedAppointment;
   patientName: string;
+  patientPhone?: string | null;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
@@ -20,7 +22,7 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   no_show: 'var(--status-danger)',
 };
 
-export default function AppointmentChip({ appointment, patientName, onStatusUpdate, onEdit, onDelete }: Props) {
+export default function AppointmentChip({ appointment, patientName, patientPhone, onStatusUpdate, onEdit, onDelete }: Props) {
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +59,13 @@ export default function AppointmentChip({ appointment, patientName, onStatusUpda
     e.stopPropagation();
     setShowPopover(false);
     action();
+  };
+
+  const sendConfirmWhatsApp = () => {
+    if (!patientPhone || !appointment.confirmToken) return;
+    const confirmUrl = `${window.location.origin}/confirm/${appointment.confirmToken}`;
+    const message = buildAppointmentConfirmMessage(patientName, appointment.scheduledAt, confirmUrl);
+    window.open(buildWhatsAppSendUrl(patientPhone, message), '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -154,6 +163,11 @@ export default function AppointmentChip({ appointment, patientName, onStatusUpda
               {appointment.status !== 'attended' && appointment.status !== 'canceled' && appointment.status !== 'no_show' && (
                 <button className="popover-btn danger" onClick={(e) => handleAction(e, () => onStatusUpdate(appointment.id, 'canceled'))}>
                   <X size={14} /> Cancelar
+                </button>
+              )}
+              {!isPastoral && patientPhone && appointment.confirmToken && (
+                <button className="popover-btn" onClick={(e) => handleAction(e, sendConfirmWhatsApp)}>
+                  <MessageCircle size={14} style={{ color: '#25D366' }} /> Enviar confirmação por WhatsApp
                 </button>
               )}
             </>

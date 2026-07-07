@@ -48,6 +48,9 @@ export default function WeekGrid({ days, appointments, patients, onSlotClick, on
     return patients.find(p => p.id === appt.patientId)?.name ?? appt.patientId.slice(0, 8);
   };
 
+  const getPatientPhone = (appt: Appointment) =>
+    patients.find(p => p.id === appt.patientId)?.phone ?? null;
+
   return (
     <div className="calendar-grid-scroll" ref={gridRef}>
       <div className="calendar-header-row">
@@ -97,6 +100,7 @@ export default function WeekGrid({ days, appointments, patients, onSlotClick, on
                   key={appt.id}
                   appointment={appt}
                   patientName={getPatientName(appt)}
+                  patientPhone={getPatientPhone(appt)}
                   onStatusUpdate={onStatusUpdate}
                   onEdit={onEdit}
                   onDelete={onDelete}
