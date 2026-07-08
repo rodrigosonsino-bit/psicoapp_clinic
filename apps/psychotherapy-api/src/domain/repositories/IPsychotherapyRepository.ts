@@ -340,6 +340,8 @@ export interface FinancialPayment {
     patientId: string;
     monthlyRecordId: string | null;
     amountCents: number;
+    netAmountCents: number;
+    processingFeeCents: number;
     currency: string;
     paidAt: Date;
     method: 'pix' | 'credit_card' | 'cash' | 'bank_transfer' | 'other';
@@ -360,6 +362,12 @@ export interface RegisterPaymentDTO {
     patientId: string;
     monthlyRecordId?: string | null;
     amountCents: number;
+    // Se omitidos, assume sem taxa (net = amount, fee = 0) — mesma convenção do backfill
+    // da migration 080. financial_payments.net_amount_cents/processing_fee_cents são
+    // NOT NULL desde essa migration; omitir causava erro de constraint (achado em 2026-07-08,
+    // método nunca tinha sido exercitado em produção — zero chamadores até então).
+    netAmountCents?: number;
+    processingFeeCents?: number;
     paidAt: Date;
     method: 'pix' | 'credit_card' | 'cash' | 'bank_transfer' | 'other';
     source: 'manual' | 'pix';

@@ -2884,16 +2884,28 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             }
 
             // 3. Inserir pagamento
+            // net_amount_cents/processing_fee_cents são NOT NULL desde a migration 080 (chk_fin_math
+            // exige net+fee=amount) — sem taxa informada, assume net=amount/fee=0 (mesma convenção
+            // do backfill daquela migration). Validado aqui com erro claro em vez de deixar a
+            // constraint do banco estourar sem contexto.
+            const netAmountCents = data.netAmountCents ?? data.amountCents;
+            const processingFeeCents = data.processingFeeCents ?? 0;
+            if (netAmountCents + processingFeeCents !== data.amountCents) {
+                throw new AppError('netAmountCents + processingFeeCents deve ser igual a amountCents', 400);
+            }
+
             const id = data.id || crypto.randomUUID();
             const payRes = await client.query(`
                 INSERT INTO financial_payments (
                     id, tenant_id, patient_id, monthly_record_id, amount_cents,
+                    net_amount_cents, processing_fee_cents,
                     currency, paid_at, method, source, status, provider_txid,
                     idempotency_key, created_by
-                ) VALUES ($1, $2, $3, $4, $5, 'BRL', $6, $7, $8, 'confirmed', $9, $10, $11)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'BRL', $8, $9, $10, 'confirmed', $11, $12, $13)
                 RETURNING *;
             `, [
                 id, validTenantId, data.patientId, monthlyRecordId, data.amountCents,
+                netAmountCents, processingFeeCents,
                 data.paidAt, data.method, data.source, data.providerTxid || null,
                 data.idempotencyKey, data.createdBy
             ]);
@@ -2972,13 +2984,16 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             }
 
             // 5. Registrar no log de auditoria
+            // Achado em 2026-07-08: este INSERT usava target_type/target_id/created_by, colunas
+            // que não existem em audit_logs (schema real, migration 043: aggregate_type/
+            // aggregate_id/operator_id/justification, esta última NOT NULL). Método nunca tinha
+            // sido exercitado em produção (zero chamadores) — por isso nunca deu erro até agora.
             await client.query(`
-                INSERT INTO audit_logs (id, tenant_id, action, target_type, target_id, payload, created_by)
-                VALUES (gen_random_uuid(), $1, 'void_payment', 'financial_payment', $2, $3, $4);
+                INSERT INTO audit_logs (id, tenant_id, aggregate_type, aggregate_id, action, operator_id, justification, payload)
+                VALUES (gen_random_uuid(), $1, 'financial_payment', $2, 'void_payment', $3, $4, $5);
             `, [
-                validTenantId, paymentId,
-                JSON.stringify({ reason, oldStatus: oldPay.status, amountCents: oldPay.amount_cents }),
-                voidedBy
+                validTenantId, paymentId, voidedBy, reason,
+                JSON.stringify({ reason, oldStatus: oldPay.status, amountCents: oldPay.amount_cents })
             ]);
 
             await client.query('COMMIT');
@@ -3016,6 +3031,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             patientId: row.patient_id,
             monthlyRecordId: row.monthly_record_id,
             amountCents: row.amount_cents,
+            netAmountCents: row.net_amount_cents,
+            processingFeeCents: row.processing_fee_cents,
             currency: row.currency,
             paidAt: new Date(row.paid_at),
             method: row.method,
