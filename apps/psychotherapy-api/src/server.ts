@@ -204,7 +204,16 @@ if (require.main === module) {
                 // Cloud API presente (mesmo que o provider ativo ainda seja 'baileys'), para não
                 // perder eventos que a Meta já possa estar enviando durante a configuração inicial.
                 if (cloudClientConfig) {
-                    const inboxWorker = new WhatsappCloudInboxWorker(whatsappCloudRepository);
+                    // Encaminhamento de mensagens recebidas para o número pessoal — opcional
+                    // (WHATSAPP_NOTIFY_PHONE ausente = recurso desligado, sem afetar lembretes).
+                    const notifyPhoneDigits = process.env.WHATSAPP_NOTIFY_PHONE?.replace(/\D/g, '');
+                    const notifyConfig = notifyPhoneDigits
+                        ? { client: new WhatsappCloudClient(cloudClientConfig), notifyPhoneDigits }
+                        : undefined;
+                    if (!notifyConfig) {
+                        logger.warn('⚠️ WHATSAPP_NOTIFY_PHONE não configurado — encaminhamento de respostas de pacientes para número pessoal desativado.');
+                    }
+                    const inboxWorker = new WhatsappCloudInboxWorker(whatsappCloudRepository, notifyConfig);
                     inboxWorker.start();
                 }
 

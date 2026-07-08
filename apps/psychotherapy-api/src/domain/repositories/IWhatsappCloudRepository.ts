@@ -29,6 +29,16 @@ export interface WebhookStatusEvent {
     rawPayload: unknown;
 }
 
+/** Mensagem inbound normalizada — deliberadamente sem o payload bruto da Meta (minimização de
+ * dado sensível): só o necessário para montar a notificação de encaminhamento. */
+export interface WebhookMessageEvent {
+    providerMessageId: string;
+    fromPhoneDigits: string;
+    contactName: string | null;
+    textPreview: string;
+    providerTimestamp: Date;
+}
+
 export interface PendingWebhookEvent {
     id: string;
     eventType: 'status' | 'message';
@@ -85,6 +95,13 @@ export interface IWhatsappCloudRepository {
      * (evento duplicado, at-least-once da Meta).
      */
     insertWebhookStatusEvent(event: WebhookStatusEvent): Promise<boolean>;
+
+    /**
+     * Insere uma mensagem inbound normalizada (só os campos necessários para a notificação —
+     * nunca o payload bruto da Meta). Deduplica por provider_message_id (migration 087) —
+     * retorna false se já existia (reentrega at-least-once da Meta).
+     */
+    insertWebhookMessageEvent(event: WebhookMessageEvent): Promise<boolean>;
 
     /** Reivindica (claim) eventos pendentes de processamento para o worker durável, com lease
      * (claimed_until) para impedir que uma execução sobreposta do cron reprocesse a mesma linha. */

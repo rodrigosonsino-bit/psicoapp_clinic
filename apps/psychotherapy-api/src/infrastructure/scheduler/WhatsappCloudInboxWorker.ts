@@ -1,6 +1,14 @@
 import * as cron from 'node-cron';
 import { IWhatsappCloudRepository, PendingWebhookEvent, CloudDeliveryStatus } from '../../domain/repositories/IWhatsappCloudRepository';
+import { WhatsappCloudClient } from '../whatsappCloud/WhatsappCloudClient';
 import { logger } from '../logger';
+
+/** Config do encaminhamento de mensagens recebidas para o número pessoal — deliberadamente sem
+ * nenhuma automação/resposta ao paciente, só uma notificação de texto via template aprovado. */
+export interface InboundNotifyConfig {
+    client: WhatsappCloudClient;
+    notifyPhoneDigits: string;
+}
 
 const BATCH_SIZE = 25;
 const LEASE_SECONDS = 300; // 5 minutos — bem acima do tempo esperado de processamento de um lote
@@ -26,7 +34,10 @@ function nextRetryDelayMs(attempts: number): number {
 export class WhatsappCloudInboxWorker {
     private task: ReturnType<typeof cron.schedule> | null = null;
 
-    constructor(private readonly repository: IWhatsappCloudRepository) {}
+    constructor(
+        private readonly repository: IWhatsappCloudRepository,
+        private readonly notifyConfig?: InboundNotifyConfig
+    ) {}
 
     /** Roda a cada minuto — baixo volume esperado no piloto, não precisa de mais frequência. */
     start(): void {
@@ -61,9 +72,9 @@ export class WhatsappCloudInboxWorker {
             if (event.eventType === 'status') {
                 const handled = await this.processStatusEvent(event);
                 if (!handled) return; // já reagendado dentro de processStatusEvent
+            } else if (event.eventType === 'message') {
+                await this.processMessageEvent(event);
             }
-            // event_type='message' (inbound) fica fora de escopo do piloto — marcado como
-            // processado sem ação, apenas para não ficar reprocessando indefinidamente.
             await this.repository.markWebhookEventProcessed(event.id);
         } catch (err) {
             const deadLetter = event.processingAttempts >= MAX_PROCESSING_ATTEMPTS;
@@ -106,5 +117,38 @@ export class WhatsappCloudInboxWorker {
         }
 
         return true;
+    }
+
+    /**
+     * Encaminha a mensagem recebida como notificação de texto para o número pessoal — SEM
+     * nenhuma automação ou resposta ao paciente (escopo deliberadamente mínimo, ver plano de
+     * migração). Se o encaminhamento não estiver configurado ou o template não estiver aprovado,
+     * apenas loga e segue (fail-safe: nunca deve derrubar o processamento da inbox por causa de
+     * um recurso opcional de notificação).
+     */
+    private async processMessageEvent(event: PendingWebhookEvent): Promise<void> {
+        if (!this.notifyConfig) return;
+
+        const payload = event.rawPayload as { fromPhoneDigits?: string; contactName?: string | null; textPreview?: string } | null;
+        if (!payload?.fromPhoneDigits || !payload.textPreview) return;
+
+        const template = await this.repository.getActiveTemplate('patient_reply_notify', 'pt_BR');
+        if (!template || template.metaStatus !== 'APPROVED') {
+            logger.warn('WhatsappCloudInboxWorker: template de notificação de resposta ainda não aprovado/ativo — encaminhamento pulado.');
+            return;
+        }
+
+        const displayName = payload.contactName || payload.fromPhoneDigits;
+        const outcome = await this.notifyConfig.client.sendTemplateMessage(
+            this.notifyConfig.notifyPhoneDigits,
+            template.metaTemplateName,
+            template.languageCode,
+            [{ type: 'body', values: [displayName, payload.textPreview] }]
+        );
+
+        if (outcome.kind !== 'accepted') {
+            logger.warn({ outcome: outcome.kind, errorMessage: outcome.errorMessage },
+                'WhatsappCloudInboxWorker: falha ao encaminhar notificação de resposta para o número pessoal.');
+        }
     }
 }

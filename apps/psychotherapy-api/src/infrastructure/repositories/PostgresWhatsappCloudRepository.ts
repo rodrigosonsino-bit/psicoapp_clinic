@@ -4,6 +4,7 @@ import {
     WhatsappCloudTemplateBinding,
     FinalizeAttemptInput,
     WebhookStatusEvent,
+    WebhookMessageEvent,
     PendingWebhookEvent,
     CloudDeliveryStatus,
     AdvanceDeliveryOutcome,
@@ -148,6 +149,26 @@ export class PostgresWhatsappCloudRepository implements IWhatsappCloudRepository
              DO NOTHING
              RETURNING id;`,
             [event.providerMessageId, event.statusValue, event.providerTimestamp, JSON.stringify(event.rawPayload)]
+        );
+        return (result.rowCount ?? 0) > 0;
+    }
+
+    async insertWebhookMessageEvent(event: WebhookMessageEvent): Promise<boolean> {
+        // raw_payload guarda só os campos normalizados (nunca o envelope bruto da Meta) —
+        // minimização de dado sensível de paciente, mantendo a coluna JSONB NOT NULL existente.
+        const normalized = {
+            fromPhoneDigits: event.fromPhoneDigits,
+            contactName: event.contactName,
+            textPreview: event.textPreview,
+        };
+        const result = await this.dbPool.query(
+            `INSERT INTO whatsapp_cloud_webhook_events
+                (event_type, provider_message_id, provider_timestamp, raw_payload)
+             VALUES ('message', $1, $2, $3::jsonb)
+             ON CONFLICT (provider_message_id) WHERE event_type = 'message'
+                 DO NOTHING
+             RETURNING id;`,
+            [event.providerMessageId, event.providerTimestamp, JSON.stringify(normalized)]
         );
         return (result.rowCount ?? 0) > 0;
     }

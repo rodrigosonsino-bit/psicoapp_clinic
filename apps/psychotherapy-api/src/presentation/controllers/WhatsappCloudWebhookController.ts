@@ -14,10 +14,24 @@ interface MetaStatusItem {
     recipient_id?: string;
 }
 
+interface MetaContact {
+    profile?: { name?: string };
+    wa_id?: string;
+}
+
+interface MetaMessageItem {
+    id?: string;
+    from?: string;
+    timestamp?: string;
+    type?: string;
+    text?: { body?: string };
+}
+
 interface MetaChangeValue {
     metadata?: { phone_number_id?: string };
     statuses?: MetaStatusItem[];
-    messages?: unknown[];
+    messages?: MetaMessageItem[];
+    contacts?: MetaContact[];
 }
 
 /**
@@ -90,16 +104,23 @@ export class WhatsappCloudWebhookController {
                 for (const change of entry?.changes ?? []) {
                     const value: MetaChangeValue = change?.value ?? {};
 
-                    if (configuredPhoneNumberId && value.metadata?.phone_number_id && value.metadata.phone_number_id !== configuredPhoneNumberId) {
-                        // Evento de um número diferente do configurado — ignora com segurança.
+                    // Fail-closed: rejeita (não processa) qualquer evento sem phone_number_id ou
+                    // com valor divergente do configurado, em vez de processar por omissão.
+                    if (!configuredPhoneNumberId || value.metadata?.phone_number_id !== configuredPhoneNumberId) {
+                        logger.warn('[WhatsappCloudWebhook] Evento sem phone_number_id correspondente — rejeitado (fail-closed).');
                         continue;
                     }
 
                     for (const status of value.statuses ?? []) {
                         await this.persistStatusEvent(status);
                     }
-                    // Mensagens recebidas (inbound) ficam fora de escopo deste piloto — não são
-                    // processadas nem persistidas por ora (evita reter dado sensível sem uso).
+
+                    // Encaminhamento de mensagens inbound: SOMENTE notificação para o número
+                    // pessoal (sem automação/resposta ao paciente) — ver WhatsappCloudInboxWorker.
+                    const contactsByWaId = new Map((value.contacts ?? []).map(c => [c.wa_id, c.profile?.name ?? null]));
+                    for (const message of value.messages ?? []) {
+                        await this.persistMessageEvent(message, contactsByWaId);
+                    }
                 }
             }
         } catch (err) {
@@ -114,6 +135,29 @@ export class WhatsappCloudWebhookController {
 
         res.sendStatus(200);
     };
+
+    private async persistMessageEvent(message: MetaMessageItem, contactsByWaId: Map<string | undefined, string | null>): Promise<void> {
+        if (!message?.id || !message.from || !message.timestamp) {
+            return; // evento incompleto — ignorado com segurança
+        }
+
+        const providerTimestamp = new Date(Number(message.timestamp) * 1000);
+        if (Number.isNaN(providerTimestamp.getTime())) return;
+
+        // Preview curto e só de texto — mídia/áudio/outros tipos viram um marcador genérico em
+        // vez de tentar baixar/reter o conteúdo (fora de escopo desta notificação simples).
+        const textPreview = message.type === 'text' && message.text?.body
+            ? message.text.body.slice(0, 300)
+            : `[mensagem do tipo '${message.type ?? 'desconhecido'}']`;
+
+        await this.repository.insertWebhookMessageEvent({
+            providerMessageId: message.id,
+            fromPhoneDigits: message.from.replace(/\D/g, ''),
+            contactName: contactsByWaId.get(message.from) ?? null,
+            textPreview,
+            providerTimestamp,
+        });
+    }
 
     private async persistStatusEvent(status: MetaStatusItem): Promise<void> {
         if (!status?.id || !status.status || !KNOWN_STATUS_VALUES.has(status.status) || !status.timestamp) {
