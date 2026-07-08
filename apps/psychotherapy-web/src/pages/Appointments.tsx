@@ -463,7 +463,9 @@ export default function Appointments() {
                         {STATUS_LABEL[a.status]}
                       </span>
                       {coveredAppointmentIds.has(a.id) && (
-                        <CheckCircle2 size={13} style={{ color: '#ffffff', marginLeft: 4, verticalAlign: 'middle' }} title="Sessão paga" />
+                        <span title="Sessão paga" style={{ display: 'inline-flex', verticalAlign: 'middle', marginLeft: 4 }}>
+                          <CheckCircle2 size={13} style={{ color: '#ffffff' }} />
+                        </span>
                       )}
                     </td>
                     <td>
