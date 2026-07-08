@@ -20,10 +20,10 @@ const STATUS_LABEL: Record<AppointmentStatus, string> = {
 
 const STATUS_BADGE: Record<AppointmentStatus, string> = {
   scheduled: 'info',
-  confirmed: 'success',
+  confirmed: 'confirmed',
   attended: 'success',
   canceled: 'danger',
-  no_show: 'danger',
+  no_show: 'warning',
 };
 
 function formatDateTime(iso: string) {
