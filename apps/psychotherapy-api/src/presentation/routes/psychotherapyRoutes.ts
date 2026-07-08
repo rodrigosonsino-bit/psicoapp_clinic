@@ -669,9 +669,27 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/reminders/trigger', authMiddleware, asyncHandler(async (req, res) => {
         const { ReminderScheduler } = require('../../infrastructure/scheduler/ReminderScheduler');
         const { WhatsappSessionManager } = require('@antigravity/whatsapp-core');
+        const { WhatsappCloudClient } = require('../../infrastructure/whatsappCloud/WhatsappCloudClient');
+        const { WhatsappCloudSender } = require('../../infrastructure/whatsappCloud/WhatsappCloudSender');
+        const { PostgresWhatsappCloudRepository } = require('../../infrastructure/repositories/PostgresWhatsappCloudRepository');
+        const { loadWhatsappCloudClientConfig } = require('../../infrastructure/whatsappCloud/WhatsappCloudConfig');
+        const { Pool } = require('pg');
+
         const repository = container.resolve<any>('IPsychotherapyRepository');
         const sessionManager = container.resolve<InstanceType<typeof WhatsappSessionManager>>('WhatsappSessionManager');
-        const scheduler = new ReminderScheduler(repository, sessionManager);
+
+        // Mesma lógica de montagem do server.ts: sem isso, este endpoint de teste nunca exercita
+        // o caminho real do WhatsApp Cloud API (ficava sempre em fail-closed "não configurado").
+        let whatsappCloudSender: any;
+        const cloudClientConfig = loadWhatsappCloudClientConfig();
+        if (cloudClientConfig) {
+            const dbPool = container.resolve<InstanceType<typeof Pool>>(Pool);
+            const whatsappCloudRepository = new PostgresWhatsappCloudRepository(dbPool);
+            const cloudClient = new WhatsappCloudClient(cloudClientConfig);
+            whatsappCloudSender = new WhatsappCloudSender(cloudClient, whatsappCloudRepository);
+        }
+
+        const scheduler = new ReminderScheduler(repository, sessionManager, whatsappCloudSender);
         const result = await scheduler.processReminders();
         res.json({ ok: true, result });
     }));
