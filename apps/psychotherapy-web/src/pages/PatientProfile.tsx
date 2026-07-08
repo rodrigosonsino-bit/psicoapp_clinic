@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Save, Plus, Edit2, Trash2, CheckCircle2, Clock,
-  Tag, Link2, ChevronDown, ChevronUp, Loader2,
+  Tag, Link2, ChevronDown, ChevronUp, Loader2, MessageCircle,
 } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type {
   Patient, ClinicalNote, PaginatedResponse,
   Anamnesis, TreatmentPlan, TreatmentPlanStatus, BookingLinkResult, ReminderChannel,
+  WhatsappMessageHistoryEntry,
 } from '../types/api';
 import { MODALIDADE_OPTIONS, getModalidadeValue } from '../constants/modalidade';
 import type { ModalidadeValue } from '../constants/modalidade';
@@ -17,7 +18,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-type Tab = 'dados' | 'prontuario' | 'historico' | 'grupos';
+type Tab = 'dados' | 'prontuario' | 'historico' | 'whatsapp' | 'grupos';
 
 const STATUS_PLAN_LABEL: Record<TreatmentPlanStatus, string> = {
   active: 'Ativo', completed: 'Concluído', suspended: 'Suspenso',
@@ -94,7 +95,7 @@ export default function PatientProfile() {
 
       {/* Abas */}
       <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '2px solid var(--border-color)', marginBottom: '1.5rem' }}>
-        {(['dados', 'prontuario', 'historico', 'grupos'] as Tab[]).map(tab => (
+        {(['dados', 'prontuario', 'historico', 'whatsapp', 'grupos'] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -107,7 +108,7 @@ export default function PatientProfile() {
               fontSize: '0.9375rem',
             }}
           >
-            {tab === 'dados' ? 'Dados Cadastrais' : tab === 'prontuario' ? 'Prontuário' : tab === 'historico' ? 'Histórico' : 'Grupos'}
+            {tab === 'dados' ? 'Dados Cadastrais' : tab === 'prontuario' ? 'Prontuário' : tab === 'historico' ? 'Histórico' : tab === 'whatsapp' ? 'WhatsApp' : 'Grupos'}
           </button>
         ))}
       </div>
@@ -121,6 +122,9 @@ export default function PatientProfile() {
       )}
       {activeTab === 'historico' && (
         <HistoricoTab patientId={patient.id} patientName={patient.name} />
+      )}
+      {activeTab === 'whatsapp' && (
+        <WhatsappTab patientId={patient.id} patientName={patient.name} />
       )}
       {activeTab === 'grupos' && (
         <GruposTab patientId={patient.id} />
@@ -779,6 +783,69 @@ function HistoricoTab({ patientId, patientName }: { patientId: string; patientNa
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete({ open: false, id: null })}
       />
+    </div>
+  );
+}
+
+// ── Aba: Conversa WhatsApp (só visualização, sem automação) ──────────────────
+
+function WhatsappTab({ patientId, patientName }: { patientId: string; patientName: string }) {
+  const toast = useToast();
+  const [messages, setMessages] = useState<WhatsappMessageHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetchApi<PaginatedResponse<WhatsappMessageHistoryEntry>>(
+          `/api/psychotherapy/patients/${patientId}/whatsapp-messages?limit=100`
+        );
+        setMessages(res.data);
+      } catch {
+        toast.error('Erro ao carregar conversa do WhatsApp.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [patientId, toast]);
+
+  const patientNameShort = patientName.split(' ')[0];
+
+  if (loading) return <SkeletonTable rows={4} cols={1} />;
+
+  if (messages.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+        <MessageCircle size={28} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
+        <div>Nenhuma mensagem registrada com {patientNameShort} ainda.</div>
+      </div>
+    );
+  }
+
+  // Mais recente primeiro na API; exibida cronologicamente (mais antiga em cima) como um chat.
+  const chronological = [...messages].reverse();
+
+  return (
+    <div style={{ maxWidth: '640px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      <p className="text-small" style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+        Histórico de mensagens enviadas e recebidas via WhatsApp. Só visualização — nenhuma resposta é enviada automaticamente a partir daqui.
+      </p>
+      {chronological.map(msg => (
+        <div key={msg.id} style={{ display: 'flex', justifyContent: msg.direction === 'outbound' ? 'flex-end' : 'flex-start' }}>
+          <div style={{
+            maxWidth: '75%',
+            padding: '0.6rem 0.9rem',
+            borderRadius: 'var(--radius-md)',
+            background: msg.direction === 'outbound' ? 'var(--brand-primary)18' : 'var(--bg-panel)',
+            border: '1px solid var(--border-color)',
+          }}>
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.body}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'right' }}>
+              {msg.direction === 'outbound' ? 'Enviada' : 'Recebida'} · {new Date(msg.occurredAt).toLocaleString('pt-BR')}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

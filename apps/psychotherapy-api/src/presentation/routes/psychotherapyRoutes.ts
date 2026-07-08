@@ -275,6 +275,7 @@ export function createPsychotherapyRoutes(): Router {
     // Patients & Months
     router.get('/psychotherapy/patients', validateQuery(listPatientsQuerySchema), asyncHandler((req, res) => controller.listPatients(req, res)));
     router.post('/psychotherapy/patients', validateBody(patientSchema), asyncHandler((req, res) => controller.savePatient(req, res)));
+    router.get('/psychotherapy/patients/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => controller.getPatient(req, res)));
     router.patch('/psychotherapy/patients/:id/individual-modality', validateParams(uuidParamSchema), validateBody(changePatientModalitySchema), asyncHandler((req, res) => controller.changeModality(req, res)));
     router.delete('/psychotherapy/patients/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => controller.deletePatient(req, res)));
     router.get('/psychotherapy/months/:month', validateParams(monthParamSchema), asyncHandler((req, res) => controller.getMonth(req, res)));

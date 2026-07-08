@@ -39,6 +39,16 @@ export interface WebhookMessageEvent {
     providerTimestamp: Date;
 }
 
+/** Entrada do histórico de conversa exibido na ficha do paciente — só visualização, sem
+ * automação nenhuma em cima disso. */
+export interface WhatsappMessageHistoryEntry {
+    id: string;
+    direction: 'inbound' | 'outbound';
+    body: string;
+    messageType: string;
+    occurredAt: Date;
+}
+
 export interface PendingWebhookEvent {
     id: string;
     eventType: 'status' | 'message';
@@ -102,6 +112,41 @@ export interface IWhatsappCloudRepository {
      * retorna false se já existia (reentrega at-least-once da Meta).
      */
     insertWebhookMessageEvent(event: WebhookMessageEvent): Promise<boolean>;
+
+    /**
+     * Registra uma mensagem enviada (lembrete) no histórico de conversa exibido na ficha do
+     * paciente. Deduplica por provider_message_id (UNIQUE, migration 088) — idempotente diante de
+     * reprocessamento do mesmo wamid.
+     */
+    insertOutboundMessage(input: {
+        tenantId: string;
+        patientId: string;
+        providerMessageId: string;
+        body: string;
+        occurredAt: Date;
+    }): Promise<void>;
+
+    /**
+     * Casa o telefone remetente com um paciente do tenant (últimos 8 dígitos — mesma lógica de
+     * PaymentReceiptHandler.ts) e, se encontrar, registra a mensagem recebida no histórico.
+     * Não faz nada (retorna null) se não achar paciente correspondente — mensagens de remetentes
+     * desconhecidos nunca entram no histórico de nenhum paciente.
+     */
+    insertInboundMessageIfPatientMatch(input: {
+        tenantId: string;
+        fromPhoneDigits: string;
+        providerMessageId: string;
+        body: string;
+        occurredAt: Date;
+    }): Promise<{ patientId: string } | null>;
+
+    /** Lista paginada do histórico de conversa de um paciente, mais recente primeiro. */
+    listMessagesForPatient(
+        tenantId: string,
+        patientId: string,
+        page: number,
+        limit: number
+    ): Promise<{ data: WhatsappMessageHistoryEntry[]; total: number }>;
 
     /** Reivindica (claim) eventos pendentes de processamento para o worker durável, com lease
      * (claimed_until) para impedir que uma execução sobreposta do cron reprocesse a mesma linha. */

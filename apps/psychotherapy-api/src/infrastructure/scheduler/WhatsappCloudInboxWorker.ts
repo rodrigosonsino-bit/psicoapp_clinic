@@ -8,6 +8,9 @@ import { logger } from '../logger';
 export interface InboundNotifyConfig {
     client: WhatsappCloudClient;
     notifyPhoneDigits: string;
+    /** Tenant único servido por este piloto — necessário para escopar a correspondência de
+     * telefone com paciente (nunca buscar entre tenants). */
+    tenantId: string;
 }
 
 const BATCH_SIZE = 25;
@@ -131,6 +134,23 @@ export class WhatsappCloudInboxWorker {
 
         const payload = event.rawPayload as { fromPhoneDigits?: string; contactName?: string | null; textPreview?: string } | null;
         if (!payload?.fromPhoneDigits || !payload.textPreview) return;
+
+        // Histórico de conversa exibido na ficha do paciente — só visualização, sem automação.
+        // Independente do resultado (casou ou não com paciente), a notificação abaixo continua
+        // normalmente para o número pessoal.
+        if (event.providerMessageId) {
+            try {
+                await this.repository.insertInboundMessageIfPatientMatch({
+                    tenantId: this.notifyConfig.tenantId,
+                    fromPhoneDigits: payload.fromPhoneDigits,
+                    providerMessageId: event.providerMessageId,
+                    body: payload.textPreview,
+                    occurredAt: event.providerTimestamp ?? new Date(),
+                });
+            } catch (err) {
+                logger.warn({ err }, 'WhatsappCloudInboxWorker: falha ao registrar histórico de conversa do paciente (não afeta a notificação).');
+            }
+        }
 
         const template = await this.repository.getActiveTemplate('patient_reply_notify', 'pt_BR');
         if (!template || template.metaStatus !== 'APPROVED') {

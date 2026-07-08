@@ -5,6 +5,7 @@ import {
     FinalizeAttemptInput,
     WebhookStatusEvent,
     WebhookMessageEvent,
+    WhatsappMessageHistoryEntry,
     PendingWebhookEvent,
     CloudDeliveryStatus,
     AdvanceDeliveryOutcome,
@@ -171,6 +172,79 @@ export class PostgresWhatsappCloudRepository implements IWhatsappCloudRepository
             [event.providerMessageId, event.providerTimestamp, JSON.stringify(normalized)]
         );
         return (result.rowCount ?? 0) > 0;
+    }
+
+    async insertOutboundMessage(input: {
+        tenantId: string;
+        patientId: string;
+        providerMessageId: string;
+        body: string;
+        occurredAt: Date;
+    }): Promise<void> {
+        await this.dbPool.query(
+            `INSERT INTO psychotherapy_whatsapp_messages
+                (tenant_id, patient_id, direction, provider_message_id, body, occurred_at)
+             VALUES ($1, $2, 'outbound', $3, $4, $5)
+             ON CONFLICT (provider_message_id) DO NOTHING;`,
+            [input.tenantId, input.patientId, input.providerMessageId, input.body, input.occurredAt]
+        );
+    }
+
+    async insertInboundMessageIfPatientMatch(input: {
+        tenantId: string;
+        fromPhoneDigits: string;
+        providerMessageId: string;
+        body: string;
+        occurredAt: Date;
+    }): Promise<{ patientId: string } | null> {
+        // Mesma lógica de correspondência de PaymentReceiptHandler.ts: últimos 8 dígitos, cobrindo
+        // variações de DDI/DDD entre o que está salvo no cadastro e o JID recebido da Meta.
+        const last8 = input.fromPhoneDigits.slice(-8);
+        const patientResult = await this.dbPool.query(
+            `SELECT id FROM psychotherapy_patients
+             WHERE tenant_id = $1
+               AND status != 'inactive'
+               AND regexp_replace(phone, '[^0-9]', '', 'g') LIKE $2
+             LIMIT 1;`,
+            [input.tenantId, `%${last8}`]
+        );
+        if (patientResult.rows.length === 0) return null;
+
+        const patientId = patientResult.rows[0].id;
+        await this.dbPool.query(
+            `INSERT INTO psychotherapy_whatsapp_messages
+                (tenant_id, patient_id, direction, provider_message_id, body, occurred_at)
+             VALUES ($1, $2, 'inbound', $3, $4, $5)
+             ON CONFLICT (provider_message_id) DO NOTHING;`,
+            [input.tenantId, patientId, input.providerMessageId, input.body, input.occurredAt]
+        );
+        return { patientId };
+    }
+
+    async listMessagesForPatient(
+        tenantId: string,
+        patientId: string,
+        page: number,
+        limit: number
+    ): Promise<{ data: WhatsappMessageHistoryEntry[]; total: number }> {
+        const offset = (page - 1) * limit;
+        const result = await this.dbPool.query(
+            `SELECT id, direction, body, message_type, occurred_at, COUNT(*) OVER() AS total
+             FROM psychotherapy_whatsapp_messages
+             WHERE tenant_id = $1 AND patient_id = $2
+             ORDER BY occurred_at DESC
+             LIMIT $3 OFFSET $4;`,
+            [tenantId, patientId, limit, offset]
+        );
+        const total = result.rows.length > 0 ? Number(result.rows[0].total) : 0;
+        const data: WhatsappMessageHistoryEntry[] = result.rows.map(row => ({
+            id: row.id,
+            direction: row.direction,
+            body: row.body,
+            messageType: row.message_type,
+            occurredAt: row.occurred_at,
+        }));
+        return { data, total };
     }
 
     async claimPendingWebhookEvents(limit: number, leaseSeconds: number): Promise<PendingWebhookEvent[]> {

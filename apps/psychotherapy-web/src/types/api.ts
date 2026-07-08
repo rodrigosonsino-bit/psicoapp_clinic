@@ -236,6 +236,14 @@ export interface PendingDetails {
   groupCharges: PendingGroupChargeDetail[];
 }
 
+export interface WhatsappMessageHistoryEntry {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  body: string;
+  messageType: string;
+  occurredAt: string;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {

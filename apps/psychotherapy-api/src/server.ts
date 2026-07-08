@@ -28,6 +28,7 @@ import { BroadcastWorker } from './infrastructure/queue/BroadcastWorker';
 import { closeBroadcastRedisConnection } from './infrastructure/queue/redisConnection';
 import { IBroadcastRepository } from './domain/repositories/IBroadcastRepository';
 import { createWhatsappCloudWebhookRoutes } from './presentation/routes/whatsappCloudWebhookRoutes';
+import { createWhatsappMessagesRoutes } from './presentation/routes/whatsappMessagesRoutes';
 import { PostgresWhatsappCloudRepository } from './infrastructure/repositories/PostgresWhatsappCloudRepository';
 import { WhatsappCloudClient } from './infrastructure/whatsappCloud/WhatsappCloudClient';
 import { WhatsappCloudSender } from './infrastructure/whatsappCloud/WhatsappCloudSender';
@@ -130,6 +131,9 @@ const whatsappSessionManager = container.resolve<WhatsappSessionManager>('Whatsa
 const dbPool = container.resolve(Pool);
 app.use('/api', createWhatsappRoutes(whatsappSessionManager, dbPool));
 
+// Histórico de conversa WhatsApp Cloud API por paciente — só visualização, sem automação.
+app.use('/api', createWhatsappMessagesRoutes(whatsappCloudRepository));
+
 // Webhook Pix — rota pública (sem auth JWT), valida via header da Efí Bank
 app.post('/webhooks/pix', express.json(), (req, res) => {
     const pixController = container.resolve(PixController);
@@ -204,14 +208,17 @@ if (require.main === module) {
                 // Cloud API presente (mesmo que o provider ativo ainda seja 'baileys'), para não
                 // perder eventos que a Meta já possa estar enviando durante a configuração inicial.
                 if (cloudClientConfig) {
-                    // Encaminhamento de mensagens recebidas para o número pessoal — opcional
-                    // (WHATSAPP_NOTIFY_PHONE ausente = recurso desligado, sem afetar lembretes).
+                    // Encaminhamento de mensagens recebidas para o número pessoal + histórico de
+                    // conversa na ficha do paciente — opcional (requer WHATSAPP_NOTIFY_PHONE e
+                    // WHATSAPP_CLOUD_TENANT_ID; ausência de qualquer um desativa ambos, sem
+                    // afetar lembretes).
                     const notifyPhoneDigits = process.env.WHATSAPP_NOTIFY_PHONE?.replace(/\D/g, '');
-                    const notifyConfig = notifyPhoneDigits
-                        ? { client: new WhatsappCloudClient(cloudClientConfig), notifyPhoneDigits }
+                    const cloudTenantId = process.env.WHATSAPP_CLOUD_TENANT_ID?.trim();
+                    const notifyConfig = (notifyPhoneDigits && cloudTenantId)
+                        ? { client: new WhatsappCloudClient(cloudClientConfig), notifyPhoneDigits, tenantId: cloudTenantId }
                         : undefined;
                     if (!notifyConfig) {
-                        logger.warn('⚠️ WHATSAPP_NOTIFY_PHONE não configurado — encaminhamento de respostas de pacientes para número pessoal desativado.');
+                        logger.warn('⚠️ WHATSAPP_NOTIFY_PHONE/WHATSAPP_CLOUD_TENANT_ID não configurados — encaminhamento de respostas e histórico de conversa desativados.');
                     }
                     const inboxWorker = new WhatsappCloudInboxWorker(whatsappCloudRepository, notifyConfig);
                     inboxWorker.start();

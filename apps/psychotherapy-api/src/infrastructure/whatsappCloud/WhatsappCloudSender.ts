@@ -125,6 +125,25 @@ export class WhatsappCloudSender implements IReminderMessageSender {
 
         if (outcome.kind === 'accepted' && outcome.wamid) {
             await this.repository.createDeliveryRecord(outcome.wamid, appt.tenantId, appt.appointmentId);
+
+            // Histórico de conversa exibido na ficha do paciente — só visualização, sem efeito
+            // nenhum sobre o envio em si (se falhar, não deve derrubar o fluxo do lembrete).
+            try {
+                const bodyText = parameters
+                    .filter(p => p.type === 'body' || p.type === 'header')
+                    .flatMap(p => p.values)
+                    .join(' — ') || `[template: ${template.metaTemplateName}]`;
+                await this.repository.insertOutboundMessage({
+                    tenantId: appt.tenantId,
+                    patientId: appt.patientId,
+                    providerMessageId: outcome.wamid,
+                    body: bodyText,
+                    occurredAt: new Date(),
+                });
+            } catch (err) {
+                logger.warn({ err, appointmentId: appt.appointmentId }, 'WhatsappCloudSender: falha ao registrar histórico de conversa (não afeta o envio).');
+            }
+
             logger.info({ appointmentId: appt.appointmentId, attemptNumber }, '✅ Lembrete enviado via WhatsApp Cloud API');
             return { success: true, retryEligible: true };
         }

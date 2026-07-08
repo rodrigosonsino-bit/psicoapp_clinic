@@ -5,9 +5,11 @@ import { ListPsychotherapyMonthUseCase } from '../../application/useCases/ListPs
 import { ListPsychotherapyPatientsUseCase } from '../../application/useCases/ListPsychotherapyPatientsUseCase';
 import { SavePsychotherapyMonthlyRecordUseCase } from '../../application/useCases/SavePsychotherapyMonthlyRecordUseCase';
 import { SavePsychotherapyPatientUseCase } from '../../application/useCases/SavePsychotherapyPatientUseCase';
+import { IPsychotherapyRepository } from '../../domain/repositories/IPsychotherapyRepository';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { AppError } from '../../domain/errors/AppError';
-import { injectable } from 'tsyringe';
+import { NotFoundError } from '../../domain/errors/NotFoundError';
+import { injectable, inject } from 'tsyringe';
 
 import { ChangePatientModalityUseCase } from '../../application/useCases/ChangePatientModalityUseCase';
 import { AddAdvanceCreditUseCase } from '../../application/useCases/AddAdvanceCreditUseCase';
@@ -22,8 +24,17 @@ export class PsychotherapyController {
         private readonly saveMonthlyRecordUseCase: SavePsychotherapyMonthlyRecordUseCase,
         private readonly generateMonthUseCase: GeneratePsychotherapyMonthUseCase,
         private readonly changeModalityUseCase: ChangePatientModalityUseCase,
-        private readonly addAdvanceCreditUseCase: AddAdvanceCreditUseCase
+        private readonly addAdvanceCreditUseCase: AddAdvanceCreditUseCase,
+        @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository
     ) {}
+
+    /** GET /patients/:id — busca um único paciente (usado pela tela de Prontuário). */
+    async getPatient(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const patient = await this.repository.findPatientById(tenantId, req.params.id);
+        if (!patient) throw new NotFoundError('Paciente não encontrado ou não autorizado');
+        return res.status(200).json(patient);
+    }
 
     async listPatients(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);
