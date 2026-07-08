@@ -59,6 +59,7 @@ export default function Appointments() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [prefilledDate, setPrefilledDate] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [coveredAppointmentIds, setCoveredAppointmentIds] = useState<Set<string>>(new Set());
   const toast = useToast();
   const PAGE_SIZE = 20;
 
@@ -126,6 +127,7 @@ export default function Appointments() {
       });
       setAppointments(res.data);
       setTotal(res.meta.total);
+      loadCoveredAppointmentIds(res.data);
     } catch (err) {
       console.error(err);
       setError(true);
@@ -134,6 +136,24 @@ export default function Appointments() {
       setLoading(false);
     }
   }, [page, filterPatientId, viewType, currentDate, toast]);
+
+  // "Coberta pelo pagamento": mesmo conceito já usado no modal de pendências do Dashboard
+  // (sessões cronologicamente cobertas pelas `paid_sessions` do mês), agora sinalizado na
+  // aba do agendamento. Busca por mês (não por intervalo visível) porque o cálculo precisa
+  // do mês inteiro do paciente pra ficar com a ordinalidade certa — um único agendamento
+  // fora de ordem mudaria quais sessões contam como "pagas".
+  const loadCoveredAppointmentIds = useCallback(async (appts: Appointment[]) => {
+    const months = new Set(appts.map(a => a.scheduledAt.slice(0, 7)));
+    if (months.size === 0) { setCoveredAppointmentIds(new Set()); return; }
+    try {
+      const results = await Promise.all(
+        Array.from(months).map(month =>
+          fetchApi<{ data: string[] }>(`/api/psychotherapy/appointments/covered/${month}`).catch(() => ({ data: [] }))
+        )
+      );
+      setCoveredAppointmentIds(new Set(results.flatMap(r => r.data)));
+    } catch { /* silently ignore — só afeta o indicador visual, não bloqueia a tela */ }
+  }, []);
 
   useEffect(() => { loadPatients(); }, [loadPatients]);
   useEffect(() => { loadGroups(); }, [loadGroups]);
@@ -442,6 +462,9 @@ export default function Appointments() {
                       <span className={`badge badge-${STATUS_BADGE[a.status]}`}>
                         {STATUS_LABEL[a.status]}
                       </span>
+                      {coveredAppointmentIds.has(a.id) && (
+                        <CheckCircle2 size={13} style={{ color: '#ffffff', marginLeft: 4, verticalAlign: 'middle' }} title="Sessão paga" />
+                      )}
                     </td>
                     <td>
                       <div className="flex gap-1 items-center flex-wrap">
@@ -564,6 +587,7 @@ export default function Appointments() {
           appointments={appointments}
           patients={patients}
           groups={groups}
+          coveredAppointmentIds={coveredAppointmentIds}
           onSlotClick={handleSlotClick}
           onStatusUpdate={handleStatusUpdate}
           onEdit={a => { setEditAppointment(a); setShowModal(true); }}

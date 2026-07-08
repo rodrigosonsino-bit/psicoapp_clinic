@@ -285,6 +285,7 @@ export interface IPsychotherapyRepository {
     expenseExistsForMonth(tenantId: string, fixedExpenseId: string, month: string): Promise<boolean>;
     getDashboardAnalytics(tenantId: string, currentMonthStr: string): Promise<DashboardAnalytics>;
     getPendingDetails(tenantId: string, currentMonthStr: string): Promise<PendingDetails>;
+    listCoveredAppointmentIds(tenantId: string, month: string): Promise<string[]>;
     saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment>;
     listAppointments(tenantId: string, options?: ListAppointmentsOptions): Promise<PaginatedResult<PsychotherapyAppointment>>;
     findAppointmentById(tenantId: string, id: string): Promise<PsychotherapyAppointment | null>;

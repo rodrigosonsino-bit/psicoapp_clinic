@@ -384,6 +384,7 @@ export function createPsychotherapyRoutes(): Router {
     router.get('/psychotherapy/appointments', validateQuery(listAppointmentsQuerySchema), asyncHandler((req, res) => appointmentController.listAppointments(req, res)));
     router.delete('/psychotherapy/appointments/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => appointmentController.deleteAppointment(req, res)));
     router.patch('/psychotherapy/appointments/:id/status', validateParams(uuidParamSchema), validateBody(updateAppointmentStatusSchema), asyncHandler((req, res) => appointmentController.updateStatus(req, res)));
+    router.get('/psychotherapy/appointments/covered/:month', validateParams(monthParamSchema), asyncHandler((req, res) => appointmentController.listCoveredAppointmentIds(req, res)));
 
     // CSV Exports
     const exportController = container.resolve(ExportController);

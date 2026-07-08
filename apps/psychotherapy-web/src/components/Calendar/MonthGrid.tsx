@@ -6,6 +6,7 @@ interface Props {
   appointments: Appointment[];
   patients: Patient[];
   groups: { id: string; name: string }[];
+  coveredAppointmentIds: Set<string>;
   onDayClick: (date: Date) => void;
 }
 
@@ -17,7 +18,7 @@ const STATUS_COLOR: Record<string, string> = {
   no_show: 'var(--status-danger)',
 };
 
-export default function MonthGrid({ currentDate, appointments, patients, groups, onDayClick }: Props) {
+export default function MonthGrid({ currentDate, appointments, patients, groups, coveredAppointmentIds, onDayClick }: Props) {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
   
@@ -69,11 +70,13 @@ export default function MonthGrid({ currentDate, appointments, patients, groups,
               {dayAppts.slice(0, 3).map(a => (
                 <div 
                   key={a.id} 
-                  className="month-chip" 
-                  style={{ 
+                  className="month-chip"
+                  style={{
                     borderLeftColor: STATUS_COLOR[a.status],
-                    opacity: (a.status === 'canceled' || a.status === 'no_show') ? 0.6 : 1
+                    opacity: (a.status === 'canceled' || a.status === 'no_show') ? 0.6 : 1,
+                    boxShadow: coveredAppointmentIds.has(a.id) ? 'inset 0 0 0 1px rgba(255,255,255,0.7)' : undefined
                   }}
+                  title={coveredAppointmentIds.has(a.id) ? 'Sessão paga' : undefined}
                 >
                   <span style={{ fontWeight: 600 }}>{format(new Date(a.scheduledAt), 'HH:mm')}</span> {getPatientFirstName(a)}
                 </div>

@@ -10,13 +10,14 @@ interface Props {
   appointments: Appointment[];
   patients: Patient[];
   groups: { id: string; name: string }[];
+  coveredAppointmentIds: Set<string>;
   onSlotClick: (date: Date) => void;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
 }
 
-export default function WeekGrid({ days, appointments, patients, groups, onSlotClick, onStatusUpdate, onEdit, onDelete }: Props) {
+export default function WeekGrid({ days, appointments, patients, groups, coveredAppointmentIds, onSlotClick, onStatusUpdate, onEdit, onDelete }: Props) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [nowTop, setNowTop] = useState(() => topPx(new Date().toISOString()));
 
@@ -107,6 +108,7 @@ export default function WeekGrid({ days, appointments, patients, groups, onSlotC
                   appointment={appt}
                   patientName={getPatientName(appt)}
                   patientPhone={getPatientPhone(appt)}
+                  isPaid={coveredAppointmentIds.has(appt.id)}
                   onStatusUpdate={onStatusUpdate}
                   onEdit={onEdit}
                   onDelete={onDelete}

@@ -10,6 +10,7 @@ interface CalendarViewProps {
   appointments: Appointment[];
   patients: Patient[];
   groups: { id: string; name: string }[];
+  coveredAppointmentIds: Set<string>;
   onSlotClick: (date: Date) => void;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
   onEdit: (a: Appointment) => void;

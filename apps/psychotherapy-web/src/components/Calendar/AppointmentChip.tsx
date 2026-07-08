@@ -9,6 +9,7 @@ interface Props {
   appointment: PositionedAppointment;
   patientName: string;
   patientPhone?: string | null;
+  isPaid?: boolean;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
@@ -22,7 +23,7 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   no_show: 'var(--status-danger)',
 };
 
-export default function AppointmentChip({ appointment, patientName, patientPhone, onStatusUpdate, onEdit, onDelete }: Props) {
+export default function AppointmentChip({ appointment, patientName, patientPhone, isPaid, onStatusUpdate, onEdit, onDelete }: Props) {
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -78,12 +79,16 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
           left: `calc(${appointment.trackIndex} * (100% / ${Math.max(1, appointment.trackCount)}))`,
           width: `calc(100% / ${Math.max(1, appointment.trackCount)} - 3px)`,
           borderLeftColor: STATUS_COLOR[appointment.status],
-          opacity: (appointment.status === 'canceled' || appointment.status === 'no_show') ? 0.6 : 1
+          opacity: (appointment.status === 'canceled' || appointment.status === 'no_show') ? 0.6 : 1,
+          // Sessão paga: anel branco sutil por cima da cor de status normal (não substitui,
+          // só sinaliza pagamento — status continua distinguível pela cor da aba esquerda).
+          boxShadow: isPaid ? 'inset 0 0 0 1px rgba(255,255,255,0.7)' : undefined
         }}
         onClick={(e) => {
           e.stopPropagation();
           setShowPopover(!showPopover);
         }}
+        title={isPaid ? 'Sessão paga' : undefined}
       >
         <div className="chip-time">{timeStr}</div>
         <div className="chip-name">{patientName}</div>
