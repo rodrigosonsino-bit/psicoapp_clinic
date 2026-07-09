@@ -8,6 +8,7 @@ import { SkeletonTable } from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
 import { CalendarView } from '../components/Calendar';
 import { buildAppointmentConfirmMessage, buildWhatsAppSendUrl } from '../utils/whatsapp';
+import { getAppPublicBaseUrl } from '../utils/formatters';
 import './Appointments.css';
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
@@ -255,14 +256,14 @@ export default function Appointments() {
     a.groupId ? (groups.find(g => g.id === a.groupId)?.name ?? 'Grupo') : patientName(a.patientId);
 
   const copyConfirmLink = (token: string) => {
-    const url = `${window.location.origin}/confirm/${token}`;
+    const url = `${getAppPublicBaseUrl()}/confirm/${token}`;
     navigator.clipboard.writeText(url).then(() => toast.success('Link copiado! Envie para o paciente.'));
   };
 
   const sendConfirmWhatsApp = (a: Appointment) => {
     const phone = patientPhone(a.patientId);
     if (!phone || !a.confirmToken) return;
-    const confirmUrl = `${window.location.origin}/confirm/${a.confirmToken}`;
+    const confirmUrl = `${getAppPublicBaseUrl()}/confirm/${a.confirmToken}`;
     const message = buildAppointmentConfirmMessage(patientName(a.patientId), a.scheduledAt, confirmUrl);
     window.open(buildWhatsAppSendUrl(phone, message), '_blank', 'noopener,noreferrer');
   };

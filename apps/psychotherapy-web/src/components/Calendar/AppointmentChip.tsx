@@ -4,6 +4,7 @@ import type { Appointment, AppointmentStatus } from '../../types/api';
 import type { PositionedAppointment } from './calendarUtils';
 import { topPx, heightPx } from './calendarUtils';
 import { buildAppointmentConfirmMessage, buildWhatsAppSendUrl } from '../../utils/whatsapp';
+import { getAppPublicBaseUrl } from '../../utils/formatters';
 
 interface Props {
   appointment: PositionedAppointment;
@@ -64,7 +65,7 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
 
   const sendConfirmWhatsApp = () => {
     if (!patientPhone || !appointment.confirmToken) return;
-    const confirmUrl = `${window.location.origin}/confirm/${appointment.confirmToken}`;
+    const confirmUrl = `${getAppPublicBaseUrl()}/confirm/${appointment.confirmToken}`;
     const message = buildAppointmentConfirmMessage(patientName, appointment.scheduledAt, confirmUrl);
     window.open(buildWhatsAppSendUrl(patientPhone, message), '_blank', 'noopener,noreferrer');
   };
