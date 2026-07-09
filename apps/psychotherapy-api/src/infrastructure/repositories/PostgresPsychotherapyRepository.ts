@@ -2775,8 +2775,12 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             ON CONFLICT (tenant_id, month, patient_id) WHERE patient_id IS NOT NULL
             DO UPDATE SET
                 patient_name_snapshot = EXCLUDED.patient_name_snapshot,
-                status                = EXCLUDED.status,
-                payment_type          = EXCLUDED.payment_type,
+                -- status/payment_type NÃO são sobrescritos aqui: são overrides explícitos por
+                -- mês (dropdown "Modalidade" em Faturamento Mensal) e não devem reverter pro
+                -- padrão do cadastro do paciente sempre que agendamentos mudam ou o registro é
+                -- resincronizado. Achado real: alterar a modalidade de um paciente no mês não
+                -- ficava salvo, pois saveMonthlyRecord chama syncMonthlyRecord logo em seguida,
+                -- que reescrevia status/payment_type com o valor antigo do cadastro.
                 expected_sessions     = EXCLUDED.expected_sessions,
                 absences              = EXCLUDED.absences,
                 expected_amount_cents = EXCLUDED.expected_amount_cents,
