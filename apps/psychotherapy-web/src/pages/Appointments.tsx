@@ -20,8 +20,8 @@ const STATUS_LABEL: Record<AppointmentStatus, string> = {
 };
 
 const STATUS_BADGE: Record<AppointmentStatus, string> = {
-  scheduled: 'info',
-  confirmed: 'confirmed',
+  scheduled: 'muted',
+  confirmed: 'info',
   attended: 'success',
   canceled: 'danger',
   no_show: 'warning',

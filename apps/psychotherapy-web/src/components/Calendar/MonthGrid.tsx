@@ -11,8 +11,8 @@ interface Props {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  scheduled: 'var(--status-info)',
-  confirmed: 'var(--brand-primary)',
+  scheduled: 'var(--text-muted)',
+  confirmed: 'var(--status-info)',
   attended: 'var(--status-success)',
   canceled: 'var(--status-danger)',
   no_show: 'var(--status-warning)',

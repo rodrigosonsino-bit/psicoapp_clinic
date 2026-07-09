@@ -270,7 +270,7 @@ button {
 .badge-warning { background-color: rgba(245, 158, 11, 0.1); color: var(--status-warning); }
 .badge-danger { background-color: rgba(239, 68, 68, 0.1); color: var(--status-danger); }
 .badge-info { background-color: rgba(59, 130, 246, 0.1); color: var(--status-info); }
-.badge-confirmed { background-color: rgba(109, 93, 252, 0.1); color: var(--brand-primary); }
+.badge-muted { background-color: rgba(100, 116, 139, 0.1); color: var(--text-muted); }
 
 /* Utilities */
 .flex { display: flex; }
