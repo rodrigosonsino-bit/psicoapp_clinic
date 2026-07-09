@@ -6,6 +6,7 @@ import {
     WebhookStatusEvent,
     WebhookMessageEvent,
     WhatsappMessageHistoryEntry,
+    UnseenConversation,
     PendingWebhookEvent,
     CloudDeliveryStatus,
     AdvanceDeliveryOutcome,
@@ -245,6 +246,35 @@ export class PostgresWhatsappCloudRepository implements IWhatsappCloudRepository
             occurredAt: row.occurred_at,
         }));
         return { data, total };
+    }
+
+    async claimUnseenConversations(tenantId: string): Promise<UnseenConversation[]> {
+        const result = await this.dbPool.query(
+            `WITH claimed AS (
+                UPDATE psychotherapy_whatsapp_messages
+                SET seen_at = NOW()
+                WHERE tenant_id = $1 AND direction = 'inbound' AND seen_at IS NULL
+                RETURNING patient_id, body, occurred_at
+             ),
+             latest AS (
+                SELECT DISTINCT ON (patient_id) patient_id, body, occurred_at
+                FROM claimed
+                ORDER BY patient_id, occurred_at DESC
+             )
+             SELECT l.patient_id, p.name AS patient_name, p.phone,
+                    l.body AS last_message_body, l.occurred_at AS last_message_at
+             FROM latest l
+             JOIN psychotherapy_patients p ON p.id = l.patient_id
+             WHERE p.tenant_id = $1;`,
+            [tenantId]
+        );
+        return result.rows.map(row => ({
+            patientId: row.patient_id,
+            patientName: row.patient_name,
+            phone: row.phone,
+            lastMessageBody: row.last_message_body,
+            lastMessageAt: row.last_message_at,
+        }));
     }
 
     async claimPendingWebhookEvents(limit: number, leaseSeconds: number): Promise<PendingWebhookEvent[]> {

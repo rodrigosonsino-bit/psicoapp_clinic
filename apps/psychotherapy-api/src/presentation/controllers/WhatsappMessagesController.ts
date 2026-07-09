@@ -45,6 +45,19 @@ export class WhatsappMessagesController {
     };
 
     /**
+     * Reivindica (marca como vistas) todas as conversas com mensagem inbound não vista — usado
+     * pelo popup global que faz polling nesta rota. Sem automação: só sinaliza pro frontend abrir
+     * o popup; a resposta continua sendo uma ação explícita do profissional.
+     */
+    listUnseen = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
+        const tenantId = req.tenantId || req.userId;
+        if (!tenantId) throw new AppError('Tenant não identificado', 401);
+
+        const conversations = await this.repository.claimUnseenConversations(tenantId);
+        return res.status(200).json({ data: conversations });
+    };
+
+    /**
      * Envia uma resposta manual ao paciente (texto livre — só é aceito pela Meta dentro da janela
      * de 24h desde a última mensagem do paciente). Nenhuma automação: é sempre uma ação explícita
      * do profissional clicando "Enviar" na ficha do paciente.

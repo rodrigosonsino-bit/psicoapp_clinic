@@ -49,6 +49,15 @@ export interface WhatsappMessageHistoryEntry {
     occurredAt: Date;
 }
 
+/** Conversa com mensagem inbound não vista — usada pelo popup global de mensagem nova. */
+export interface UnseenConversation {
+    patientId: string;
+    patientName: string;
+    phone: string | null;
+    lastMessageBody: string;
+    lastMessageAt: Date;
+}
+
 export interface PendingWebhookEvent {
     id: string;
     eventType: 'status' | 'message';
@@ -147,6 +156,14 @@ export interface IWhatsappCloudRepository {
         page: number,
         limit: number
     ): Promise<{ data: WhatsappMessageHistoryEntry[]; total: number }>;
+
+    /**
+     * Reivindica (marca como vistas, atomicamente) todas as mensagens inbound ainda não vistas do
+     * tenant, agrupadas por paciente (uma entrada por paciente, com a mensagem mais recente).
+     * Usado pelo popup global — a partir da resposta, a persistência na tela é responsabilidade
+     * só do frontend (estado local), não depende de novo polling backend para continuar visível.
+     */
+    claimUnseenConversations(tenantId: string): Promise<UnseenConversation[]>;
 
     /** Reivindica (claim) eventos pendentes de processamento para o worker durável, com lease
      * (claimed_until) para impedir que uma execução sobreposta do cron reprocesse a mesma linha. */

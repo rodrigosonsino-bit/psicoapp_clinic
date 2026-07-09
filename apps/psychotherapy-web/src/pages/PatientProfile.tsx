@@ -2,19 +2,19 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Save, Plus, Edit2, Trash2, CheckCircle2, Clock,
-  Tag, Link2, ChevronDown, ChevronUp, Loader2, MessageCircle,
+  Tag, Link2, ChevronDown, ChevronUp, Loader2,
 } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type {
   Patient, ClinicalNote, PaginatedResponse,
   Anamnesis, TreatmentPlan, TreatmentPlanStatus, BookingLinkResult, ReminderChannel,
-  WhatsappMessageHistoryEntry,
 } from '../types/api';
 import { MODALIDADE_OPTIONS, getModalidadeValue } from '../constants/modalidade';
 import type { ModalidadeValue } from '../constants/modalidade';
 import { useToast } from '../context/ToastContext';
 import { SkeletonTable } from '../components/Skeleton';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { WhatsappConversationPanel } from '../components/WhatsappConversationPanel';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -790,100 +790,7 @@ function HistoricoTab({ patientId, patientName }: { patientId: string; patientNa
 // ── Aba: Conversa WhatsApp (só visualização, sem automação) ──────────────────
 
 function WhatsappTab({ patientId, patientName }: { patientId: string; patientName: string }) {
-  const toast = useToast();
-  const [messages, setMessages] = useState<WhatsappMessageHistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [replyText, setReplyText] = useState('');
-  const [sending, setSending] = useState(false);
-
-  const loadMessages = useCallback(async () => {
-    try {
-      const res = await fetchApi<PaginatedResponse<WhatsappMessageHistoryEntry>>(
-        `/api/psychotherapy/patients/${patientId}/whatsapp-messages?limit=100`
-      );
-      setMessages(res.data);
-    } catch {
-      toast.error('Erro ao carregar conversa do WhatsApp.');
-    } finally {
-      setLoading(false);
-    }
-  }, [patientId, toast]);
-
-  useEffect(() => { loadMessages(); }, [loadMessages]);
-
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = replyText.trim();
-    if (!text) return;
-    try {
-      setSending(true);
-      await fetchApi(`/api/psychotherapy/patients/${patientId}/whatsapp-messages`, {
-        method: 'POST',
-        body: JSON.stringify({ text }),
-      });
-      setReplyText('');
-      toast.success('Mensagem enviada.');
-      await loadMessages();
-    } catch (err) {
-      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao enviar mensagem. A janela de 24h de resposta pode estar fechada.');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const patientNameShort = patientName.split(' ')[0];
-
-  // Mais recente primeiro na API; exibida cronologicamente (mais antiga em cima) como um chat.
-  const chronological = [...messages].reverse();
-
-  return (
-    <div style={{ maxWidth: '640px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-      <p className="text-small" style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-        Histórico de mensagens enviadas e recebidas via WhatsApp. Responder aqui envia uma mensagem real ao paciente — só funciona dentro da janela de 24h desde a última mensagem dele.
-      </p>
-
-      {loading ? (
-        <SkeletonTable rows={4} cols={1} />
-      ) : messages.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-          <MessageCircle size={28} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-          <div>Nenhuma mensagem registrada com {patientNameShort} ainda.</div>
-        </div>
-      ) : (
-        chronological.map(msg => (
-          <div key={msg.id} style={{ display: 'flex', justifyContent: msg.direction === 'outbound' ? 'flex-end' : 'flex-start' }}>
-            <div style={{
-              maxWidth: '75%',
-              padding: '0.6rem 0.9rem',
-              borderRadius: 'var(--radius-md)',
-              background: msg.direction === 'outbound' ? 'var(--brand-primary)18' : 'var(--bg-panel)',
-              border: '1px solid var(--border-color)',
-            }}>
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.body}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'right' }}>
-                {msg.direction === 'outbound' ? 'Enviada' : 'Recebida'} · {new Date(msg.occurredAt).toLocaleString('pt-BR')}
-              </div>
-            </div>
-          </div>
-        ))
-      )}
-
-      <form onSubmit={handleSend} style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-        <textarea
-          className="form-control"
-          rows={2}
-          placeholder={`Escreva uma resposta para ${patientNameShort}...`}
-          value={replyText}
-          onChange={e => setReplyText(e.target.value)}
-          disabled={sending}
-          style={{ resize: 'vertical', flex: 1 }}
-        />
-        <button type="submit" className="btn btn-primary" disabled={sending || !replyText.trim()} style={{ alignSelf: 'flex-end' }}>
-          {sending ? 'Enviando...' : 'Enviar'}
-        </button>
-      </form>
-    </div>
-  );
+  return <WhatsappConversationPanel patientId={patientId} patientName={patientName} />;
 }
 
 // ── Aba 4: Grupos Terapêuticos ───────────────────────────────────────────────

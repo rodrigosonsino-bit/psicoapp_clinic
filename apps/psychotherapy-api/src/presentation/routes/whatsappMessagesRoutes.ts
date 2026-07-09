@@ -14,6 +14,7 @@ export function createWhatsappMessagesRoutes(
     const router = Router();
     const controller = new WhatsappMessagesController(repository, psychotherapyRepository, cloudClient);
 
+    router.get('/psychotherapy/whatsapp-messages/unseen', authMiddleware, asyncHandler(controller.listUnseen));
     router.get('/psychotherapy/patients/:patientId/whatsapp-messages', authMiddleware, asyncHandler(controller.listForPatient));
     router.post('/psychotherapy/patients/:patientId/whatsapp-messages', authMiddleware, asyncHandler(controller.sendReply));
 
