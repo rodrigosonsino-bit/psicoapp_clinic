@@ -6,6 +6,19 @@ import { WhatsappConversationPanel } from '../components/WhatsappConversationPan
 const POLL_INTERVAL_MS = 5000;
 const CONVERSATION_POLL_INTERVAL_MS = 5000;
 
+/**
+ * Prefixos de rota PÚBLICA (sem login) — o provider é montado na raiz do app (envolve tudo,
+ * inclusive essas rotas), mas nunca deve chamar a API autenticada nelas. Um token antigo/expirado
+ * ainda presente no navegador do PACIENTE (ex: mesmo aparelho já usado pra acessar o painel antes)
+ * faria o 401 do polling disparar o redirecionamento global de "sessão expirada" (fetchApi.ts) e
+ * chutar o paciente pra tela de login no meio do fluxo público de confirmação de agendamento.
+ */
+const PUBLIC_ROUTE_PREFIXES = ['/auth', '/confirm/', '/book/', '/self-book/'];
+
+function isOnPublicRoute(): boolean {
+  return PUBLIC_ROUTE_PREFIXES.some(prefix => window.location.pathname.startsWith(prefix));
+}
+
 interface UnseenConversation {
   patientId: string;
   patientName: string;
@@ -32,7 +45,7 @@ export function IncomingMessagePopupProvider({ children }: { children: React.Rea
   const [openConversations, setOpenConversations] = useState<OpenConversation[]>([]);
 
   const pollUnseen = useCallback(async () => {
-    if (!tokenStorage.isAuthenticated()) return;
+    if (isOnPublicRoute() || !tokenStorage.isAuthenticated()) return;
     try {
       const res = await fetchApi<{ data: UnseenConversation[] }>('/api/psychotherapy/whatsapp-messages/unseen');
       if (res.data.length === 0) return;
