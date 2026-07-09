@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw, MessageCircle } from 'lucide-react';
 import { fetchApi } from '../services/api';
-import type { Appointment, AppointmentStatus, Patient, PaginatedResponse } from '../types/api';
+import type { Appointment, AppointmentStatus, Patient, PaginatedResponse, MonthResponse } from '../types/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonTable } from '../components/Skeleton';
@@ -62,6 +63,7 @@ export default function Appointments() {
   const [syncing, setSyncing] = useState(false);
   const [coveredAppointmentIds, setCoveredAppointmentIds] = useState<Set<string>>(new Set());
   const toast = useToast();
+  const navigate = useNavigate();
   const PAGE_SIZE = 20;
 
   const loadPatients = useCallback(async () => {
@@ -175,6 +177,42 @@ export default function Appointments() {
       toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao atualizar status.');
       // Revert optimistic update by reloading
       loadAppointments(page, filterPatientId, viewType, currentDate);
+    }
+  };
+
+  const openPatientProfile = (patientId: string) => navigate(`/patients/${patientId}`);
+
+  // Atalho de "Agendamentos": marca +1 sessão paga no registro de Faturamento Mensal do
+  // paciente, reusando o MESMO endpoint (POST /months/:month/records) e a mesma lógica de
+  // paidSessions/paymentStatus que a tela de Faturamento Mensal já usa (MonthlyRecords.tsx,
+  // updatePaidSessions) — evita duplicar a regra de negócio em dois lugares.
+  const handleMarkSessionPaid = async (id: string) => {
+    const appointment = appointments.find(a => a.id === id);
+    if (!appointment) return;
+    const month = appointment.scheduledAt.slice(0, 7);
+    try {
+      const monthRes = await fetchApi<MonthResponse>(`/api/psychotherapy/months/${month}`);
+      const record = monthRes.records.find(r => r.patientId === appointment.patientId);
+      if (!record) {
+        toast.error('Nenhum registro de Faturamento Mensal encontrado para esse paciente neste mês. Abra Faturamento Mensal e gere o mês primeiro.');
+        return;
+      }
+      const targetSessions = Math.max(0, record.expectedSessions - record.absences);
+      const newPaidSessions = Math.min(record.paidSessions + 1, targetSessions);
+      if (newPaidSessions === record.paidSessions) {
+        toast.info('Esse mês já está com todas as sessões esperadas marcadas como pagas.');
+        return;
+      }
+      const newStatus: 'paid' | 'partial' | 'pending' =
+        newPaidSessions >= targetSessions ? 'paid' : newPaidSessions > 0 ? 'partial' : 'pending';
+      await fetchApi(`/api/psychotherapy/months/${month}/records`, {
+        method: 'POST',
+        body: JSON.stringify({ ...record, paidSessions: newPaidSessions, paymentStatus: newStatus })
+      });
+      toast.success(`Sessão marcada como paga (${newPaidSessions}/${targetSessions} pagas em ${month}).`);
+      await loadAppointments(page, filterPatientId, viewType, currentDate);
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao marcar sessão como paga.');
     }
   };
 
@@ -596,6 +634,8 @@ export default function Appointments() {
           onEdit={a => { setEditAppointment(a); setShowModal(true); }}
           onDelete={id => openDeleteDialog(id)}
           onDayClick={date => { setCurrentDate(date); setViewType('day'); }}
+          onOpenProfile={openPatientProfile}
+          onMarkPaid={handleMarkSessionPaid}
         />
       )}
 
@@ -606,6 +646,7 @@ export default function Appointments() {
           patients={patients}
           onClose={() => { setShowModal(false); setPrefilledDate(null); }}
           onSave={() => loadAppointments(page, filterPatientId, viewType, currentDate)}
+          onPatientCreated={p => setPatients(prev => [...prev, p])}
         />
       )}
 
@@ -686,12 +727,13 @@ export default function Appointments() {
 
 // ── AppointmentModal ──────────────────────────────────────────────────────────
 
-function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, onSave }: {
+function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, onSave, onPatientCreated }: {
   appointment: Appointment | null;
   patients: Patient[];
   initialScheduledAt?: string | null;
   onClose: () => void;
   onSave: () => void;
+  onPatientCreated: (patient: Patient) => void;
 }) {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -777,6 +819,45 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
   const [retroactive, setRetroactive] = useState(false);
   const toast = useToast();
 
+  // Cadastro rápido de paciente sem sair do modal de agendamento (ex: alguém liga pedindo
+  // horário e ainda não é paciente). Modalidade fixa em "Avulsa" (one_off/per_session, 0
+  // sessões esperadas) — a terapeuta ajusta a modalidade de verdade depois em Pacientes,
+  // isso aqui só evita bloquear o agendamento por falta de cadastro.
+  const [showQuickAddPatient, setShowQuickAddPatient] = useState(false);
+  const [quickPatientName, setQuickPatientName] = useState('');
+  const [quickPatientPhone, setQuickPatientPhone] = useState('');
+  const [creatingPatient, setCreatingPatient] = useState(false);
+
+  const handleQuickCreatePatient = async () => {
+    if (!quickPatientName.trim()) {
+      toast.error('Informe o nome do paciente.');
+      return;
+    }
+    setCreatingPatient(true);
+    try {
+      const res = await fetchApi<{ data: Patient }>('/api/psychotherapy/patients', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: quickPatientName.trim(),
+          status: 'one_off',
+          paymentType: 'per_session',
+          phone: quickPatientPhone.trim() || null,
+          reminderChannel: 'whatsapp',
+        })
+      });
+      onPatientCreated(res.data);
+      handlePatientChange(res.data.id);
+      toast.success(`Paciente ${res.data.name} cadastrado.`);
+      setShowQuickAddPatient(false);
+      setQuickPatientName('');
+      setQuickPatientPhone('');
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao cadastrar paciente.');
+    } finally {
+      setCreatingPatient(false);
+    }
+  };
+
   // Sessão no passado só pode ser criada (novo agendamento) como registro retroativo.
   const isPastNew = !appointment && !!formData.scheduledAt &&
     new Date(formData.scheduledAt).getTime() < Date.now() - 60_000;
@@ -854,11 +935,72 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
             </div>
           ) : (
             <div className="form-group">
-              <label className="form-label">Paciente *</label>
-              <select required className="form-control" value={formData.patientId}
-                onChange={e => handlePatientChange(e.target.value)} disabled={submitting}>
-                {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label">Paciente *</label>
+                {!showQuickAddPatient && (
+                  <button
+                    type="button"
+                    className="popover-btn"
+                    style={{ padding: '0.15rem 0.5rem', fontSize: '0.8rem' }}
+                    onClick={() => setShowQuickAddPatient(true)}
+                    disabled={submitting}
+                  >
+                    <Plus size={12} /> Novo Paciente
+                  </button>
+                )}
+              </div>
+
+              {showQuickAddPatient ? (
+                <div className="card animate-fade-in" style={{ padding: '0.75rem', marginBottom: '0.5rem' }}>
+                  <div className="flex gap-4" style={{ marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Nome do paciente *"
+                      value={quickPatientName}
+                      onChange={e => setQuickPatientName(e.target.value)}
+                      disabled={creatingPatient}
+                      autoFocus
+                    />
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Celular (opcional)"
+                      value={quickPatientPhone}
+                      onChange={e => setQuickPatientPhone(e.target.value)}
+                      disabled={creatingPatient}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                      onClick={handleQuickCreatePatient}
+                      disabled={creatingPatient}
+                    >
+                      {creatingPatient ? 'Cadastrando...' : 'Cadastrar e selecionar'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                      onClick={() => { setShowQuickAddPatient(false); setQuickPatientName(''); setQuickPatientPhone(''); }}
+                      disabled={creatingPatient}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  <p className="text-small" style={{ marginTop: '0.4rem', marginBottom: 0 }}>
+                    Cadastrado como "Avulsa" — ajuste a modalidade depois em Pacientes.
+                  </p>
+                </div>
+              ) : (
+                <select required className="form-control" value={formData.patientId}
+                  onChange={e => handlePatientChange(e.target.value)} disabled={submitting}>
+                  {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
             </div>
           )}
 

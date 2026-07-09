@@ -15,9 +15,11 @@ interface Props {
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
+  onOpenProfile: (patientId: string) => void;
+  onMarkPaid: (id: string) => void;
 }
 
-export default function WeekGrid({ days, appointments, patients, groups, coveredAppointmentIds, onSlotClick, onStatusUpdate, onEdit, onDelete }: Props) {
+export default function WeekGrid({ days, appointments, patients, groups, coveredAppointmentIds, onSlotClick, onStatusUpdate, onEdit, onDelete, onOpenProfile, onMarkPaid }: Props) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [nowTop, setNowTop] = useState(() => topPx(new Date().toISOString()));
 
@@ -112,6 +114,8 @@ export default function WeekGrid({ days, appointments, patients, groups, covered
                   onStatusUpdate={onStatusUpdate}
                   onEdit={onEdit}
                   onDelete={onDelete}
+                  onOpenProfile={onOpenProfile}
+                  onMarkPaid={onMarkPaid}
                 />
               ))}
             </div>

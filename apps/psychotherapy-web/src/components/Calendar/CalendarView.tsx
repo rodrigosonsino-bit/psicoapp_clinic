@@ -16,6 +16,8 @@ interface CalendarViewProps {
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
   onDayClick: (date: Date) => void;
+  onOpenProfile: (patientId: string) => void;
+  onMarkPaid: (id: string) => void;
 }
 
 export default function CalendarView(props: CalendarViewProps) {

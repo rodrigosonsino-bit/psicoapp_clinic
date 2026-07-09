@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Check, Edit2, Trash2, X, CheckCircle2, UserX, XCircle, Ban, MessageCircle } from 'lucide-react';
+import { Check, Edit2, Trash2, X, CheckCircle2, UserX, XCircle, Ban, MessageCircle, DollarSign, ExternalLink } from 'lucide-react';
 import type { Appointment, AppointmentStatus } from '../../types/api';
 import type { PositionedAppointment } from './calendarUtils';
 import { topPx, heightPx } from './calendarUtils';
@@ -14,6 +14,8 @@ interface Props {
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
+  onOpenProfile: (patientId: string) => void;
+  onMarkPaid: (id: string) => void;
 }
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
@@ -24,7 +26,7 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   no_show: 'var(--status-warning)',
 };
 
-export default function AppointmentChip({ appointment, patientName, patientPhone, isPaid, onStatusUpdate, onEdit, onDelete }: Props) {
+export default function AppointmentChip({ appointment, patientName, patientPhone, isPaid, onStatusUpdate, onEdit, onDelete, onOpenProfile, onMarkPaid }: Props) {
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -123,6 +125,18 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
                 {appointment.status === 'attended' && <Check size={14} style={{ marginLeft: 'auto', color: 'var(--brand-primary, #6d5dfc)' }} />}
               </button>
 
+              {appointment.status === 'attended' && !appointment.groupId && !isPaid && (
+                <button
+                  className="popover-btn"
+                  onClick={(e) => handleAction(e, () => onMarkPaid(appointment.id))}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <DollarSign size={14} style={{ color: 'var(--status-success)' }} />
+                    <span>Marcar sessão como paga</span>
+                  </div>
+                </button>
+              )}
+
               {!isPastoral && (
                 <button 
                   className={`popover-btn ${appointment.status === 'no_show' ? 'active' : ''}`} 
@@ -180,6 +194,11 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
           )}
 
           <hr style={{ margin: '0.25rem 0', borderColor: 'var(--border-color)' }} />
+          {!appointment.groupId && !isPastoral && (
+            <button className="popover-btn" onClick={(e) => handleAction(e, () => onOpenProfile(appointment.patientId))}>
+              <ExternalLink size={14} /> Abrir Prontuário
+            </button>
+          )}
           <div style={{ display: 'flex', gap: '0.25rem' }}>
             <button className="popover-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={(e) => handleAction(e, () => onEdit(appointment))}>
               <Edit2 size={14} /> Editar
