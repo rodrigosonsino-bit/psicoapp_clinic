@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { CalendarCheck, Clock, CheckCircle, XCircle, Loader } from 'lucide-react';
+import { CalendarCheck, Clock, CheckCircle, XCircle, Loader, Ban } from 'lucide-react';
 import './ConfirmAppointment.css';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -33,6 +33,8 @@ export default function ConfirmAppointment() {
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -59,6 +61,23 @@ export default function ConfirmAppointment() {
       setError('Falha ao confirmar presença. Tente novamente.');
     } finally {
       setConfirming(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!token) return;
+    setCanceling(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/appointments/confirm/${token}/cancel`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Erro ao cancelar.'); return; }
+      setAppointment(prev => prev ? { ...prev, status: 'canceled' } : prev);
+      setConfirmed(true);
+    } catch {
+      setError('Falha ao cancelar a sessão. Tente novamente.');
+    } finally {
+      setCanceling(false);
+      setShowCancelConfirm(false);
     }
   };
 
@@ -123,6 +142,30 @@ export default function ConfirmAppointment() {
                     : 'Obrigado! Seu terapeuta foi notificado da sua confirmação.'}
                 </p>
               </div>
+            ) : showCancelConfirm ? (
+              <div className="confirm-actions">
+                <p className="confirm-prompt">
+                  Tem certeza que deseja cancelar esta sessão? Essa ação não pode ser desfeita por aqui — entre em contato com seu terapeuta para remarcar.
+                </p>
+                <button
+                  className="confirm-btn confirm-btn-danger"
+                  onClick={handleCancel}
+                  disabled={canceling}
+                >
+                  {canceling ? (
+                    <><Loader size={18} className="spin" /> Cancelando...</>
+                  ) : (
+                    <><Ban size={18} /> Sim, cancelar sessão</>
+                  )}
+                </button>
+                <button
+                  className="confirm-btn-link"
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={canceling}
+                >
+                  Voltar
+                </button>
+              </div>
             ) : (
               <div className="confirm-actions">
                 <p className="confirm-prompt">
@@ -138,6 +181,13 @@ export default function ConfirmAppointment() {
                   ) : (
                     <><CheckCircle size={18} /> Confirmar Presença</>
                   )}
+                </button>
+                <button
+                  className="confirm-btn-link"
+                  onClick={() => setShowCancelConfirm(true)}
+                  disabled={confirming}
+                >
+                  Não posso comparecer / Cancelar sessão
                 </button>
               </div>
             )}

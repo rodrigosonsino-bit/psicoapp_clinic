@@ -241,6 +241,7 @@ export function createPsychotherapyRoutes(): Router {
     const confirmTokenParamSchema = z.object({ token: z.string().uuid('Token inválido') });
     router.get('/appointments/confirm/:token', validateParams(confirmTokenParamSchema), asyncHandler((req, res) => confirmController.getByToken(req, res)));
     router.post('/appointments/confirm/:token', validateParams(confirmTokenParamSchema), asyncHandler((req, res) => confirmController.confirm(req, res)));
+    router.post('/appointments/confirm/:token/cancel', validateParams(confirmTokenParamSchema), asyncHandler((req, res) => confirmController.cancel(req, res)));
 
     // Auto-agendamento pelo paciente (público)
     const bookingController = container.resolve(BookingController);

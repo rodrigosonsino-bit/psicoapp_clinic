@@ -155,6 +155,27 @@
 .confirm-btn:hover { opacity: 0.9; }
 .confirm-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+.confirm-btn-danger {
+  background: var(--status-danger);
+}
+
+.confirm-btn-link {
+  width: 100%;
+  display: block;
+  text-align: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 0.75rem;
+  padding: 0.25rem;
+}
+
+.confirm-btn-link:hover { color: var(--text-secondary); }
+.confirm-btn-link:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .confirm-footer {
   text-align: center;
   font-size: 0.8rem;
