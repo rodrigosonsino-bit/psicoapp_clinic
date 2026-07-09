@@ -131,8 +131,16 @@ const whatsappSessionManager = container.resolve<WhatsappSessionManager>('Whatsa
 const dbPool = container.resolve(Pool);
 app.use('/api', createWhatsappRoutes(whatsappSessionManager, dbPool));
 
-// Histórico de conversa WhatsApp Cloud API por paciente — só visualização, sem automação.
-app.use('/api', createWhatsappMessagesRoutes(whatsappCloudRepository));
+// Histórico de conversa WhatsApp Cloud API por paciente — visualização + resposta manual, sem
+// automação. cloudClient fica null (rota de envio desativada, fail-closed) se a config não
+// estiver presente — a listagem continua funcionando normalmente de qualquer forma.
+const whatsappMessagesCloudConfig = loadWhatsappCloudClientConfig();
+const whatsappMessagesCloudClient = whatsappMessagesCloudConfig ? new WhatsappCloudClient(whatsappMessagesCloudConfig) : null;
+app.use('/api', createWhatsappMessagesRoutes(
+    whatsappCloudRepository,
+    container.resolve<IPsychotherapyRepository>('IPsychotherapyRepository'),
+    whatsappMessagesCloudClient
+));
 
 // Webhook Pix — rota pública (sem auth JWT), valida via header da Efí Bank
 app.post('/webhooks/pix', express.json(), (req, res) => {

@@ -82,6 +82,22 @@ export class WhatsappCloudClient {
         return this.postWithRetry(body, toE164);
     }
 
+    /**
+     * Mensagem de texto livre — só é aceita pela Meta dentro da janela de 24h desde a última
+     * mensagem do destinatário para o número (janela de atendimento ao cliente). Fora da janela,
+     * a Meta rejeita com erro específico; é preciso usar template nesse caso.
+     */
+    async sendFreeformText(toE164: string, text: string): Promise<SubmissionOutcome> {
+        const body = {
+            messaging_product: 'whatsapp',
+            to: toE164,
+            type: 'text',
+            text: { body: text },
+        };
+
+        return this.postWithRetry(body, toE164);
+    }
+
     private async postWithRetry(body: unknown, toE164: string): Promise<SubmissionOutcome> {
         let lastOutcome: SubmissionOutcome = { kind: 'unknown', errorMessage: 'Nenhuma tentativa executada' };
 
