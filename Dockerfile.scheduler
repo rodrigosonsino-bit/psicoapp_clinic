@@ -31,10 +31,12 @@ COPY apps/scheduler-api/package.json ./apps/scheduler-api/
 # Install only production dependencies (workspace symlinks are created here)
 RUN npm ci --omit=dev --ignore-scripts
 
-# Copy compiled output
+# Copy compiled output and runtime assets
 COPY --from=builder /monorepo/packages/whatsapp-core/dist ./packages/whatsapp-core/dist
 COPY --from=builder /monorepo/apps/scheduler-api/dist ./apps/scheduler-api/dist
+COPY --from=builder /monorepo/apps/scheduler-api/public ./apps/scheduler-api/public
+COPY --from=builder /monorepo/apps/scheduler-api/migrations ./apps/scheduler-api/migrations
 
 WORKDIR /monorepo/apps/scheduler-api
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+CMD ["npm", "start"]
