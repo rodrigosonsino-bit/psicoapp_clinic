@@ -1,3 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/scheduler-api/Dockerfile"
+
 [deploy]
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
