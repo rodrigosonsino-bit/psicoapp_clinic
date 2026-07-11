@@ -157,8 +157,12 @@ export class PostgresMessageRepository implements IMessageRepository {
         }
 
         if (filters?.recipientId) {
-            conditions.push(`sm.recipient_id LIKE $${idx++}`);
+            // Busca tanto pelo telefone/JID bruto (recipient_id) quanto pelo nome do contato
+            // exibido na lista (mesma expressão COALESCE do SELECT) — sem isso, buscar por nome
+            // nunca batia com nada, só números batiam.
+            conditions.push(`(sm.recipient_id ILIKE $${idx} OR COALESCE(sm.metadata->>'recipientName', wc.name) ILIKE $${idx})`);
             values.push(`%${filters.recipientId}%`);
+            idx++;
         }
 
         const limitIdx = idx++;
