@@ -19,6 +19,8 @@ export interface WeeklyReportStats {
     }[];
 }
 
+const REPORT_TIMEZONE = 'America/Sao_Paulo';
+
 export class WeeklyReportUseCase {
     /**
      * Defensive query limit for retrieving weekly report messages.
@@ -29,13 +31,17 @@ export class WeeklyReportUseCase {
     constructor(private readonly messageRepository: IMessageRepository) {}
 
     async execute(userId: string, recipientId?: string): Promise<WeeklyReportStats> {
-        // Definir os últimos 7 dias (incluindo hoje)
-        const endDate = new Date();
-        endDate.setHours(23, 59, 59, 999);
+        // Definir os últimos 7 dias (incluindo hoje) em horário de Brasília — o servidor
+        // (Railway) roda em UTC, então usar new Date().setHours()/setDate() puro (fuso do
+        // processo) desalinhava a janela em até 3h e fazia mensagens enviadas à noite (21h-23h59
+        // BRT) caírem no dia seguinte do gráfico, além de potencialmente incluir/excluir mensagens
+        // erradas na janela de "últimos 7 dias".
+        const todayBrtStr = new Date().toLocaleDateString('en-CA', { timeZone: REPORT_TIMEZONE }); // YYYY-MM-DD
+        const endDate = new Date(`${todayBrtStr}T23:59:59.999-03:00`);
 
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 6);
-        startDate.setHours(0, 0, 0, 0);
+        const sixDaysAgoInstant = new Date(endDate.getTime() - 6 * 24 * 60 * 60 * 1000);
+        const startDateBrtStr = sixDaysAgoInstant.toLocaleDateString('en-CA', { timeZone: REPORT_TIMEZONE });
+        const startDate = new Date(`${startDateBrtStr}T00:00:00.000-03:00`);
 
         // Buscar todas as mensagens no período (usamos um limite alto para abranger tudo)
         const messages = await this.messageRepository.findAll(userId, WeeklyReportUseCase.MAX_WEEKLY_REPORT_MESSAGES, 0, {
@@ -54,10 +60,9 @@ export class WeeklyReportUseCase {
         // 2. Inicializar as estatísticas diárias para os últimos 7 dias
         const dailyStats: { day: string; date: string; count: number }[] = [];
         for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const dateString = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-            let dayName = d.toLocaleDateString('pt-BR', { weekday: 'short' }); // ex: "seg.", "ter."
+            const d = new Date(endDate.getTime() - i * 24 * 60 * 60 * 1000);
+            const dateString = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: REPORT_TIMEZONE });
+            let dayName = d.toLocaleDateString('pt-BR', { weekday: 'short', timeZone: REPORT_TIMEZONE }); // ex: "seg.", "ter."
             dayName = dayName.charAt(0).toUpperCase() + dayName.slice(1).replace('.', '');
             
             dailyStats.push({
@@ -86,7 +91,7 @@ export class WeeklyReportUseCase {
 
             // Agrupamento diário por data de agendamento (sendAt)
             const sendAtDate = new Date(msg.sendAt);
-            const msgDateString = sendAtDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            const msgDateString = sendAtDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: REPORT_TIMEZONE });
             
             const dayStat = dailyStats.find(ds => ds.date === msgDateString);
             if (dayStat) {
