@@ -1,0 +1,9 @@
+node_modules
+.git
+**/*.exe
+**/.cache
+desktop
+dist
+android
+ios
+**/*.zip

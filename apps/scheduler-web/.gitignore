@@ -46,3 +46,5 @@ desktop/dist-new/
 desktop/dist-package/
 desktop/node_modules/
 dist-desktop/
+
+.vercel
