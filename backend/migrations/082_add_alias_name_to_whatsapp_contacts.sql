@@ -1,0 +1,1 @@
+ALTER TABLE whatsapp_contacts ADD COLUMN IF NOT EXISTS alias_name TEXT;

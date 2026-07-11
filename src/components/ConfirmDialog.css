@@ -1,0 +1,146 @@
+.confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 17, 26, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 1rem;
+}
+
+.confirm-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 440px;
+  width: 100%;
+  position: relative;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.confirm-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.confirm-close-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-surface-hover);
+}
+
+.confirm-header {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.confirm-icon-wrapper {
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wrapper-danger {
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.wrapper-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+.wrapper-info {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.confirm-icon.icon-danger {
+  color: var(--status-danger);
+}
+
+.confirm-icon.icon-warning {
+  color: var(--status-warning);
+}
+
+.confirm-icon.icon-info {
+  color: var(--status-info);
+}
+
+.confirm-title-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.confirm-title-wrapper h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.confirm-title-wrapper p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* Actions buttons variants mapping */
+.btn.confirm-submit-btn.btn-danger {
+  background-color: var(--status-danger);
+  border: 1px solid var(--status-danger);
+  color: white;
+}
+
+.btn.confirm-submit-btn.btn-danger:hover {
+  background-color: #dc2626;
+  border-color: #dc2626;
+  transform: translateY(-1px);
+}
+
+.btn.confirm-submit-btn.btn-warning {
+  background-color: var(--status-warning);
+  border: 1px solid var(--status-warning);
+  color: white;
+}
+
+.btn.confirm-submit-btn.btn-warning:hover {
+  background-color: #d97706;
+  border-color: #d97706;
+  transform: translateY(-1px);
+}
+
+.btn.confirm-submit-btn.btn-info {
+  background-color: var(--status-info);
+  border: 1px solid var(--status-info);
+  color: white;
+}
+
+.btn.confirm-submit-btn.btn-info:hover {
+  background-color: #2563eb;
+  border-color: #2563eb;
+  transform: translateY(-1px);
+}

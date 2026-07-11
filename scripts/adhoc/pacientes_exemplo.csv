@@ -1,0 +1,6 @@
+nome,telefone,email,tipo_pagamento,preco_sessao,status,observacoes
+Ana Souza,11999990001,ana@email.com,por_sessao,180,semanal,Paciente nova
+Bruno Lima,11999990002,,por_sessao,150,quinzenal,
+Carla Mendes,11999990003,carla@email.com,mensal,600,semanal,Cobrança mensal fixa
+Diana Rocha,,diana@email.com,por_sessao,180,avulso,Atendimento eventual
+Eduardo Santos,11999990005,,por_sessao,150,inativo,Pausou tratamento

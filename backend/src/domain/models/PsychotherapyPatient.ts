@@ -1,0 +1,24 @@
+export type PatientStatus = 'weekly' | 'biweekly' | 'monthly' | 'one_off' | 'inactive';
+export type PaymentType = 'monthly' | 'per_session';
+export type ReminderChannel = 'whatsapp' | 'email' | 'both' | 'none';
+
+export class PsychotherapyPatient {
+    constructor(
+        public readonly id: string,
+        public readonly tenantId: string,
+        public readonly name: string,
+        public readonly status: PatientStatus,
+        public readonly paymentType: PaymentType | null,
+        public readonly defaultSessionPriceCents: number | null,
+        public readonly notes: string | null,
+        public readonly document: string | null,
+        public readonly phone: string | null,
+        public readonly email: string | null,
+        public readonly createdAt: Date,
+        public readonly updatedAt: Date,
+        public readonly reminderChannel: ReminderChannel = 'whatsapp',
+        public readonly fullName: string | null = null,
+        public readonly whatsappBulkOptIn: boolean = false,
+        public readonly individualTherapyEnabled: boolean = true
+    ) {}
+}

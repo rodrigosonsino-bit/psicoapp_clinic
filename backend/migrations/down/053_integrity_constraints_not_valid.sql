@@ -1,0 +1,32 @@
+-- Down Migration: 053_integrity_constraints_not_valid.sql
+
+ALTER TABLE therapy_group_members DROP CONSTRAINT IF EXISTS fk_group_members_patient_tenant;
+ALTER TABLE therapy_group_members DROP CONSTRAINT IF EXISTS fk_group_members_group_tenant;
+ALTER TABLE psychotherapy_reminders_log DROP CONSTRAINT IF EXISTS fk_reminders_appointment_tenant;
+ALTER TABLE group_session_records DROP CONSTRAINT IF EXISTS fk_group_sessions_appointment_tenant;
+ALTER TABLE group_session_records DROP CONSTRAINT IF EXISTS fk_group_sessions_group_tenant;
+ALTER TABLE group_session_records DROP CONSTRAINT IF EXISTS fk_group_sessions_patient_tenant;
+ALTER TABLE group_payments DROP CONSTRAINT IF EXISTS fk_group_payments_group_tenant;
+ALTER TABLE group_payments DROP CONSTRAINT IF EXISTS fk_group_payments_patient_tenant;
+ALTER TABLE psychotherapy_booking_links DROP CONSTRAINT IF EXISTS fk_booking_links_patient_tenant;
+ALTER TABLE psychotherapy_treatment_plans DROP CONSTRAINT IF EXISTS fk_treatment_plans_patient_tenant;
+ALTER TABLE psychotherapy_anamnesis DROP CONSTRAINT IF EXISTS fk_anamnesis_patient_tenant;
+ALTER TABLE psychotherapy_monthly_records DROP CONSTRAINT IF EXISTS fk_monthly_records_patient_tenant;
+ALTER TABLE psychotherapy_pix_charges DROP CONSTRAINT IF EXISTS fk_pix_charges_monthly_record_tenant;
+ALTER TABLE psychotherapy_pix_charges DROP CONSTRAINT IF EXISTS fk_pix_charges_patient_tenant;
+ALTER TABLE psychotherapy_clinical_notes DROP CONSTRAINT IF EXISTS fk_clinical_notes_session_tenant;
+ALTER TABLE psychotherapy_clinical_notes DROP CONSTRAINT IF EXISTS fk_clinical_notes_patient_tenant;
+ALTER TABLE psychotherapy_appointments DROP CONSTRAINT IF EXISTS fk_appointments_calendar_event_tenant;
+ALTER TABLE psychotherapy_appointments DROP CONSTRAINT IF EXISTS fk_appointments_parent_tenant;
+ALTER TABLE psychotherapy_appointments DROP CONSTRAINT IF EXISTS fk_appointments_group_tenant;
+ALTER TABLE psychotherapy_appointments DROP CONSTRAINT IF EXISTS fk_appointments_patient_tenant;
+ALTER TABLE psychotherapy_receipts DROP CONSTRAINT IF EXISTS fk_receipts_patient_tenant;
+ALTER TABLE psychotherapy_sessions DROP CONSTRAINT IF EXISTS fk_sessions_patient_tenant;
+
+ALTER TABLE auth_refresh_tokens DROP CONSTRAINT IF EXISTS chk_refresh_tokens_family_id_not_null;
+ALTER TABLE therapy_group_members DROP CONSTRAINT IF EXISTS chk_group_members_tenant_id_not_null;
+ALTER TABLE psychotherapy_appointments DROP CONSTRAINT IF EXISTS chk_calendar_event_id_not_null;
+
+ALTER TABLE psychotherapy_sessions DROP CONSTRAINT IF EXISTS uq_psychotherapy_sessions_tenant;
+ALTER TABLE psychotherapy_appointments DROP CONSTRAINT IF EXISTS uq_psychotherapy_appointments_tenant;
+ALTER TABLE therapy_groups DROP CONSTRAINT IF EXISTS uq_therapy_groups_tenant;

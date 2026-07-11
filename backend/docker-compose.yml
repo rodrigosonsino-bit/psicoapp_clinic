@@ -1,0 +1,100 @@
+services:
+  app:
+    build: .
+    container_name: psychotherapy-backend
+    ports:
+      - "3001:3000"
+    environment:
+      # ── Servidor ──────────────────────────────
+      - PORT=3000
+      - NODE_ENV=production
+
+      # ── Banco ─────────────────────────────────
+      - DATABASE_URL=postgresql://psychotherapy:psychotherapy@postgres:5432/psychotherapy_db
+
+      # ── Auth JWT ──────────────────────────────
+      - JWT_SECRET=${JWT_SECRET}
+
+      # ── CORS (frontend URL) ───────────────────
+      - CORS_ORIGIN=http://localhost:5173
+
+      # ── App ───────────────────────────────────
+      - APP_BASE_URL=http://localhost:5173
+      - APP_NAME=PsicoApp
+
+      # ── Lembretes ─────────────────────────────
+      - ENABLE_REMINDERS=${ENABLE_REMINDERS:-true}
+      - REMINDER_WEBHOOK_URL=${REMINDER_WEBHOOK_URL:-}
+
+      # ── WhatsApp (Baileys) ────────────────────
+      - ENABLE_WHATSAPP=${ENABLE_WHATSAPP:-true}
+      - REDIS_URL=redis://redis:6379
+      - ADMIN_WHATSAPP_NUMBER=${ADMIN_WHATSAPP_NUMBER:-}
+      - SARAH_AUTO_REENABLE_MINUTES=${SARAH_AUTO_REENABLE_MINUTES:-60}
+      - SARAH_ZOMBIE_TIMEOUT_MINUTES=${SARAH_ZOMBIE_TIMEOUT_MINUTES:-10}
+
+      # ── Pix ───────────────────────────────────
+      - PIX_PROVIDER=${PIX_PROVIDER:-mock}
+      - EFI_CLIENT_ID=${EFI_CLIENT_ID:-}
+      - EFI_CLIENT_SECRET=${EFI_CLIENT_SECRET:-}
+      - EFI_PIX_KEY=${EFI_PIX_KEY:-}
+      - EFI_SANDBOX=${EFI_SANDBOX:-true}
+
+      # ── Google Calendar ───────────────────────
+      # Correção pós-auditoria (separação de monorepo, 2026-07-11): valores
+      # reais estavam hardcoded aqui — trocados por env vars, mesmo padrão
+      # já usado pra JWT_SECRET acima.
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=http://localhost:3001/auth/google/callback
+      - GOOGLE_CALENDAR_NAME=Sessões_Terapia
+      - TZ_CALENDAR=America/Sao_Paulo
+
+      # ── Dev bypass (desabilitado em produção) ─
+      - ALLOW_DEFAULT_USER=false
+      - DEFAULT_USER_ID=${DEFAULT_USER_ID:-e3b0c442-98fc-11ee-b9d1-0242ac120002}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: psychotherapy-postgres
+    environment:
+      - POSTGRES_USER=psychotherapy
+      - POSTGRES_PASSWORD=psychotherapy
+      - POSTGRES_DB=psychotherapy_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U psychotherapy -d psychotherapy_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: psychotherapy-redis
+    ports:
+      - "6380:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

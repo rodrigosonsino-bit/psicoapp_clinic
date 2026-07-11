@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS mp_events (
+  id VARCHAR PRIMARY KEY,
+  processed_at TIMESTAMP DEFAULT NOW()
+);

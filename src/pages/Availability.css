@@ -1,0 +1,72 @@
+.availability-page {}
+
+.availability-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.availability-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.availability-day-card {
+  padding: 1rem 1.25rem;
+}
+
+.availability-day-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--brand-primary);
+  margin: 0 0 0.75rem;
+}
+
+.availability-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.availability-slot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.625rem;
+  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  transition: opacity var(--transition-fast);
+}
+
+.availability-slot-row.inactive {
+  opacity: 0.45;
+}
+
+.slot-time {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.slot-time strong {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.slot-time span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.slot-actions {
+  display: flex;
+  gap: 0.25rem;
+}

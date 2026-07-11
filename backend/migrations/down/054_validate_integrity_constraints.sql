@@ -1,0 +1,2 @@
+-- Down Migration: 054_validate_integrity_constraints.sql
+-- (A reversão é tratada no down da migration 053 que remove as constraints fisicamente)
