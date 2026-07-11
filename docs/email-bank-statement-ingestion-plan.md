@@ -1,12 +1,24 @@
-# Ingestão Automática de Extrato Bancário via E-mail — Plano v2 — **APROVADO COM RESSALVAS (não implementado)**
+# Ingestão Automática de Extrato Bancário via E-mail — Plano v3 — **APROVADO, pré-requisito resolvido**
 
 > **Veredito final (2ª rodada de auditoria Codex CLI, 2026-07-11):
 > Aprovado com ressalvas.** Os 6 achados da v1 foram fechados; a única
 > ressalva remanescente (mecanismo de reclaim de mensagens travadas
 > precisava ser um `UPDATE` atômico, não leitura+escrita em passos
-> separados) já foi corrigida no texto abaixo. **Plano pronto pra
-> implementação — bloqueado só pelo pré-requisito real: confirmar o
-> formato do e-mail/anexo do Nubank com um envio de teste.**
+> separados) já foi corrigida no texto abaixo.
+>
+> **Atualização v3**: usuário confirmou que o e-mail automático do Nubank
+> chega **nos 3 formatos anexados** (CSV, OFX, PDF — os mesmos 3 já
+> baixados manualmente e usados pra validar a v1). Isso resolve o
+> pré-requisito bloqueante — **cai no caso simples já previsto**: extrair
+> especificamente o anexo `.csv` entre os 3 e reaproveitar
+> `ImportBankStatementUseCase`/`parseNubankCsv()` sem nenhuma mudança
+> neles. **3ª rodada de auditoria (Codex CLI) confirmou a simplificação
+> como segura** e pegou 1 inconsistência textual real (regra antiga de
+> "rejeitar múltiplos anexos" incompatível com o e-mail real ter 3) — já
+> corrigida no texto abaixo. **Plano aprovado, pronto pra implementação.**
+> A validação com um e-mail real de verdade (nome exato do anexo,
+> remetente, assunto) continua recomendada antes de produção, não mais
+> bloqueante — ver seção de riscos.
 
 > **Histórico**: v1 auditada pelo Codex CLI e **reprovada** (2026-07-11) —
 > 6 achados (3 altos, 3 médios): verificação SPF/DKIM subespecificada e
@@ -34,43 +46,42 @@ e-mail, extrai o anexo, e roda o **mesmo pipeline já existente e aprovado**
 terapeuta confirma manualmente cada sugestão. **Nada muda na gravação** —
 só a origem do arquivo deixa de ser upload manual e passa a ser automática.
 
-## Pré-requisito bloqueante — mesma categoria de risco que a v1 teve com PDF/CSV/OFX
+## Formato do anexo — resolvido (v3): CSV entre 3 anexos
 
-**Não sabemos, ainda, em que formato o Nubank manda o extrato por e-mail
-automático.** Pode ser PDF anexado (mais comum em envios automáticos de
-banco), pode ser um link pra baixar, pode até ser o CSV. A v1 deste projeto
-já mudou de arquitetura 2 vezes (PDF → CSV/OFX) por causa exatamente desse
-tipo de suposição não validada — **não repetir o erro aqui**. Antes de
-escrever qualquer parser novo:
+**Confirmado pelo usuário (2026-07-11)**: o e-mail automático do Nubank
+chega com os 3 formatos anexados (CSV, OFX, PDF) — mesmos 3 que já foram
+baixados manualmente e usados pra validar a v1 da conciliação. Isso resolve
+o que era o pré-requisito bloqueante deste plano (a v1 chegou a mudar de
+arquitetura 2x, PDF → CSV/OFX, por causa de suposição de formato não
+validada — aqui não precisa repetir esse ciclo, o formato já é conhecido).
 
-1. Usuário configura o envio recorrente no app do Nubank pro alias.
-2. Aguardar 1 envio real chegar.
-3. Inspecionar o e-mail real (remetente exato, assunto, formato do anexo
-   ou link, se tem senha/proteção no PDF).
-4. Só então decidir: reaproveitar o parser CSV já existente (se o anexo for
-   CSV), ou desenhar um novo caminho (se for PDF/link).
+**Decisão de parsing**: o job de e-mail identifica o anexo cujo nome/
+`Content-Type` indica CSV (ex. `filename.endsWith('.csv')` ou
+`Content-Type: text/csv`) entre os 3 anexados, **ignora OFX e PDF**, e
+passa o buffer do CSV pro `parseNubankCsv()`/`ImportBankStatementUseCase`
+já existentes — nenhuma mudança nesses dois. Se por algum motivo o anexo
+CSV não estiver presente numa mensagem específica (ex. Nubank muda o
+comportamento), a mensagem cai em `status='no_attachment'` (schema já
+previsto abaixo) — nunca tenta parsear PDF/OFX como fallback silencioso.
 
-**Correção da v2 (achado #3 da auditoria)**: a v1 dizia "roda o mesmo
-pipeline já existente e aprovado" como se fosse verdade incondicionalmente
-— **não é**. `ImportBankStatementUseCase` hoje chama `parseNubankCsv()`
-direto e grava `file_format='csv'` — é **CSV-only**, ponto final. As duas
-hipóteses de formato do anexo do e-mail levam a caminhos bem diferentes:
+**Ainda recomendado, não bloqueante**: validar contra 1 e-mail real assim
+que o primeiro chegar — confirmar nome exato do arquivo CSV anexado (pra
+calibrar a detecção por nome/extensão), remetente real (pro filtro de
+segurança da seção seguinte) e assunto. Isso pode acontecer em paralelo
+com o início da implementação, não precisa mais ser um passo prévio
+sequencial.
 
-- **Se vier CSV**: a frase "mesmo pipeline" fica literalmente verdadeira —
-  só muda a origem do buffer (upload HTTP → anexo de e-mail), o resto do
-  código não muda nada.
-- **Se vier PDF**: **não é** "só trocar a origem do arquivo" — reabre
-  integralmente os riscos já identificados e descartados na v6 do plano de
-  conciliação (extração posicional, ausência provável de FITID real,
-  dedupe mais frágil, hardening contra PDF malicioso). Nesse caso, esta
-  fase 2 vira um projeto do tamanho da v6, não um incremento pequeno sobre
-  a v1 já aprovada. **Isso precisa ser reavaliado com o usuário antes de
-  prosseguir** se o formato real vier a ser PDF — não é uma decisão que
-  este plano toma sozinho.
-
-Este plano **não assume mais** um formato específico como hipótese de
-trabalho (a v1 assumia PDF "porque é mais comum") — a decisão de caminho
-fica genuinamente em aberto até o passo 1 (bloqueante) ser cumprido.
+**Correção da v2 (achado #3 da auditoria), agora resolvida na v3**: a v1
+dizia "roda o mesmo pipeline já existente e aprovado" como se fosse
+verdade incondicionalmente — não era, `ImportBankStatementUseCase` é
+CSV-only. A v2 deixou a decisão de caminho em aberto (CSV = trivial, PDF =
+projeto do tamanho da v6 descartada). **Com a confirmação da v3 de que o
+CSV está entre os 3 anexos**, a frase volta a ser literalmente verdadeira:
+só muda a origem do buffer (upload HTTP → anexo de e-mail extraído), o
+resto do código (`parseNubankCsv`, motor de matching, gates de
+confirmação) não muda nada. O caminho "se vier PDF" fica documentado como
+não aplicável a esta integração — OFX e PDF do e-mail são simplesmente
+ignorados, não processados.
 
 ## Decisão de arquitetura: Gmail API, conexão OAuth dedicada (não reaproveitar a do Calendar)
 
@@ -260,9 +271,16 @@ nenhuma presente na v1:
 - **Validar o anexo por conteúdo real (content sniffing), não só pela
   extensão/`Content-Type` declarado** pelo e-mail — mesmo princípio da
   validação de assinatura de arquivo já usada no upload manual.
-- **Rejeitar mensagens com múltiplos anexos inesperados** (mais que 1) sem
-  tentar adivinhar qual é o extrato — reportar como `error`, deixar pra
-  revisão manual.
+- **Correção da v3 (achado da 3ª rodada de auditoria)**: a regra da v2
+  ("rejeitar múltiplos anexos") ficou incompatível com o formato real
+  confirmado — o e-mail legítimo do Nubank chega com **3 anexos** (CSV,
+  OFX, PDF), não 1. Regra corrigida: aceitar a mensagem só se houver
+  **exatamente 1 anexo `.csv`** dentro de uma allowlist conhecida de
+  extensões esperadas (`.csv`, `.ofx`, `.pdf` — os outros 2 são ignorados,
+  não processados). Rejeitar (`status='error'`, revisão manual) se: zero
+  anexos `.csv`, mais de um anexo `.csv`, ou qualquer anexo fora dessa
+  allowlist (sinal de mensagem fora do padrão esperado, mesmo que tenha
+  passado nos filtros de remetente/autenticação).
 - **Nunca seguir link arbitrário presente no corpo do e-mail** — se o
   Nubank mandar um link de download em vez de anexo direto (possível,
   ainda não confirmado), isso é fora de escopo desta v2 e precisa de
@@ -279,13 +297,14 @@ nenhuma presente na v1:
   da rejeição (remetente, motivo técnico) — nunca corpo/assunto completo
   do e-mail rejeitado.
 
-## Riscos e assunções (bloqueantes)
+## Riscos e assunções
 
-1. **Formato real do anexo/e-mail do Nubank — não confirmado** (seção
-   "Pré-requisito bloqueante" acima). Bloqueante de verdade — nada de
-   parser novo antes disso.
-2. Domínio de envio real do Nubank pra verificação de remetente — a
-   confirmar com o e-mail real.
+1. ~~Formato real do anexo/e-mail do Nubank~~ — **resolvido na v3**: CSV
+   confirmado entre os 3 anexos. Não bloqueia mais.
+2. Domínio de envio real do Nubank pra verificação de remetente — ainda a
+   confirmar com o e-mail real (não bloqueia o início da implementação,
+   bloqueia só ativar o filtro de segurança em produção — ver seção de
+   passos).
 3. Cadência de envio automático configurável no app do Nubank — não
    confirmado se é diária/semanal/mensal, isso afeta a cadência do
    polling (não faz sentido pollar de 15 em 15 min um e-mail que só chega
@@ -293,28 +312,33 @@ nenhuma presente na v1:
 4. Custo/limite de quota da Gmail API — verificar se o plano gratuito do
    Google Cloud cobre o volume esperado (deve ser trivial pro volume de
    1 e-mail por tenant por ciclo, mas confirmar antes de assumir).
+5. **Novo**: nome exato do arquivo CSV anexado (pra calibrar a detecção
+   por extensão/`Content-Type` no meio dos 3 anexos) — só confirmável com
+   o e-mail real.
 
-## Fora de escopo desta v1
+## Fora de escopo desta v3
 
 - Notificação proativa (WhatsApp/push) de novas sugestões.
 - Suporte a outros bancos além do Nubank.
 - Reaproveitar a conexão OAuth do Calendar (decisão explícita de manter
   separada).
-- Qualquer coisa além de PDF/CSV como formato de anexo (OFX por e-mail,
-  se existir, fica pra quando for confirmado que existe).
+- Processar os anexos OFX/PDF do e-mail (só o CSV é extraído e
+  processado; os outros 2 são ignorados).
 
 ## Passos de implementação (ordem sugerida)
 
-1. **Bloqueante**: usuário configura o envio automático no Nubank, aguarda
-   1 e-mail real chegar, compartilha o formato/remetente real.
-2. Decidir arquitetura de parsing definitiva com base no formato real
-   (reaproveitar CSV, ou desenhar extração de PDF).
-3. Registrar novo cliente/escopo OAuth dedicado (`gmail.readonly`), fluxo
+1. ~~Bloqueante: confirmar formato do anexo~~ — **resolvido** (CSV
+   confirmado entre os 3 anexos do e-mail automático).
+2. Registrar novo cliente/escopo OAuth dedicado (`gmail.readonly`), fluxo
    de conexão na tela de perfil (padrão similar ao "Conectar Google
    Calendar" já existente).
-4. Migration da tabela de dedupe de e-mail.
-5. `EmailBankStatementPollUseCase` + job `node-cron`.
-6. Testar contra o e-mail real numa branch Neon descartável antes de tocar
-   produção — mesmo rigor da v1.
-7. **Nova rodada de auditoria Codex CLI** antes de implementar de verdade
-   (mesmo processo da v1 — este plano ainda não foi auditado).
+3. Migration da tabela de dedupe de e-mail (`gmail_oauth_tokens` +
+   `psychotherapy_bank_statement_email_imports`).
+4. `EmailBankStatementPollUseCase` + job `node-cron` (extrai o anexo
+   `.csv` entre os 3, aplica os filtros de segurança, chama
+   `ImportBankStatementUseCase.execute()` já existente).
+5. Testar contra 1 e-mail real numa branch Neon descartável antes de tocar
+   produção — mesmo rigor da v1, incluindo confirmar nome do anexo e
+   domínio de remetente reais nesse teste.
+6. Build completo + verificação de hash de bundle (frontend, se a tela de
+   conexão/desconexão de e-mail for adicionada) antes de deploy.
