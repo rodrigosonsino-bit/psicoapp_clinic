@@ -6,6 +6,7 @@ import Patients from './pages/Patients';
 import Sessions from './pages/Sessions';
 import Expenses from './pages/Expenses';
 import MonthlyRecords from './pages/MonthlyRecords';
+import BankReconciliation from './pages/BankReconciliation';
 import Receipts from './pages/Receipts';
 import ProfileSettings from './pages/ProfileSettings';
 import Appointments from './pages/Appointments';
@@ -42,6 +43,7 @@ function App() {
           <Route path="sessions" element={<Sessions />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="monthly-records" element={<MonthlyRecords />} />
+          <Route path="bank-reconciliation" element={<BankReconciliation />} />
           <Route path="receipts" element={<Receipts />} />
           <Route path="groups" element={<Groups />} />
           <Route path="fiscal" element={<Fiscal />} />

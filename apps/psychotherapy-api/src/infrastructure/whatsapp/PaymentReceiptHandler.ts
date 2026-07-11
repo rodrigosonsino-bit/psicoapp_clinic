@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Pool } from 'pg';
 import { IncomingMessageContext } from '@antigravity/whatsapp-core';
 import { logger } from '../logger';
+import { incrementPaidSessions } from '../db/incrementPaidSessions';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -137,30 +138,6 @@ function calcSessionsFromAmount(
     return { sessionsToAdd, isFullPayment };
 }
 
-// ── 5. Atualizar paid_sessions no banco ──────────────────────────────────────
-
-async function applyPayment(
-    dbPool: Pool,
-    tenantId: string,
-    recordId: string,
-    newPaidSessions: number,
-    totalExpected: number,
-    absences: number
-): Promise<void> {
-    const target = Math.max(totalExpected - absences, 1);
-    const newStatus = newPaidSessions >= target ? 'paid'
-        : newPaidSessions > 0 ? 'partial'
-        : 'pending';
-
-    await dbPool.query(`
-        UPDATE psychotherapy_monthly_records
-        SET paid_sessions   = $1,
-            payment_status  = $2,
-            updated_at      = NOW()
-        WHERE tenant_id = $3 AND id = $4
-    `, [newPaidSessions, newStatus, tenantId, recordId]);
-}
-
 // ── 6. Handler principal ──────────────────────────────────────────────────────
 
 export function createPaymentReceiptHandler(dbPool: Pool) {
@@ -209,24 +186,34 @@ export function createPaymentReceiptHandler(dbPool: Pool) {
             return `Recebi seu comprovante de ${amountBRL} ✅\nCadastro financeiro não encontrado para o mês atual. Seu terapeuta será avisado.`;
         }
 
-        // 4. Calcular sessões
-        const { sessionsToAdd, isFullPayment } = calcSessionsFromAmount(amountCents, record);
+        // 4. Calcular quantas sessões o valor cobriria (prévia — só pra decidir
+        // se vale a pena chamar o banco; o valor real aplicado vem do UPDATE
+        // atômico no passo 5, que revalida o saldo no momento da escrita)
+        const { sessionsToAdd } = calcSessionsFromAmount(amountCents, record);
         if (sessionsToAdd <= 0) {
             return `Recebi o comprovante de ${amountBRL} ✅\nSuas sessões de ${month.substring(5, 7)}/${month.substring(0, 4)} já estão todas pagas. Obrigada!`;
         }
 
-        // 5. Aplicar pagamento
-        const newPaidSessions = record.paidSessions + sessionsToAdd;
-        await applyPayment(dbPool, ctx.tenantId, record.id, newPaidSessions, record.expectedSessions, record.absences);
+        // 5. Aplicar pagamento — UPDATE atômico de linha única (elimina a race
+        // entre este handler e outro escritor concorrente de paid_sessions,
+        // ex. o endpoint de conciliação bancária; ver
+        // docs/bank-statement-reconciliation-plan.md)
+        const { paidSessions: newPaidSessions, appliedSessions } = await incrementPaidSessions(
+            dbPool, ctx.tenantId, record.id, sessionsToAdd
+        );
 
-        logger.info({ patientId: patient.id, amountCents, sessionsToAdd, newPaidSessions }, '[Receipt] Pagamento registrado com sucesso');
+        logger.info({ patientId: patient.id, amountCents, sessionsToAdd, appliedSessions, newPaidSessions }, '[Receipt] Pagamento registrado com sucesso');
 
-        // 6. Montar resposta
-        const sessionWord = sessionsToAdd === 1 ? 'sessão registrada' : 'sessões registradas';
-        const suffix = isFullPayment
+        // 6. Montar resposta a partir do que foi REALMENTE aplicado pelo UPDATE
+        // (appliedSessions pode ser menor que sessionsToAdd se o saldo mudou
+        // entre a leitura do passo 3 e a escrita, ex. concorrência) — nunca do
+        // valor pré-calculado no passo 4.
+        const remaining = Math.max(record.expectedSessions - record.absences - newPaidSessions, 0);
+        const sessionWord = appliedSessions === 1 ? 'sessão registrada' : 'sessões registradas';
+        const suffix = remaining <= 0
             ? 'Pagamento do mês quitado! ✅'
-            : `Faltam ${record.expectedSessions - record.absences - newPaidSessions} sessão(ões) para quitar o mês.`;
+            : `Faltam ${remaining} sessão(ões) para quitar o mês.`;
 
-        return `✅ Pagamento de ${amountBRL} confirmado!\n${sessionsToAdd} ${sessionWord} em ${month}.\n${suffix}\n\nObrigada, ${patient.name.split(' ')[0]}! 🙏`;
+        return `✅ Pagamento de ${amountBRL} confirmado!\n${appliedSessions} ${sessionWord} em ${month}.\n${suffix}\n\nObrigada, ${patient.name.split(' ')[0]}! 🙏`;
     };
 }

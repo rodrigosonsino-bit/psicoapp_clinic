@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import rateLimit from 'express-rate-limit';
 import { PsychotherapyController } from '../controllers/PsychotherapyController';
+import { BankStatementController } from '../controllers/BankStatementController';
 import { ProfileController } from '../controllers/ProfileController';
 import { ReceiptController } from '../controllers/ReceiptController';
 import { SessionController } from '../controllers/SessionController';
@@ -31,6 +34,41 @@ const uuidParamSchema = z.object({
 
 const monthParamSchema = z.object({
     month: z.string().regex(/^\d{4}-\d{2}$/, 'Mês inválido (esperado formato YYYY-MM)')
+});
+
+// Conciliação de extrato bancário
+const importIdParamSchema = z.object({
+    importId: z.string().uuid('ID de import inválido')
+});
+
+const bankStatementTransactionsQuerySchema = z.object({
+    status: z.enum(['pending', 'confirmed', 'ignored']).optional()
+});
+
+const confirmBankStatementTransactionSchema = z.object({
+    patientId: z.string().uuid('ID do paciente inválido'),
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'Mês inválido (esperado formato YYYY-MM)')
+});
+
+const confirmBankStatementBatchSchema = z.object({
+    ids: z.array(z.string().uuid()).min(1).max(200)
+});
+
+// multer memory storage — nunca persiste o arquivo em disco (contém nome/CPF
+// mascarado de terceiros). Limite de 5MB cobre anos de extrato de uma conta
+// pequena com folga.
+const bankStatementUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 }
+});
+
+// Rate limit dedicado ao endpoint de import (parsing de arquivo é mais caro
+// que os outros endpoints do CRUD).
+const bankStatementImportRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false
 });
 
 const advanceCreditSchema = z.object({
@@ -272,6 +310,7 @@ export function createPsychotherapyRoutes(): Router {
     const controller = container.resolve(PsychotherapyController);
     const profileController = container.resolve(ProfileController);
     const receiptController = container.resolve(ReceiptController);
+    const bankStatementController = container.resolve(BankStatementController);
 
     // Patients & Months
     router.get('/psychotherapy/patients', validateQuery(listPatientsQuerySchema), asyncHandler((req, res) => controller.listPatients(req, res)));
@@ -283,6 +322,40 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/months/:month/generate', validateParams(monthParamSchema), asyncHandler((req, res) => controller.generateMonth(req, res)));
     router.post('/psychotherapy/months/:month/records', validateParams(monthParamSchema), validateBody(monthlyRecordSchema), asyncHandler((req, res) => controller.saveMonthlyRecord(req, res)));
     router.post('/psychotherapy/patients/:patientId/advance-credit', validateParams(advanceCreditPatientIdParamSchema), validateBody(advanceCreditSchema), asyncHandler((req, res) => controller.addAdvanceCredit(req, res)));
+
+    // Conciliação de extrato bancário (ver docs/bank-statement-reconciliation-plan.md)
+    router.post(
+        '/psychotherapy/bank-statements/import',
+        bankStatementImportRateLimit,
+        bankStatementUpload.single('file'),
+        asyncHandler((req, res) => bankStatementController.import(req, res))
+    );
+    router.get(
+        '/psychotherapy/bank-statements/imports/latest',
+        asyncHandler((req, res) => bankStatementController.getLatestImport(req, res))
+    );
+    router.get(
+        '/psychotherapy/bank-statements/imports/:importId/transactions',
+        validateParams(importIdParamSchema),
+        validateQuery(bankStatementTransactionsQuerySchema),
+        asyncHandler((req, res) => bankStatementController.listTransactions(req, res))
+    );
+    router.post(
+        '/psychotherapy/bank-statements/transactions/:id/confirm',
+        validateParams(uuidParamSchema),
+        validateBody(confirmBankStatementTransactionSchema),
+        asyncHandler((req, res) => bankStatementController.confirm(req, res))
+    );
+    router.post(
+        '/psychotherapy/bank-statements/transactions/:id/ignore',
+        validateParams(uuidParamSchema),
+        asyncHandler((req, res) => bankStatementController.ignore(req, res))
+    );
+    router.post(
+        '/psychotherapy/bank-statements/transactions/confirm-batch',
+        validateBody(confirmBankStatementBatchSchema),
+        asyncHandler((req, res) => bankStatementController.confirmBatch(req, res))
+    );
 
     // Profile
     router.get('/profile', asyncHandler((req, res) => profileController.getProfile(req, res)));

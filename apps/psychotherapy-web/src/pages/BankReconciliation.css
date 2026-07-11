@@ -1,0 +1,218 @@
+.bank-reconciliation-page {
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.bank-reconciliation-page .page-header {
+  margin-bottom: 1.5rem;
+}
+
+.bank-reconciliation-page .page-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+.bank-reconciliation-upload {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.bank-reconciliation-import-summary {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.bank-reconciliation-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.bank-reconciliation-filters {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filter-chip {
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.filter-chip:hover {
+  background: var(--bg-surface-hover);
+}
+
+.filter-chip.active {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: white;
+}
+
+.bank-reconciliation-batch-summary {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.bank-reconciliation-batch-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bank-reconciliation-empty {
+  color: var(--text-muted);
+  padding: 2rem 0;
+  text-align: center;
+}
+
+.bank-reconciliation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.bank-reconciliation-row {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+}
+
+.bank-reconciliation-row.confidence-high { border-left-color: var(--status-success); }
+.bank-reconciliation-row.confidence-medium { border-left-color: var(--status-warning); }
+.bank-reconciliation-row.confidence-low { border-left-color: var(--status-info); }
+.bank-reconciliation-row.confidence-none { border-left-color: var(--border-color); }
+
+.bank-reconciliation-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bank-reconciliation-row-date {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-width: 5.5rem;
+}
+
+.bank-reconciliation-row-amount {
+  font-weight: 600;
+  min-width: 6rem;
+}
+
+.bank-reconciliation-row-payer {
+  flex: 1;
+  min-width: 12rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bank-reconciliation-expand-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 0.15rem;
+}
+
+.bank-reconciliation-row-description {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.bank-reconciliation-select,
+.bank-reconciliation-month-input {
+  background: var(--bg-base);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.bank-reconciliation-select {
+  min-width: 12rem;
+}
+
+.bank-reconciliation-confirmed-info {
+  color: var(--status-success);
+  font-size: 0.875rem;
+}
+
+.bank-reconciliation-warning {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--status-warning);
+}
+
+.bank-reconciliation-warning.error {
+  color: var(--status-danger);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.btn-icon {
+  padding: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-success {
+  background: var(--status-success);
+  color: white;
+  border: none;
+}
+
+.btn-success:hover {
+  opacity: 0.9;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-surface-hover);
+}
+
+.badge-confidence-high { background-color: rgba(16, 185, 129, 0.1); color: var(--status-success); }
+.badge-confidence-medium { background-color: rgba(245, 158, 11, 0.1); color: var(--status-warning); }
+.badge-confidence-low { background-color: rgba(59, 130, 246, 0.1); color: var(--status-info); }
+.badge-confidence-none { background-color: rgba(100, 116, 139, 0.1); color: var(--text-muted); }

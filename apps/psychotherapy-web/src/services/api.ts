@@ -54,8 +54,11 @@ export async function fetchApi<T = unknown>(
 ): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
 
+  // FormData (upload de arquivo) não pode ter Content-Type forçado — o browser
+  // precisa gerar o boundary do multipart sozinho.
+  const isFormData = options.body instanceof FormData;
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...options.headers,
   };
 

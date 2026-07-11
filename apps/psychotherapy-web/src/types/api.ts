@@ -441,3 +441,49 @@ export interface TreatmentPlan {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Conciliação de extrato bancário ───────────────────────────────────────────
+
+export type BankStatementMatchConfidence = 'high' | 'medium' | 'low' | 'none';
+export type BankStatementTransactionStatus = 'pending' | 'confirmed' | 'ignored';
+
+export interface BankStatementImportResult {
+  importId: string;
+  transactionCount: number;
+  skippedLineCount: number;
+  duplicateFitidCount: number;
+}
+
+export interface BankStatementTransaction {
+  id: string;
+  fitid: string;
+  posted_at: string;
+  amount_cents: number;
+  raw_description: string;
+  payer_name_guess: string | null;
+  suggested_patient_id: string | null;
+  suggested_month: string | null;
+  suggested_sessions: number | null;
+  match_confidence: BankStatementMatchConfidence;
+  possible_pix_duplicate: boolean;
+  status: BankStatementTransactionStatus;
+  confirmed_patient_id: string | null;
+  confirmed_month: string | null;
+  confirmed_sessions: number | null;
+  confirmed_at: string | null;
+  ignored_at: string | null;
+  created_at: string;
+}
+
+export interface BankStatementConfirmResult {
+  transactionId: string;
+  confirmedSessions: number;
+  paidSessions: number;
+  paymentStatus: 'paid' | 'partial' | 'pending';
+}
+
+export interface BankStatementBatchResult {
+  total: number;
+  success: number;
+  results: Array<{ id: string; success: boolean; reason?: string }>;
+}
