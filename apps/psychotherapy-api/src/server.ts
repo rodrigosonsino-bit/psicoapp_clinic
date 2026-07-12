@@ -289,14 +289,15 @@ if (require.main === module) {
                 });
 
                 // Cron 3: Ingestão automática de extrato bancário via e-mail (Gmail),
-                // a cada 6h — extrato não muda em tempo real, não precisa ser frequente.
-                nodeCron.schedule('0 */6 * * *', async () => {
+                // toda segunda-feira às 6h (horário de Brasília) — o Nubank envia o
+                // extrato semanalmente, não precisa de polling mais frequente.
+                nodeCron.schedule('0 6 * * 1', async () => {
                     try {
                         await container.resolve(EmailBankStatementPollUseCase).execute();
                     } catch (err) {
                         logger.error({ err }, 'Erro ao rodar polling de extrato bancário via e-mail');
                     }
-                });
+                }, { timezone: 'America/Sao_Paulo' });
             });
         })
         .catch(err => {
