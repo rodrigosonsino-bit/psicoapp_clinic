@@ -25,6 +25,7 @@ interface MetaMessageItem {
     timestamp?: string;
     type?: string;
     text?: { body?: string };
+    reaction?: { message_id?: string; emoji?: string };
 }
 
 interface MetaChangeValue {
@@ -146,9 +147,12 @@ export class WhatsappCloudWebhookController {
 
         // Preview curto e só de texto — mídia/áudio/outros tipos viram um marcador genérico em
         // vez de tentar baixar/reter o conteúdo (fora de escopo desta notificação simples).
+        // Reação (emoji a uma mensagem anterior) é exceção: o emoji cabe no preview de texto.
         const textPreview = message.type === 'text' && message.text?.body
             ? message.text.body.slice(0, 300)
-            : `[mensagem do tipo '${message.type ?? 'desconhecido'}']`;
+            : message.type === 'reaction' && message.reaction?.emoji
+                ? `${message.reaction.emoji} (reação)`
+                : `[mensagem do tipo '${message.type ?? 'desconhecido'}']`;
 
         await this.repository.insertWebhookMessageEvent({
             providerMessageId: message.id,
