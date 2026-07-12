@@ -74,6 +74,32 @@ export class BankStatementController {
         }
     }
 
+    /**
+     * Tela de e-mails rejeitados (extensão da Conciliação Bancária, ver
+     * docs/email-bank-statement-ingestion-plan.md) — mostra só o mínimo
+     * necessário (remetente normalizado, motivo técnico), nunca
+     * corpo/assunto do e-mail.
+     */
+    async listEmailImports(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+
+        const result = await this.dbPool.query<{
+            id: string; gmail_message_id: string; status: string; error_detail: string | null;
+            sender_normalized: string | null; import_id: string | null;
+            processed_at: string | null; created_at: string;
+        }>(
+            `SELECT id, gmail_message_id, status, error_detail, sender_normalized, import_id,
+                    processed_at, created_at
+             FROM psychotherapy_bank_statement_email_imports
+             WHERE tenant_id = $1
+             ORDER BY created_at DESC
+             LIMIT 50`,
+            [tenantId]
+        );
+
+        return res.status(200).json({ data: result.rows });
+    }
+
     async getLatestImport(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);
 

@@ -335,6 +335,10 @@ export function createPsychotherapyRoutes(): Router {
         asyncHandler((req, res) => bankStatementController.getLatestImport(req, res))
     );
     router.get(
+        '/psychotherapy/bank-statements/email-imports',
+        asyncHandler((req, res) => bankStatementController.listEmailImports(req, res))
+    );
+    router.get(
         '/psychotherapy/bank-statements/imports/:importId/transactions',
         validateParams(importIdParamSchema),
         validateQuery(bankStatementTransactionsQuerySchema),

@@ -6,6 +6,7 @@ import { PostgresBroadcastRepository } from './infrastructure/repositories/Postg
 import { MockPixProvider } from './infrastructure/pix/MockPixProvider';
 import { EfiBankPixProvider } from './infrastructure/pix/EfiBankPixProvider';
 import { GoogleCalendarService } from './infrastructure/google/GoogleCalendarService';
+import { GmailAuthService } from './infrastructure/google/GmailAuthService';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
 import { BroadcastQueue } from './infrastructure/queue/BroadcastQueue';
 import { BroadcastOutboxDispatcher } from './infrastructure/queue/BroadcastOutboxDispatcher';
@@ -32,6 +33,9 @@ container.registerSingleton('IPixProvider', useRealPix ? EfiBankPixProvider : Mo
 
 // Google Calendar Service
 container.registerSingleton('GoogleCalendarService', GoogleCalendarService);
+
+// Gmail (extrato bancário via e-mail) — conexão OAuth dedicada, separada do Calendar
+container.registerSingleton(GmailAuthService);
 
 // WhatsApp Session Manager (singleton — inicializado em server.ts via initializeAll)
 container.registerInstance('WhatsappSessionManager', new WhatsappSessionManager('psicoapp'));

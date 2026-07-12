@@ -11,6 +11,8 @@ export interface ImportBankStatementResult {
     duplicateFitidCount: number;
 }
 
+const GMAIL_MESSAGE_ID_UNIQUE_CONSTRAINT = 'uq_bank_stmt_imports_gmail_message_id';
+
 interface CandidatePatient {
     id: string;
     name: string;
@@ -42,64 +44,125 @@ interface MatchResult {
 export class ImportBankStatementUseCase {
     constructor(@inject(Pool) private readonly dbPool: Pool) {}
 
+    /**
+     * Genuinamente transacional (achado real da 6ª rodada de auditoria do
+     * plano de ingestão via e-mail: antes desta mudança, INSERT do import +
+     * INSERTs de transações + UPDATE de duplicate_fitid_count eram queries
+     * soltas — um crash no meio deixava um import parcial que qualquer
+     * checagem de idempotência por fora trataria como concluído com
+     * sucesso). `sourceGmailMessageId`, quando presente, é a chave de dedupe
+     * do job de e-mail — gravada atomicamente no mesmo INSERT que cria a
+     * linha do import, nunca num passo externo separado.
+     */
     async execute(params: {
         tenantId: string;
         importedBy: string;
         fileName: string;
         fileBuffer: Buffer;
+        sourceGmailMessageId?: string;
     }): Promise<ImportBankStatementResult> {
-        const { tenantId, importedBy, fileName, fileBuffer } = params;
+        const { tenantId, importedBy, fileName, fileBuffer, sourceGmailMessageId = null } = params;
 
         const { transactions, skippedLineCount, periodStart, periodEnd } = parseNubankCsv(fileBuffer);
 
         const candidates = await this.loadCandidatePatients(tenantId);
-
-        const importRes = await this.dbPool.query<{ id: string }>(
-            `INSERT INTO psychotherapy_bank_statement_imports
-                (tenant_id, file_name, file_format, period_start, period_end,
-                 transaction_count, skipped_line_count, imported_by)
-             VALUES ($1, $2, 'csv', $3, $4, $5, $6, $7)
-             RETURNING id`,
-            [tenantId, fileName, periodStart, periodEnd, transactions.length, skippedLineCount, importedBy]
-        );
-        const importId = importRes.rows[0].id;
-
-        let duplicateFitidCount = 0;
-
+        // Matching é feito antes de abrir a transação de escrita (só leitura,
+        // sem efeito colateral) — mesma ordem sequencial do código original,
+        // só reposicionada pra fora do client transacional.
+        const matches: MatchResult[] = [];
         for (const tx of transactions) {
-            const match = await this.matchTransaction(tenantId, tx, candidates);
-
-            const insertRes = await this.dbPool.query(
-                `INSERT INTO psychotherapy_bank_statement_transactions
-                    (tenant_id, import_id, fitid, posted_at, amount_cents, raw_description,
-                     payer_name_guess, suggested_patient_id, suggested_month, suggested_sessions,
-                     match_confidence, possible_pix_duplicate)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                 ON CONFLICT (tenant_id, fitid) DO NOTHING
-                 RETURNING id`,
-                [
-                    tenantId, importId, tx.fitid, tx.postedAt, tx.amountCents, tx.rawDescription,
-                    tx.payerNameGuess, match.suggestedPatientId, match.suggestedMonth,
-                    match.suggestedSessions, match.matchConfidence, match.possiblePixDuplicate
-                ]
-            );
-
-            if (insertRes.rowCount === 0) duplicateFitidCount++;
+            matches.push(await this.matchTransaction(tenantId, tx, candidates));
         }
 
-        if (duplicateFitidCount > 0) {
-            await this.dbPool.query(
-                `UPDATE psychotherapy_bank_statement_imports SET duplicate_fitid_count = $1 WHERE id = $2`,
-                [duplicateFitidCount, importId]
-            );
-        }
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
 
-        return {
-            importId,
-            transactionCount: transactions.length,
-            skippedLineCount,
-            duplicateFitidCount
-        };
+            let importId: string;
+            try {
+                const importRes = await client.query<{ id: string }>(
+                    `INSERT INTO psychotherapy_bank_statement_imports
+                        (tenant_id, file_name, file_format, period_start, period_end,
+                         transaction_count, skipped_line_count, imported_by, source_gmail_message_id)
+                     VALUES ($1, $2, 'csv', $3, $4, $5, $6, $7, $8)
+                     RETURNING id`,
+                    [
+                        tenantId, fileName, periodStart, periodEnd, transactions.length,
+                        skippedLineCount, importedBy, sourceGmailMessageId
+                    ]
+                );
+                importId = importRes.rows[0].id;
+            } catch (err) {
+                // Idempotência do caminho de e-mail (achado #3 da 7ª rodada de
+                // auditoria): violação da unique de source_gmail_message_id
+                // aborta a transação inteira — ROLLBACK é obrigatório antes de
+                // qualquer outra query neste client, só então buscamos o
+                // import já existente dessa tentativa anterior.
+                const pgErr = err as { code?: string; constraint?: string };
+                if (sourceGmailMessageId && pgErr.code === '23505' && pgErr.constraint === GMAIL_MESSAGE_ID_UNIQUE_CONSTRAINT) {
+                    await client.query('ROLLBACK');
+                    const existing = await client.query<{ id: string }>(
+                        `SELECT id FROM psychotherapy_bank_statement_imports
+                         WHERE tenant_id = $1 AND source_gmail_message_id = $2`,
+                        [tenantId, sourceGmailMessageId]
+                    );
+                    if (existing.rows[0]) {
+                        return {
+                            importId: existing.rows[0].id,
+                            transactionCount: transactions.length,
+                            skippedLineCount,
+                            duplicateFitidCount: 0
+                        };
+                    }
+                }
+                throw err;
+            }
+
+            let duplicateFitidCount = 0;
+
+            for (let i = 0; i < transactions.length; i++) {
+                const tx = transactions[i];
+                const match = matches[i];
+
+                const insertRes = await client.query(
+                    `INSERT INTO psychotherapy_bank_statement_transactions
+                        (tenant_id, import_id, fitid, posted_at, amount_cents, raw_description,
+                         payer_name_guess, suggested_patient_id, suggested_month, suggested_sessions,
+                         match_confidence, possible_pix_duplicate)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                     ON CONFLICT (tenant_id, fitid) DO NOTHING
+                     RETURNING id`,
+                    [
+                        tenantId, importId, tx.fitid, tx.postedAt, tx.amountCents, tx.rawDescription,
+                        tx.payerNameGuess, match.suggestedPatientId, match.suggestedMonth,
+                        match.suggestedSessions, match.matchConfidence, match.possiblePixDuplicate
+                    ]
+                );
+
+                if (insertRes.rowCount === 0) duplicateFitidCount++;
+            }
+
+            if (duplicateFitidCount > 0) {
+                await client.query(
+                    `UPDATE psychotherapy_bank_statement_imports SET duplicate_fitid_count = $1 WHERE id = $2`,
+                    [duplicateFitidCount, importId]
+                );
+            }
+
+            await client.query('COMMIT');
+
+            return {
+                importId,
+                transactionCount: transactions.length,
+                skippedLineCount,
+                duplicateFitidCount
+            };
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            client.release();
+        }
     }
 
     private async loadCandidatePatients(tenantId: string): Promise<CandidatePatient[]> {

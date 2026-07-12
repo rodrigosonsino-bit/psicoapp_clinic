@@ -5,6 +5,7 @@ import type {
     BankStatementImportResult,
     BankStatementTransaction,
     BankStatementBatchResult,
+    BankStatementEmailImport,
     Patient,
     PaginatedResponse
 } from '../types/api';
@@ -21,6 +22,15 @@ const CONFIDENCE_LABEL: Record<string, string> = {
     none: 'Sem sugestão'
 };
 
+const EMAIL_STATUS_LABEL: Record<BankStatementEmailImport['status'], string> = {
+    processing: 'Processando',
+    processed: 'Importado com sucesso',
+    rejected_sender: 'Rejeitado — remetente não confere',
+    rejected_auth: 'Rejeitado — autenticação (SPF/DKIM/DMARC) não confere',
+    no_attachment: 'Sem anexo de extrato',
+    error: 'Erro'
+};
+
 export default function BankReconciliation() {
     const [importResult, setImportResult] = useState<BankStatementImportResult | null>(null);
     const [transactions, setTransactions] = useState<BankStatementTransaction[]>([]);
@@ -35,6 +45,8 @@ export default function BankReconciliation() {
     const [busyRowId, setBusyRowId] = useState<string | null>(null);
     const [showBatchConfirmSummary, setShowBatchConfirmSummary] = useState(false);
     const [batchRunning, setBatchRunning] = useState(false);
+    const [emailImports, setEmailImports] = useState<BankStatementEmailImport[]>([]);
+    const [showEmailImports, setShowEmailImports] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const toast = useToast();
@@ -66,9 +78,21 @@ export default function BankReconciliation() {
         }
     }, [toast]);
 
+    const loadEmailImports = useCallback(async () => {
+        try {
+            const res = await fetchApi<{ data: BankStatementEmailImport[] }>(
+                '/api/psychotherapy/bank-statements/email-imports'
+            );
+            setEmailImports(res.data || []);
+        } catch (err) {
+            console.error(err);
+        }
+    }, []);
+
     useEffect(() => {
         loadPatients();
-    }, [loadPatients]);
+        loadEmailImports();
+    }, [loadPatients, loadEmailImports]);
 
     // Recupera o último import ao abrir a tela — sem isso, um refresh de
     // página perderia o acesso à lista pendente de revisão.
@@ -384,6 +408,39 @@ export default function BankReconciliation() {
                         </div>
                     )}
                 </>
+            )}
+
+            {emailImports.length > 0 && (
+                <div className="bank-reconciliation-email-imports">
+                    <button
+                        className="bank-reconciliation-email-imports-toggle"
+                        onClick={() => setShowEmailImports(prev => !prev)}
+                    >
+                        {showEmailImports ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        E-mails do extrato automático ({emailImports.filter(e => e.status !== 'processed').length} com pendência/rejeição)
+                    </button>
+
+                    {showEmailImports && (
+                        <div className="bank-reconciliation-email-imports-list">
+                            {emailImports.map(e => (
+                                <div key={e.id} className={`bank-reconciliation-email-import-row status-${e.status}`}>
+                                    <span className="bank-reconciliation-email-import-status">
+                                        {EMAIL_STATUS_LABEL[e.status]}
+                                    </span>
+                                    <span className="bank-reconciliation-email-import-sender">
+                                        {e.sender_normalized || <span className="text-muted">(remetente desconhecido)</span>}
+                                    </span>
+                                    <span className="bank-reconciliation-email-import-date">
+                                        {new Date(e.created_at).toLocaleString('pt-BR')}
+                                    </span>
+                                    {e.error_detail && (
+                                        <span className="bank-reconciliation-email-import-detail">{e.error_detail}</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );

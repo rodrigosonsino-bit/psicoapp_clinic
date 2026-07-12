@@ -22,6 +22,7 @@ import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
 import { createPaymentReceiptHandler } from './infrastructure/whatsapp/PaymentReceiptHandler';
 import nodeCron from 'node-cron';
 import { reconcilePixCharges } from './scripts/reconcilePixCharges';
+import { EmailBankStatementPollUseCase } from './application/useCases/EmailBankStatementPollUseCase';
 import { BroadcastOutboxDispatcher } from './infrastructure/queue/BroadcastOutboxDispatcher';
 import { BroadcastQueue } from './infrastructure/queue/BroadcastQueue';
 import { BroadcastWorker } from './infrastructure/queue/BroadcastWorker';
@@ -284,6 +285,16 @@ if (require.main === module) {
                         await reconcilePixCharges();
                     } catch (err) {
                         logger.error({ err }, 'Erro ao rodar conciliação ativa Pix em background');
+                    }
+                });
+
+                // Cron 3: Ingestão automática de extrato bancário via e-mail (Gmail),
+                // a cada 6h — extrato não muda em tempo real, não precisa ser frequente.
+                nodeCron.schedule('0 */6 * * *', async () => {
+                    try {
+                        await container.resolve(EmailBankStatementPollUseCase).execute();
+                    } catch (err) {
+                        logger.error({ err }, 'Erro ao rodar polling de extrato bancário via e-mail');
                     }
                 });
             });

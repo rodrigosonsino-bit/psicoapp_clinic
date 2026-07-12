@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, User, CreditCard, Shield, MapPin, ShieldCheck, ShieldOff, Copy, CalendarDays, CheckCircle, XCircle, Smartphone, RefreshCw, Power, Loader2, Palette, MessageSquare } from 'lucide-react';
 import { fetchApi } from '../services/api';
-import type { TenantProfile, TotpSetupResult, GoogleCalendarStatus, WhatsappStatus, BookingPageSettings, CardFeeRates } from '../types/api';
+import type { TenantProfile, TotpSetupResult, GoogleCalendarStatus, GmailConnectionStatus, WhatsappStatus, BookingPageSettings, CardFeeRates } from '../types/api';
 import { useToast } from '../context/ToastContext';
 import Skeleton from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
@@ -109,6 +109,7 @@ export default function ProfileSettings() {
 
       <WhatsappSection />
       <GoogleCalendarSection />
+      <GmailBankStatementSection />
       <TwoFactorSection
         enabled={formData.twoFactorEnabled}
         onStatusChange={(status) => setFormData(prev => ({ ...prev, twoFactorEnabled: status }))}
@@ -527,6 +528,150 @@ function GoogleCalendarSection() {
             >
               <CalendarDays size={16} />
               {connecting ? 'Redirecionando...' : 'Conectar Google Calendar'}
+            </button>
+          </div>
+
+          {configError && (
+            <div style={{
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid var(--status-warning)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.875rem 1rem',
+              fontSize: '0.875rem',
+              color: 'var(--status-warning)',
+              lineHeight: 1.5
+            }}>
+              <strong>Configuração necessária:</strong> {configError}
+              <br />
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                Adicione <code>GOOGLE_CLIENT_ID</code> e <code>GOOGLE_CLIENT_SECRET</code> no arquivo <code>.env</code> do backend e reinicie o servidor.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gmail (extrato bancário via e-mail) Section ─────────────────────────────────
+// Conexão OAuth separada e dedicada da do Google Calendar acima — ver
+// docs/email-bank-statement-ingestion-plan.md.
+
+function GmailBankStatementSection() {
+  const [status, setStatus] = useState<GmailConnectionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const toast = useToast();
+
+  const loadStatus = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetchApi<GmailConnectionStatus>('/auth/gmail/status');
+      setStatus(res);
+    } catch {
+      setStatus({ connected: false, emailAddress: null });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gmailParam = params.get('gmail');
+    if (gmailParam === 'connected') {
+      toast.success('Gmail conectado com sucesso!');
+      window.history.replaceState({}, '', '/profile');
+    } else if (gmailParam === 'denied') {
+      toast.error('Conexão com Gmail cancelada.');
+      window.history.replaceState({}, '', '/profile');
+    } else if (gmailParam === 'error') {
+      toast.error('Erro ao conectar com Gmail. Tente novamente.');
+      window.history.replaceState({}, '', '/profile');
+    }
+    loadStatus();
+  }, [loadStatus, toast]);
+
+  const handleConnect = async () => {
+    try {
+      setConnecting(true);
+      setConfigError(null);
+      const res = await fetchApi<{ url: string }>('/auth/gmail/auth-url');
+      window.location.href = res.url;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('GOOGLE_CLIENT_ID') || msg.includes('não está configurado') || msg.includes('503')) {
+        setConfigError('As credenciais do Google não estão configuradas no servidor. Consulte o guia de configuração.');
+      } else {
+        toast.error(msg || 'Erro ao iniciar conexão com Gmail.');
+      }
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      setDisconnecting(true);
+      await fetchApi('/auth/gmail/disconnect', { method: 'DELETE' });
+      toast.success('Gmail desconectado.');
+      setStatus({ connected: false, emailAddress: null });
+    } catch {
+      toast.error('Erro ao desconectar Gmail.');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  return (
+    <div className="card profile-card mt-4" style={{ maxWidth: 700 }}>
+      <div className="flex items-center gap-2 mb-4">
+        <MessageSquare size={20} style={{ color: '#4285f4' }} />
+        <h3 className="text-h3" style={{ margin: 0 }}>Gmail (extrato bancário automático)</h3>
+      </div>
+
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Verificando conexão...</div>
+      ) : status?.connected ? (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle size={18} style={{ color: 'var(--status-success)' }} />
+            <div>
+              <p style={{ color: 'var(--text-primary)', fontWeight: 500, margin: 0 }}>
+                Conectado — <strong>{status.emailAddress}</strong>
+              </p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.2rem 0 0' }}>
+                O extrato do Nubank recebido por e-mail será importado automaticamente pra Conciliação Bancária.
+              </p>
+            </div>
+          </div>
+          <button className="btn btn-secondary" onClick={handleDisconnect} disabled={disconnecting}>
+            <XCircle size={16} /> {disconnecting ? 'Desconectando...' : 'Desconectar'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+                Conecte seu Gmail pra importar automaticamente o extrato do Nubank recebido por e-mail.
+              </p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.3rem 0 0' }}>
+                O app terá acesso técnico de leitura à sua caixa de e-mail inteira (o Google exige esse
+                escopo), mas só processa mensagens enviadas pro alias configurado — nunca lê ou apaga
+                nenhum outro e-mail.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={handleConnect}
+              disabled={connecting}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}
+            >
+              <MessageSquare size={16} />
+              {connecting ? 'Redirecionando...' : 'Conectar Gmail'}
             </button>
           </div>
 

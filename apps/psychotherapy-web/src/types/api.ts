@@ -323,6 +323,11 @@ export interface GoogleCalendarStatus {
   calendarId: string | null;
 }
 
+export interface GmailConnectionStatus {
+  connected: boolean;
+  emailAddress: string | null;
+}
+
 export interface ClinicalNote {
   id: string;
   tenantId: string;
@@ -472,6 +477,17 @@ export interface BankStatementTransaction {
   confirmed_sessions: number | null;
   confirmed_at: string | null;
   ignored_at: string | null;
+  created_at: string;
+}
+
+export interface BankStatementEmailImport {
+  id: string;
+  gmail_message_id: string;
+  status: 'processing' | 'processed' | 'rejected_sender' | 'rejected_auth' | 'no_attachment' | 'error';
+  error_detail: string | null;
+  sender_normalized: string | null;
+  import_id: string | null;
+  processed_at: string | null;
   created_at: string;
 }
 

@@ -4,6 +4,7 @@ import { container } from '../../container';
 import { AuthController } from '../controllers/AuthController';
 import { TotpController } from '../controllers/TotpController';
 import { GoogleAuthController } from '../controllers/GoogleAuthController';
+import { GmailAuthController } from '../controllers/GmailAuthController';
 import { SyncGoogleCalendarEventsUseCase } from '../../application/useCases/SyncGoogleCalendarEventsUseCase';
 import { validateBody } from '../middlewares/validationMiddleware';
 import { asyncHandler } from '../middlewares/asyncHandler';
@@ -66,6 +67,13 @@ export function createAuthRoutes(): Router {
         });
         return res.status(202).json({ ok: true, message: 'Sincronização iniciada' });
     }));
+
+    // Gmail (extrato bancário via e-mail) OAuth — conexão dedicada, separada do Calendar
+    const gmailAuthController = container.resolve(GmailAuthController);
+    router.get('/gmail/auth-url', authMiddleware, asyncHandler((req, res) => gmailAuthController.getAuthUrl(req, res)));
+    router.get('/gmail/callback', asyncHandler((req, res) => gmailAuthController.callback(req, res)));
+    router.get('/gmail/status', authMiddleware, asyncHandler((req, res) => gmailAuthController.status(req, res)));
+    router.delete('/gmail/disconnect', authMiddleware, asyncHandler((req, res) => gmailAuthController.disconnect(req, res)));
 
     return router;
 }
