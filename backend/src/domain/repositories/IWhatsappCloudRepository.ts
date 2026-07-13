@@ -47,6 +47,10 @@ export interface WhatsappMessageHistoryEntry {
     body: string;
     messageType: string;
     occurredAt: Date;
+    /** Status de entrega (só para outbound) — null se ainda não há projeção de status
+     * (psychotherapy_whatsapp_cloud_status) para essa mensagem, ex.: mensagens antigas
+     * enviadas antes do registro passar a ser criado para respostas manuais. */
+    deliveryStatus: CloudDeliveryStatus | null;
 }
 
 /** Conversa com mensagem inbound não vista — usada pelo popup global de mensagem nova. */
