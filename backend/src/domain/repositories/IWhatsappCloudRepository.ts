@@ -93,8 +93,12 @@ export interface IWhatsappCloudRepository {
     /** Atualiza a linha reservada por reserveAttempt com o resultado real da chamada à Meta. */
     finalizeAttempt(appointmentId: string, input: FinalizeAttemptInput): Promise<void>;
 
-    /** Cria a projeção de status inicial ('submitted') logo após a Meta aceitar o envio. */
-    createDeliveryRecord(providerMessageId: string, tenantId: string, appointmentId: string): Promise<void>;
+    /**
+     * Cria a projeção de status inicial ('submitted') logo após a Meta aceitar o envio.
+     * appointmentId é opcional — respostas manuais (sem agendamento associado) passam apenas
+     * providerMessageId e tenantId; a coluna appointment_id aceita NULL no banco.
+     */
+    createDeliveryRecord(providerMessageId: string, tenantId: string, appointmentId?: string): Promise<void>;
 
     /**
      * Avança o status de entrega respeitando transições válidas explícitas (não um rank
