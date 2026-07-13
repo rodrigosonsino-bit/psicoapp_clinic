@@ -46,6 +46,15 @@ export class PostgresWhatsappCloudRepository implements IWhatsappCloudRepository
         };
     }
 
+    async updateTemplateSyncStatus(metaTemplateName: string, languageCode: string, metaStatus: WhatsappCloudTemplateBinding['metaStatus']): Promise<void> {
+        await this.dbPool.query(
+            `UPDATE whatsapp_cloud_templates
+             SET meta_status = $3, last_synced_at = NOW()
+             WHERE meta_template_name = $1 AND language_code = $2;`,
+            [metaTemplateName, languageCode, metaStatus]
+        );
+    }
+
     async reserveAttempt(tenantId: string, appointmentId: string): Promise<number | null> {
         try {
             const result = await this.dbPool.query(

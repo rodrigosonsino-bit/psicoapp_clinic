@@ -87,6 +87,14 @@ export interface IWhatsappCloudRepository {
     getActiveTemplate(purpose: string, languageCode: string): Promise<WhatsappCloudTemplateBinding | null>;
 
     /**
+     * Atualiza meta_status/last_synced_at de um template já cadastrado, a partir do status real
+     * consultado na Meta (ver WhatsappTemplateSyncJob). Não faz nada se o template
+     * (meta_template_name, language_code) não existir localmente — o sync nunca cria templates
+     * novos, só atualiza o status dos que já configuramos.
+     */
+    updateTemplateSyncStatus(metaTemplateName: string, languageCode: string, metaStatus: WhatsappCloudTemplateBinding['metaStatus']): Promise<void>;
+
+    /**
      * Reserva atomicamente o próximo número de tentativa para o agendamento, inserindo uma linha
      * com submission_result='reserved' ANTES de chamar a Meta. Se outra execução já reservou uma
      * tentativa concorrente (corrida), a UNIQUE(appointment_id, attempt_number) faz o INSERT

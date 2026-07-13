@@ -34,7 +34,8 @@ import { PostgresWhatsappCloudRepository } from './infrastructure/repositories/P
 import { WhatsappCloudClient } from './infrastructure/whatsappCloud/WhatsappCloudClient';
 import { WhatsappCloudSender } from './infrastructure/whatsappCloud/WhatsappCloudSender';
 import { WhatsappCloudInboxWorker } from './infrastructure/scheduler/WhatsappCloudInboxWorker';
-import { resolveWhatsAppProvider, loadWhatsappCloudClientConfig } from './infrastructure/whatsappCloud/WhatsappCloudConfig';
+import { WhatsappTemplateSyncJob } from './infrastructure/scheduler/WhatsappTemplateSyncJob';
+import { resolveWhatsAppProvider, loadWhatsappCloudClientConfig, loadWhatsappBusinessAccountId } from './infrastructure/whatsappCloud/WhatsappCloudConfig';
 import { IReminderMessageSender } from './domain/services/IReminderMessageSender';
 
 const app = express();
@@ -231,6 +232,23 @@ if (require.main === module) {
                     }
                     const inboxWorker = new WhatsappCloudInboxWorker(whatsappCloudRepository, notifyConfig);
                     inboxWorker.start();
+
+                    // Sincronização de status de templates com a Meta — opcional (requer
+                    // WHATSAPP_CLOUD_API_BUSINESS_ACCOUNT_ID). Sem isso, um template aprovado na
+                    // Meta continua marcado 'PENDING' no banco para sempre, e envios/encaminhamentos
+                    // que dependem dele (ex.: notificação de resposta de paciente) ficam bloqueados
+                    // silenciosamente.
+                    const businessAccountId = loadWhatsappBusinessAccountId();
+                    if (businessAccountId) {
+                        const templateSyncJob = new WhatsappTemplateSyncJob(
+                            new WhatsappCloudClient(cloudClientConfig),
+                            whatsappCloudRepository,
+                            businessAccountId
+                        );
+                        templateSyncJob.start();
+                    } else {
+                        logger.warn('⚠️ WHATSAPP_CLOUD_API_BUSINESS_ACCOUNT_ID não configurado — sincronização automática de status de templates desativada (meta_status pode ficar desatualizado).');
+                    }
                 }
 
                 if (process.env.ENABLE_REMINDERS !== 'false') {

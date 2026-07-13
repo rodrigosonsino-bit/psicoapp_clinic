@@ -34,6 +34,12 @@ export function loadWhatsappCloudClientConfig(): WhatsappCloudClientConfig | nul
     return { apiVersion, phoneNumberId, accessToken };
 }
 
+/** ID da conta WhatsApp Business (WABA) — necessário só para sincronizar status de templates
+ * (GET /{waba_id}/message_templates); envio de mensagens usa phoneNumberId, não este ID. */
+export function loadWhatsappBusinessAccountId(): string | null {
+    return process.env.WHATSAPP_CLOUD_API_BUSINESS_ACCOUNT_ID?.trim() || null;
+}
+
 export function loadWebhookAppSecret(): string | null {
     return process.env.WHATSAPP_CLOUD_API_APP_SECRET?.trim() || null;
 }
