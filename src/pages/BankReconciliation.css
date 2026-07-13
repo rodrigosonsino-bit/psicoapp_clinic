@@ -216,3 +216,70 @@
 .badge-confidence-medium { background-color: rgba(245, 158, 11, 0.1); color: var(--status-warning); }
 .badge-confidence-low { background-color: rgba(59, 130, 246, 0.1); color: var(--status-info); }
 .badge-confidence-none { background-color: rgba(100, 116, 139, 0.1); color: var(--text-muted); }
+
+.bank-reconciliation-email-imports {
+  margin-top: 2rem;
+  border-top: 1px solid var(--border-color);
+  padding-top: 1rem;
+}
+
+.bank-reconciliation-email-imports-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.bank-reconciliation-email-imports-list {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bank-reconciliation-email-import-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  font-size: 0.825rem;
+}
+
+.bank-reconciliation-email-import-status {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bank-reconciliation-email-import-row.status-processed .bank-reconciliation-email-import-status {
+  color: var(--status-success);
+}
+
+.bank-reconciliation-email-import-row.status-rejected_sender .bank-reconciliation-email-import-status,
+.bank-reconciliation-email-import-row.status-rejected_auth .bank-reconciliation-email-import-status,
+.bank-reconciliation-email-import-row.status-error .bank-reconciliation-email-import-status {
+  color: var(--status-danger, #ef4444);
+}
+
+.bank-reconciliation-email-import-sender {
+  color: var(--text-secondary);
+}
+
+.bank-reconciliation-email-import-date {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.bank-reconciliation-email-import-detail {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
