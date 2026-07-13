@@ -1,8 +1,9 @@
 import { logger } from '../logger';
-import { WhatsappCloudClientConfig, TemplateComponentParameter, SubmissionOutcome } from './types';
+import { WhatsappCloudClientConfig, TemplateComponentParameter, SubmissionOutcome, RemoteTemplateStatus } from './types';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
+const TEMPLATE_LIST_MAX_PAGES = 10; // Cap de segurança — piloto tem poucos templates, nunca deveria paginar tanto
 
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -96,6 +97,45 @@ export class WhatsappCloudClient {
         };
 
         return this.postWithRetry(body, toE164);
+    }
+
+    /**
+     * Lista o status atual (name/language/status) de todos os templates da conta WhatsApp
+     * Business — usado só para sincronizar whatsapp_cloud_templates.meta_status com a Meta (ver
+     * WhatsappTemplateSyncJob). Segue paginação via `paging.next` até TEMPLATE_LIST_MAX_PAGES.
+     */
+    async listTemplates(businessAccountId: string): Promise<RemoteTemplateStatus[]> {
+        const results: RemoteTemplateStatus[] = [];
+        let url: string | null =
+            `https://graph.facebook.com/${this.config.apiVersion}/${businessAccountId}/message_templates?fields=name,language,status&limit=100`;
+
+        for (let page = 0; url && page < TEMPLATE_LIST_MAX_PAGES; page++) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+
+            let response: Response;
+            try {
+                response = await fetch(url, {
+                    headers: { Authorization: `Bearer ${this.config.accessToken}` },
+                    signal: controller.signal,
+                });
+            } finally {
+                clearTimeout(timeout);
+            }
+
+            if (!response.ok) {
+                const errorBody = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+                throw new Error(
+                    `Falha ao listar templates da Meta (HTTP ${response.status}): ${errorBody?.error?.message ?? 'sem detalhe'}`
+                );
+            }
+
+            const parsed = await response.json() as { data?: RemoteTemplateStatus[]; paging?: { next?: string } };
+            results.push(...(parsed.data ?? []));
+            url = parsed.paging?.next ?? null;
+        }
+
+        return results;
     }
 
     private async postWithRetry(body: unknown, toE164: string): Promise<SubmissionOutcome> {

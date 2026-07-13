@@ -44,3 +44,13 @@ export interface SubmissionOutcome {
     errorMessage?: string;
     wamid?: string;
 }
+
+/** Status de um template retornado por GET /{business_account_id}/message_templates. Meta usa
+ * mais valores (PENDING_DELETION, IN_APPEAL, LIMIT_EXCEEDED, REINSTATED, etc.) do que os 5
+ * aceitos pela CHECK constraint de whatsapp_cloud_templates.meta_status — status fora desse
+ * conjunto são ignorados pelo sync (ver WhatsappTemplateSyncJob), não devem quebrar o job inteiro. */
+export interface RemoteTemplateStatus {
+    name: string;
+    language: string;
+    status: string;
+}
