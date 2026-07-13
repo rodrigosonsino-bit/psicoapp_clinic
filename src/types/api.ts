@@ -242,6 +242,7 @@ export interface WhatsappMessageHistoryEntry {
   body: string;
   messageType: string;
   occurredAt: string;
+  deliveryStatus: 'submitted' | 'delivered' | 'read' | 'failed' | null;
 }
 
 export interface PaginatedResponse<T> {

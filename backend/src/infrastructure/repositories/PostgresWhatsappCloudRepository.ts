@@ -230,10 +230,12 @@ export class PostgresWhatsappCloudRepository implements IWhatsappCloudRepository
     ): Promise<{ data: WhatsappMessageHistoryEntry[]; total: number }> {
         const offset = (page - 1) * limit;
         const result = await this.dbPool.query(
-            `SELECT id, direction, body, message_type, occurred_at, COUNT(*) OVER() AS total
-             FROM psychotherapy_whatsapp_messages
-             WHERE tenant_id = $1 AND patient_id = $2
-             ORDER BY occurred_at DESC
+            `SELECT m.id, m.direction, m.body, m.message_type, m.occurred_at, s.delivery_status,
+                    COUNT(*) OVER() AS total
+             FROM psychotherapy_whatsapp_messages m
+             LEFT JOIN psychotherapy_whatsapp_cloud_status s ON s.provider_message_id = m.provider_message_id
+             WHERE m.tenant_id = $1 AND m.patient_id = $2
+             ORDER BY m.occurred_at DESC
              LIMIT $3 OFFSET $4;`,
             [tenantId, patientId, limit, offset]
         );
@@ -244,6 +246,7 @@ export class PostgresWhatsappCloudRepository implements IWhatsappCloudRepository
             body: row.body,
             messageType: row.message_type,
             occurredAt: row.occurred_at,
+            deliveryStatus: row.delivery_status ?? null,
         }));
         return { data, total };
     }

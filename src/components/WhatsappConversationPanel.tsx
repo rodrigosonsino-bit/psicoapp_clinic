@@ -75,6 +75,21 @@ export function WhatsappConversationPanel({ patientId, patientName, pollInterval
   // Mais recente primeiro na API; exibida cronologicamente (mais antiga em cima) como um chat.
   const chronological = [...messages].reverse();
 
+  /** Status vem do webhook de status da Meta (assíncrono, chega segundos/minutos depois do
+   * envio) — 'submitted'/null só significa "aceito pela Meta", não confirma entrega real. */
+  function deliveryStatusLabel(status: WhatsappMessageHistoryEntry['deliveryStatus']): { text: string; isError?: boolean } {
+    switch (status) {
+      case 'failed':
+        return { text: 'Falha no envio (provavelmente a janela de 24h está fechada)', isError: true };
+      case 'delivered':
+        return { text: 'Entregue' };
+      case 'read':
+        return { text: 'Lida' };
+      default:
+        return { text: 'Enviada' };
+    }
+  }
+
   return (
     <div style={{ maxWidth: compact ? undefined : '640px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
       {onClose && (
@@ -101,22 +116,32 @@ export function WhatsappConversationPanel({ patientId, patientName, pollInterval
             <div>Nenhuma mensagem registrada com {patientNameShort} ainda.</div>
           </div>
         ) : (
-          chronological.map(msg => (
-            <div key={msg.id} style={{ display: 'flex', justifyContent: msg.direction === 'outbound' ? 'flex-end' : 'flex-start' }}>
-              <div style={{
-                maxWidth: '75%',
-                padding: '0.6rem 0.9rem',
-                borderRadius: 'var(--radius-md)',
-                background: msg.direction === 'outbound' ? 'var(--brand-primary)18' : 'var(--bg-panel)',
-                border: '1px solid var(--border-color)',
-              }}>
-                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.body}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'right' }}>
-                  {msg.direction === 'outbound' ? 'Enviada' : 'Recebida'} · {new Date(msg.occurredAt).toLocaleString('pt-BR')}
+          chronological.map(msg => {
+            const status = msg.direction === 'outbound' ? deliveryStatusLabel(msg.deliveryStatus) : null;
+            return (
+              <div key={msg.id} style={{ display: 'flex', justifyContent: msg.direction === 'outbound' ? 'flex-end' : 'flex-start' }}>
+                <div style={{
+                  maxWidth: '75%',
+                  padding: '0.6rem 0.9rem',
+                  borderRadius: 'var(--radius-md)',
+                  background: msg.direction === 'outbound' ? 'var(--brand-primary)18' : 'var(--bg-panel)',
+                  border: '1px solid var(--border-color)',
+                }}>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.body}</div>
+                  <div
+                    style={{
+                      fontSize: '0.7rem',
+                      color: status?.isError ? 'var(--status-danger)' : 'var(--text-muted)',
+                      marginTop: '0.3rem',
+                      textAlign: 'right',
+                    }}
+                  >
+                    {status ? status.text : 'Recebida'} · {new Date(msg.occurredAt).toLocaleString('pt-BR')}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
