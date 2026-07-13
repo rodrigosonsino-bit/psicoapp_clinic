@@ -86,13 +86,13 @@ export class PostgresWhatsappCloudRepository implements IWhatsappCloudRepository
         );
     }
 
-    async createDeliveryRecord(providerMessageId: string, tenantId: string, appointmentId: string): Promise<void> {
+    async createDeliveryRecord(providerMessageId: string, tenantId: string, appointmentId?: string): Promise<void> {
         await this.dbPool.query(
             `INSERT INTO psychotherapy_whatsapp_cloud_status
                 (provider_message_id, tenant_id, appointment_id, delivery_status)
              VALUES ($1, $2, $3, 'submitted')
              ON CONFLICT (provider_message_id) DO NOTHING;`,
-            [providerMessageId, tenantId, appointmentId]
+            [providerMessageId, tenantId, appointmentId ?? null]
         );
     }
 

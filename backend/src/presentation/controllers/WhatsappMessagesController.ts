@@ -104,6 +104,12 @@ export class WhatsappMessagesController {
             occurredAt: new Date(),
         });
 
+        // Sem isso, o webhook de status (sent/delivered/read) da Meta nunca acha a linha
+        // correspondente em psychotherapy_whatsapp_cloud_status e o evento cai em dead-letter
+        // sem nunca ser processado — mesmo padrão usado em WhatsappCloudSender.ts para lembretes,
+        // aqui sem appointmentId pois a resposta manual não está associada a um agendamento.
+        await this.repository.createDeliveryRecord(outcome.wamid, tenantId);
+
         return res.status(201).json({
             id: outcome.wamid,
             direction: 'outbound' as const,
