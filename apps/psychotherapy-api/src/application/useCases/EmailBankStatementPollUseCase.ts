@@ -65,9 +65,21 @@ export class EmailBankStatementPollUseCase {
         const claimed: ClaimedMessage[] = [];
 
         // Fila de mensagens novas — claim atômico por gmail_message_id.
+        // Restringe por from:domínio também na query, não só depois de buscar —
+        // achado real (2026-07-13): o Nubank não envia o extrato recorrente pro
+        // alias +nubank, manda pro e-mail principal (só o de confirmação de
+        // cadastro veio pro alias). Sem esse from: na query, alias=e-mail
+        // principal faria a busca varrer a caixa inteira, não só e-mails do
+        // Nubank — o from: aqui é só otimização de escopo da busca (o
+        // filtro de segurança de verdade continua sendo o DMARC/DKIM
+        // pós-fetch em processMessage, inalterado).
+        const senderDomain = process.env.GMAIL_NUBANK_SENDER_DOMAIN;
+        const query = senderDomain
+            ? `to:${alias} from:${senderDomain} -in:spam -in:trash`
+            : `to:${alias} -in:spam -in:trash`;
         const listRes = await gmail.users.messages.list({
             userId: 'me',
-            q: `to:${alias} -in:spam -in:trash`,
+            q: query,
             maxResults: MAX_MESSAGES_PER_TENANT_PER_CYCLE,
         });
         for (const m of listRes.data.messages ?? []) {
