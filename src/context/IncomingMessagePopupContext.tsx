@@ -30,6 +30,8 @@ interface UnseenConversation {
 interface OpenConversation {
   patientId: string;
   patientName: string;
+  minimized: boolean;
+  maximized: boolean;
 }
 
 /**
@@ -53,7 +55,7 @@ export function IncomingMessagePopupProvider({ children }: { children: React.Rea
         const alreadyOpen = new Set(prev.map(c => c.patientId));
         const toAdd = res.data
           .filter(c => !alreadyOpen.has(c.patientId))
-          .map(c => ({ patientId: c.patientId, patientName: c.patientName }));
+          .map(c => ({ patientId: c.patientId, patientName: c.patientName, minimized: false, maximized: false }));
         return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
       });
     } catch {
@@ -69,6 +71,18 @@ export function IncomingMessagePopupProvider({ children }: { children: React.Rea
 
   const closeConversation = useCallback((patientId: string) => {
     setOpenConversations(prev => prev.filter(c => c.patientId !== patientId));
+  }, []);
+
+  const toggleMinimize = useCallback((patientId: string) => {
+    setOpenConversations(prev => prev.map(c =>
+      c.patientId === patientId ? { ...c, minimized: !c.minimized, maximized: false } : c
+    ));
+  }, []);
+
+  const toggleMaximize = useCallback((patientId: string) => {
+    setOpenConversations(prev => prev.map(c =>
+      c.patientId === patientId ? { ...c, maximized: !c.maximized, minimized: false } : c
+    ));
   }, []);
 
   return (
@@ -92,19 +106,30 @@ export function IncomingMessagePopupProvider({ children }: { children: React.Rea
               key={conv.patientId}
               className="card"
               style={{
-                width: '320px',
+                width: conv.maximized ? '480px' : '320px',
                 padding: '0.75rem',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border-color)',
+                transition: 'width 0.15s ease',
               }}
             >
+              {/* Sempre montado, mesmo minimizado — o polling de novas mensagens (pollIntervalMs)
+                  precisa continuar rodando em segundo plano; desmontar ao minimizar fazia respostas
+                  do paciente passarem despercebidas até o usuário restaurar manualmente (achado de
+                  auditoria via Codex CLI). Minimizado, o próprio painel esconde o corpo e mostra só
+                  o cabeçalho + badge de não lidas. */}
               <WhatsappConversationPanel
                 patientId={conv.patientId}
                 patientName={conv.patientName}
                 compact
+                minimized={conv.minimized}
+                chatMaxHeight={conv.maximized ? 480 : 260}
                 pollIntervalMs={CONVERSATION_POLL_INTERVAL_MS}
                 onClose={() => closeConversation(conv.patientId)}
+                onMinimize={() => toggleMinimize(conv.patientId)}
+                onMaximize={() => toggleMaximize(conv.patientId)}
+                isMaximized={conv.maximized}
               />
             </div>
           ))}
