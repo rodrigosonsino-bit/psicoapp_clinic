@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { fetchApi } from '../services/api';
 import type { Patient, Session, PaginatedResponse } from '../types/api';
 import { format } from 'date-fns';
@@ -27,6 +28,7 @@ export default function Sessions() {
   });
 
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const loadData = useCallback(async () => {
     try {
@@ -50,6 +52,25 @@ export default function Sessions() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Atalho "Ver Sessão" vindo da tela de Agendamentos (?openId=<sessionId>) — abre o modal de
+  // edição direto na sessão vinculada assim que a lista carregar, sem o usuário precisar procurar
+  // manualmente. Limpa o parâmetro da URL depois (replace, sem entrada nova no histórico) pra não
+  // reabrir o modal num refresh de página.
+  useEffect(() => {
+    const openId = searchParams.get('openId');
+    if (!openId || sessions.length === 0) return;
+    const target = sessions.find(s => s.id === openId);
+    if (target) {
+      setCurrentSession(target);
+      setShowModal(true);
+    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('openId');
+      return next;
+    }, { replace: true });
+  }, [sessions, searchParams, setSearchParams]);
 
   const openModal = (session: Partial<Session> | null = null) => {
     setCurrentSession(session);
