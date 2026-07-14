@@ -58,7 +58,28 @@ interface GroupPaymentSummary {
   total_installments: number | null;
   monthly_fee_cents: number | null;
   payment_status: PaymentStatus;
-  payments: any[];
+  payments: GroupPayment[];
+}
+
+/** Registro individual de cobrança/pagamento de grupo (item de `GroupPaymentSummary.payments`). */
+type GroupPaymentRecordStatus = 'paid' | 'pending' | 'partial' | 'voided';
+
+interface GroupPayment {
+  id: string;
+  amount_cents: number;
+  status: GroupPaymentRecordStatus;
+  payment_method: 'pix' | 'cash' | 'debit_card' | 'credit_card' | null;
+  notes: string | null;
+}
+
+/** Pagamento selecionado no modal de confirmação — o registro + o nome do paciente pra exibição. */
+type PaymentToConfirm = GroupPayment & { patientName: string };
+
+/** Membro elegível a pagamento de pacote (upfront), vindo de `/eligible-upfront-payments`. */
+interface UpfrontEligibleMember {
+  group_member_id: string;
+  patient_name: string;
+  default_upfront_price_cents: number;
 }
 
 interface SessionRecord {
@@ -142,19 +163,19 @@ export default function Groups() {
   const [payments, setPayments] = useState<GroupPaymentSummary[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentToConfirm, setPaymentToConfirm] = useState<any | null>(null);
+  const [paymentToConfirm, setPaymentToConfirm] = useState<PaymentToConfirm | null>(null);
   const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null);
 
   // Novos estados para o modal de pacote (Upfront Payment)
   const [showUpfrontModal, setShowUpfrontModal] = useState(false);
-  const [eligibleUpfrontMembers, setEligibleUpfrontMembers] = useState<any[]>([]);
+  const [eligibleUpfrontMembers, setEligibleUpfrontMembers] = useState<UpfrontEligibleMember[]>([]);
   const [selectedUpfrontMemberId, setSelectedUpfrontMemberId] = useState<string>('');
   const [upfrontAmountStr, setUpfrontAmountStr] = useState<string>('');
   const [submittingUpfront, setSubmittingUpfront] = useState(false);
 
   // Novos estados para o modal de adiantar parcelas
   const [showAdvanceModal, setShowAdvanceModal] = useState(false);
-  const [memberToAdvance, setMemberToAdvance] = useState<any | null>(null);
+  const [memberToAdvance, setMemberToAdvance] = useState<GroupPaymentSummary | null>(null);
   const [monthsToAdvance, setMonthsToAdvance] = useState('1');
   const [submittingAdvance, setSubmittingAdvance] = useState(false);
   // Confirmação em lote (opcional): marca como pagas todas as parcelas recém-criadas,
@@ -188,7 +209,7 @@ export default function Groups() {
 
   const loadUpfrontEligibleMembers = useCallback(async (groupId: string) => {
     try {
-      const res: any = await fetchApi(`/api/psychotherapy/groups/${groupId}/eligible-upfront-payments`);
+      const res = await fetchApi<{ data: UpfrontEligibleMember[] }>(`/api/psychotherapy/groups/${groupId}/eligible-upfront-payments`);
       setEligibleUpfrontMembers(res.data || []);
       if (res.data && res.data.length > 0) {
         setSelectedUpfrontMemberId(res.data[0].group_member_id);
@@ -197,7 +218,7 @@ export default function Groups() {
         setSelectedUpfrontMemberId('');
         setUpfrontAmountStr('');
       }
-    } catch (err) {
+    } catch {
       toast.error('Erro ao carregar membros elegíveis para pacote.');
     }
   }, [toast]);
@@ -363,7 +384,7 @@ export default function Groups() {
     }
   };
 
-  const handleVoidPayment = async (payment: any) => {
+  const handleVoidPayment = async (payment: GroupPayment) => {
     const reason = window.prompt('Qual o motivo do estorno / cancelamento desta cobrança?');
     if (!reason || !reason.trim()) {
       return;
@@ -670,7 +691,7 @@ export default function Groups() {
                                             Nenhuma cobrança gerada para este mês.
                                           </div>
                                         )}
-                                        {m.payments.map((p: any) => (
+                                        {m.payments.map((p: GroupPayment) => (
                                           <div key={p.id} className="payment-history-item">
                                             <span>
                                               {formatCurrency(p.amount_cents)} 
@@ -745,7 +766,7 @@ export default function Groups() {
                                           className="btn btn-primary btn-sm"
                                           style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                                           onClick={() => {
-                                            const pending = m.payments?.find((p: any) => p.status === 'pending');
+                                            const pending = m.payments?.find((p: GroupPayment) => p.status === 'pending');
                                             if (pending) {
                                               setPaymentToConfirm({ ...pending, patientName: m.name });
                                               setShowPaymentModal(true);
@@ -762,7 +783,7 @@ export default function Groups() {
                                           className="btn btn-secondary btn-sm"
                                           style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                                           onClick={() => {
-                                            const pending = m.payments?.find((p: any) => p.status === 'pending' || p.status === 'partial');
+                                            const pending = m.payments?.find((p: GroupPayment) => p.status === 'pending' || p.status === 'partial');
                                             if (pending) {
                                               setPaymentToConfirm({ ...pending, patientName: m.name });
                                               setShowPaymentModal(true);
@@ -1261,7 +1282,7 @@ export default function Groups() {
                       ? cardFeeRates?.[String(advanceCardInstallments)]
                       : undefined;
 
-                    const res: any = await fetchApi(`/api/psychotherapy/groups/${selectedGroup.id}/members/${memberToAdvance.group_member_id}/advance-installments`, {
+                    const res = await fetchApi<{ data: { confirmedPaymentIds?: string[]; confirmErrors?: unknown[] } }>(`/api/psychotherapy/groups/${selectedGroup.id}/members/${memberToAdvance.group_member_id}/advance-installments`, {
                       method: 'POST',
                       body: JSON.stringify({
                         monthsToAdvance: parseInt(monthsToAdvance),
@@ -1340,9 +1361,9 @@ function FinancialSummary({
     return sum + Math.max(0, expectedForPayment(p) - paid);
   }, 0);
 
-  const paidCount = payments.filter((p: any) => p.payment_status === 'paid').length;
-  const partialCount = payments.filter((p: any) => p.payment_status === 'partial').length;
-  const pendingCount = payments.filter((p: any) => p.payment_status === 'pending').length;
+  const paidCount = payments.filter((p: GroupPaymentSummary) => p.payment_status === 'paid').length;
+  const partialCount = payments.filter((p: GroupPaymentSummary) => p.payment_status === 'partial').length;
+  const pendingCount = payments.filter((p: GroupPaymentSummary) => p.payment_status === 'pending').length;
   const total = payments.length;
   const adimplencia = total > 0 ? Math.round((paidCount / total) * 100) : 0;
 
@@ -2077,7 +2098,7 @@ function GroupFormModal({
 function ConfirmPaymentModal({
   payment, cardFeeRates, onClose, onSuccess
 }: {
-  payment: any;
+  payment: PaymentToConfirm;
   cardFeeRates?: CardFeeRates | null;
   onClose: () => void;
   onSuccess: () => void;

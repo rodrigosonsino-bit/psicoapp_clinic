@@ -83,6 +83,24 @@ export default function Appointments() {
     } catch { /* silently ignore — agendamentos de grupo mostram um rótulo genérico se isso falhar */ }
   }, []);
 
+  // "Coberta pelo pagamento": mesmo conceito já usado no modal de pendências do Dashboard
+  // (sessões cronologicamente cobertas pelas `paid_sessions` do mês), agora sinalizado na
+  // aba do agendamento. Busca por mês (não por intervalo visível) porque o cálculo precisa
+  // do mês inteiro do paciente pra ficar com a ordinalidade certa — um único agendamento
+  // fora de ordem mudaria quais sessões contam como "pagas".
+  const loadCoveredAppointmentIds = useCallback(async (appts: Appointment[]) => {
+    const months = new Set(appts.map(a => a.scheduledAt.slice(0, 7)));
+    if (months.size === 0) { setCoveredAppointmentIds(new Set()); return; }
+    try {
+      const results = await Promise.all(
+        Array.from(months).map(month =>
+          fetchApi<{ data: string[] }>(`/api/psychotherapy/appointments/covered/${month}`).catch(() => ({ data: [] }))
+        )
+      );
+      setCoveredAppointmentIds(new Set(results.flatMap(r => r.data)));
+    } catch { /* silently ignore — só afeta o indicador visual, não bloqueia a tela */ }
+  }, []);
+
   const loadAppointments = useCallback(async (pg = page, patientId = filterPatientId, vt = viewType, dt = currentDate) => {
     try {
       setLoading(true);
@@ -138,25 +156,7 @@ export default function Appointments() {
     } finally {
       setLoading(false);
     }
-  }, [page, filterPatientId, viewType, currentDate, toast]);
-
-  // "Coberta pelo pagamento": mesmo conceito já usado no modal de pendências do Dashboard
-  // (sessões cronologicamente cobertas pelas `paid_sessions` do mês), agora sinalizado na
-  // aba do agendamento. Busca por mês (não por intervalo visível) porque o cálculo precisa
-  // do mês inteiro do paciente pra ficar com a ordinalidade certa — um único agendamento
-  // fora de ordem mudaria quais sessões contam como "pagas".
-  const loadCoveredAppointmentIds = useCallback(async (appts: Appointment[]) => {
-    const months = new Set(appts.map(a => a.scheduledAt.slice(0, 7)));
-    if (months.size === 0) { setCoveredAppointmentIds(new Set()); return; }
-    try {
-      const results = await Promise.all(
-        Array.from(months).map(month =>
-          fetchApi<{ data: string[] }>(`/api/psychotherapy/appointments/covered/${month}`).catch(() => ({ data: [] }))
-        )
-      );
-      setCoveredAppointmentIds(new Set(results.flatMap(r => r.data)));
-    } catch { /* silently ignore — só afeta o indicador visual, não bloqueia a tela */ }
-  }, []);
+  }, [page, filterPatientId, viewType, currentDate, toast, loadCoveredAppointmentIds]);
 
   useEffect(() => { loadPatients(); }, [loadPatients]);
   useEffect(() => { loadGroups(); }, [loadGroups]);
@@ -817,6 +817,9 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
 
   const [submitting, setSubmitting] = useState(false);
   const [retroactive, setRetroactive] = useState(false);
+  // "Agora" capturado uma vez na montagem do modal (inicializador lazy do useState) — evita chamar
+  // Date.now() durante o render (impuro) só pra decidir se o horário escolhido já passou.
+  const [nowMs] = useState(() => Date.now());
   const toast = useToast();
 
   // Cadastro rápido de paciente sem sair do modal de agendamento (ex: alguém liga pedindo
@@ -860,7 +863,7 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
 
   // Sessão no passado só pode ser criada (novo agendamento) como registro retroativo.
   const isPastNew = !appointment && !!formData.scheduledAt &&
-    new Date(formData.scheduledAt).getTime() < Date.now() - 60_000;
+    new Date(formData.scheduledAt).getTime() < nowMs - 60_000;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

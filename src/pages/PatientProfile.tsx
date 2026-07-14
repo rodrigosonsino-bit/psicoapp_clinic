@@ -795,10 +795,21 @@ function WhatsappTab({ patientId, patientName }: { patientId: string; patientNam
 
 // ── Aba 4: Grupos Terapêuticos ───────────────────────────────────────────────
 
+/** Grupo terapêutico exibido na aba de grupos do paciente (`joined_at` só presente nos grupos
+ * dos quais o paciente já participa). */
+interface PatientGroupItem {
+  id: string;
+  name: string;
+  day_of_week: number | null;
+  start_time: string | null;
+  duration_minutes: number;
+  joined_at?: string;
+}
+
 function GruposTab({ patientId }: { patientId: string }) {
   const toast = useToast();
-  const [patientGroups, setPatientGroups] = useState<any[]>([]);
-  const [allGroups, setAllGroups] = useState<any[]>([]);
+  const [patientGroups, setPatientGroups] = useState<PatientGroupItem[]>([]);
+  const [allGroups, setAllGroups] = useState<PatientGroupItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -807,12 +818,12 @@ function GruposTab({ patientId }: { patientId: string }) {
     try {
       setLoading(true);
       const [pgRes, allRes] = await Promise.all([
-        fetchApi<{ success: boolean; data: any[] }>(`/api/psychotherapy/patients/${patientId}/groups`),
-        fetchApi<{ success: boolean; data: any[] }>('/api/psychotherapy/groups?includeInactive=false')
+        fetchApi<{ success: boolean; data: PatientGroupItem[] }>(`/api/psychotherapy/patients/${patientId}/groups`),
+        fetchApi<{ success: boolean; data: PatientGroupItem[] }>('/api/psychotherapy/groups?includeInactive=false')
       ]);
-      setPatientGroups(pgRes.data || pgRes || []);
-      setAllGroups(allRes.data || allRes || []);
-    } catch (err) {
+      setPatientGroups(pgRes.data ?? []);
+      setAllGroups(allRes.data ?? []);
+    } catch {
       toast.error('Erro ao carregar dados dos grupos.');
     } finally {
       setLoading(false);
@@ -867,7 +878,7 @@ function GruposTab({ patientId }: { patientId: string }) {
 
   const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-  const formatGroupDetails = (g: any) => {
+  const formatGroupDetails = (g: PatientGroupItem) => {
     const details: string[] = [];
     if (g.day_of_week != null) details.push(DAY_NAMES[g.day_of_week]);
     if (g.start_time) details.push(g.start_time.slice(0, 5));
