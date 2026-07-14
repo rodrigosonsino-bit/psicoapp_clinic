@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { z } from 'zod';
 import { container } from '../../container';
 import { AuthController } from '../controllers/AuthController';
@@ -31,19 +32,84 @@ const totpTokenSchema = z.object({
     token: z.string().length(6, 'Código TOTP deve ter 6 dígitos').or(z.string().length(8, 'Código de backup deve ter 8 caracteres'))
 });
 
+/**
+ * Brute-force guard dedicado às rotas de autenticação sensíveis (login / verificação de 2FA).
+ * Mais estrito que o rate limit global do server.ts (300/15min, compartilhado com TODA a API) —
+ * ali um atacante teria centenas de tentativas de senha antes de qualquer bloqueio.
+ *
+ * - `skipSuccessfulRequests: true` → só tentativas que FALHAM consomem a cota. O usuário legítimo
+ *   que acerta a senha nunca é penalizado; quem fica errando (brute-force/credential-stuffing) é.
+ * - Chave = IP + identidade. Identidade é `req.tenantId` (validado por `authMiddleware`/
+ *   `pending2faMiddleware`, que precisam rodar ANTES deste limiter na rota) quando disponível —
+ *   preferível ao email do corpo porque é uma identidade autenticada, não um dado que o próprio
+ *   atacante controla. Em `/login` (pré-auth, sem tenantId ainda) cai pro email do corpo. Sem
+ *   nenhum dos dois, cai só pra IP.
+ * - `trust proxy` já está ligado em server.ts (Railway) — `req.ip` reflete o IP real do cliente.
+ *   Achado de auditoria (Codex CLI): `app.set('trust proxy', true)` confia em toda a cadeia de
+ *   `X-Forwarded-For`, não só no hop do proxy da Railway — em tese permite spoofing de IP se
+ *   algum proxy intermediário não sanitizar o header. Não corrigido aqui (config pré-existente,
+ *   fora do escopo desta mudança) — registrado como item novo de dívida técnica.
+ */
+const loginRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    limit: 10,
+    skipSuccessfulRequests: true,
+    skip: () => process.env.NODE_ENV === 'test',
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { trustProxy: false },
+    keyGenerator: (req) => {
+        const ipKey = ipKeyGenerator(req.ip ?? '');
+        const tenantId = (req as AuthenticatedRequest).tenantId;
+        const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+        const identity = tenantId || email;
+        return identity ? `${ipKey}:${identity}` : ipKey;
+    },
+    handler: (_req, res) => {
+        res.status(429).json({
+            error: 'Muitas tentativas de login. Tente novamente em alguns minutos.'
+        });
+    }
+});
+
+/**
+ * Segunda camada, só de IP, sem `skipSuccessfulRequests` — pega o padrão que o limiter por
+ * IP+identidade sozinho não pega: um atacante variando o e-mail a cada tentativa (list
+ * spraying/credential stuffing distribuído por conta, mas concentrado num IP). Limite mais alto
+ * (30/15min) porque cobre todo tráfego de auth do IP, não só falhas de uma conta específica —
+ * não deve incomodar uso legítimo normal.
+ */
+const loginIpOnlyRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    skip: () => process.env.NODE_ENV === 'test',
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { trustProxy: false },
+    keyGenerator: (req) => ipKeyGenerator(req.ip ?? ''),
+    handler: (_req, res) => {
+        res.status(429).json({
+            error: 'Muitas tentativas de login. Tente novamente em alguns minutos.'
+        });
+    }
+});
+
 export function createAuthRoutes(): Router {
     const router = Router();
     const controller = container.resolve(AuthController);
     const totpController = container.resolve(TotpController);
 
     router.post('/register', validateBody(registerSchema), asyncHandler((req, res) => controller.register(req, res)));
-    router.post('/login', validateBody(loginSchema), asyncHandler((req, res) => controller.login(req, res)));
-    router.post('/2fa/login', pending2faMiddleware, validateBody(totpTokenSchema), asyncHandler((req, res) => controller.login2fa(req, res)));
+    router.post('/login', loginIpOnlyRateLimit, loginRateLimit, validateBody(loginSchema), asyncHandler((req, res) => controller.login(req, res)));
+    // pending2faMiddleware roda ANTES do rate limit de propósito: ele valida o token de desafio e
+    // popula req.tenantId, que o loginRateLimit usa como chave de identidade (em vez de cair pra
+    // só-IP, que penalizaria todo mundo atrás do mesmo IP/NAT por uma conta só sendo atacada).
+    router.post('/2fa/login', pending2faMiddleware, loginRateLimit, validateBody(totpTokenSchema), asyncHandler((req, res) => controller.login2fa(req, res)));
     router.post('/refresh', validateBody(refreshSchema), asyncHandler((req, res) => controller.refresh(req, res)));
 
     // 2FA — requer JWT válido
     router.post('/2fa/setup', authMiddleware, asyncHandler((req, res) => totpController.setup(req, res)));
-    router.post('/2fa/verify', authMiddleware, validateBody(totpTokenSchema), asyncHandler((req, res) => totpController.verify(req, res)));
+    router.post('/2fa/verify', authMiddleware, loginRateLimit, validateBody(totpTokenSchema), asyncHandler((req, res) => totpController.verify(req, res)));
     router.post('/2fa/disable', authMiddleware, validateBody(totpTokenSchema), asyncHandler((req, res) => totpController.disable(req, res)));
 
     // Google Calendar OAuth

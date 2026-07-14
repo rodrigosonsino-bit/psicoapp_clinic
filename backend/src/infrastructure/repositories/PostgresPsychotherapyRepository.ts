@@ -1136,12 +1136,11 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             d.setUTCMonth(d.getUTCMonth() + 1);
         }
 
-        const sixMonthsTrend: { month: string; revenueCents: number; expensesCents: number }[] = [];
-        let currentMonthRevenue = 0;
-        let currentMonthSessionRevenue = 0;
-        let currentMonthExpenses = 0;
-
-        for (const m of monthsList) {
+        // Cada mês da janela de 6 é independente — computa em paralelo (Promise.all) em vez de
+        // sequencial pra cortar o N+1 (antes eram até ~18-24 round-trips sequenciais numa carga
+        // do dashboard; agora as mesmas queries disparam concorrentes, limitadas só pelo pool).
+        // O SQL e a lógica de cutover/snapshot/fallback são idênticos ao que era feito no loop.
+        const monthResults = await Promise.all(monthsList.map(async (m) => {
             const [mYear, mMonth] = m.split('-');
             const mYearNum = parseInt(mYear, 10);
             const mMonthNum = parseInt(mMonth, 10);
@@ -1212,18 +1211,17 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
                 }
             }
 
-            sixMonthsTrend.push({
-                month: m,
-                revenueCents: revenue,
-                expensesCents: expenses
-            });
+            return { month: m, revenueCents: revenue, expensesCents: expenses, sessionRevenue };
+        }));
 
-            if (m === currentMonthStr) {
-                currentMonthRevenue = revenue;
-                currentMonthSessionRevenue = sessionRevenue;
-                currentMonthExpenses = expenses;
-            }
-        }
+        // Promise.all preserva a ordem do array de entrada, então monthResults já está cronológico.
+        const sixMonthsTrend: { month: string; revenueCents: number; expensesCents: number }[] =
+            monthResults.map(r => ({ month: r.month, revenueCents: r.revenueCents, expensesCents: r.expensesCents }));
+
+        const currentResult = monthResults.find(r => r.month === currentMonthStr);
+        const currentMonthRevenue = currentResult?.revenueCents ?? 0;
+        const currentMonthSessionRevenue = currentResult?.sessionRevenue ?? 0;
+        const currentMonthExpenses = currentResult?.expensesCents ?? 0;
 
         // Calcular pendências do mês corrente
         let pendingCents = 0;
@@ -1240,26 +1238,27 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         if (isCurrentPostCutover) {
             // Pendente no ledger: expected_amount_cents - sum(payments confirmados), só pra
             // meses já vencidos (dia 11 do mês seguinte ao mês do registro).
-            const pendRes = await this.dbPool.query(`
-                SELECT COALESCE(SUM(
-                    GREATEST(COALESCE(expected_amount_cents, 0) - COALESCE((
-                        SELECT SUM(amount_cents) FROM financial_payments
-                        WHERE monthly_record_id = mr.id AND status = 'confirmed'
-                    ), 0), 0)
-                ), 0) AS pending
-                FROM psychotherapy_monthly_records mr
-                WHERE mr.tenant_id = $1
-                  AND (to_date(mr.month, 'YYYY-MM') + INTERVAL '1 month' + INTERVAL '10 days')::date <= CURRENT_DATE;
-            `, [validTenantId]);
-
-            // Cobranças de grupo: já usa due_date próprio (mais preciso que a regra genérica
-            // acima), sem precisar de ajuste.
-            const pendGroupRes = await this.dbPool.query(`
-                SELECT COALESCE(SUM(amount_cents), 0) AS pending
-                FROM group_payments
-                WHERE tenant_id = $1 AND status = 'pending'
-                  AND COALESCE(due_date, CURRENT_DATE) <= CURRENT_DATE;
-            `, [validTenantId]);
+            const [pendRes, pendGroupRes] = await Promise.all([
+                this.dbPool.query(`
+                    SELECT COALESCE(SUM(
+                        GREATEST(COALESCE(expected_amount_cents, 0) - COALESCE((
+                            SELECT SUM(amount_cents) FROM financial_payments
+                            WHERE monthly_record_id = mr.id AND status = 'confirmed'
+                        ), 0), 0)
+                    ), 0) AS pending
+                    FROM psychotherapy_monthly_records mr
+                    WHERE mr.tenant_id = $1
+                      AND (to_date(mr.month, 'YYYY-MM') + INTERVAL '1 month' + INTERVAL '10 days')::date <= CURRENT_DATE;
+                `, [validTenantId]),
+                // Cobranças de grupo: já usa due_date próprio (mais preciso que a regra genérica
+                // acima), sem precisar de ajuste.
+                this.dbPool.query(`
+                    SELECT COALESCE(SUM(amount_cents), 0) AS pending
+                    FROM group_payments
+                    WHERE tenant_id = $1 AND status = 'pending'
+                      AND COALESCE(due_date, CURRENT_DATE) <= CURRENT_DATE;
+                `, [validTenantId])
+            ]);
 
             pendingCents = parseInt(pendRes.rows[0].pending, 10) + parseInt(pendGroupRes.rows[0].pending, 10);
         } else {
@@ -1270,34 +1269,35 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             // decorreu e já passou até do prazo de pagamento — sem sentido prorratear por
             // sessão "decorrida"). O mês corrente nunca aparece aqui (seu vencimento é sempre
             // no futuro), então não há mais rateio por sessão a fazer nesta métrica.
-            const pendingResult = await this.dbPool.query(`
-                SELECT COALESCE(SUM(
-                    CASE
-                        WHEN pmr.payment_type = 'monthly' THEN
-                            GREATEST(
-                                (pmr.expected_sessions - pmr.absences - pmr.paid_sessions)
-                                    * pmr.session_price_cents::numeric / GREATEST(pmr.expected_sessions - pmr.absences, 1)
-                                    - pmr.previous_month_paid_cents,
-                            0)
-                        ELSE
-                            GREATEST(
-                                GREATEST(pmr.expected_sessions - pmr.absences - pmr.paid_sessions, 0)
-                                    * COALESCE(pmr.session_price_cents, 0)
-                                    - pmr.previous_month_paid_cents,
-                            0)
-                    END
-                ), 0) as pending
-                FROM psychotherapy_monthly_records pmr
-                WHERE pmr.tenant_id = $1 AND pmr.payment_status != 'paid'
-                  AND (to_date(pmr.month, 'YYYY-MM') + INTERVAL '1 month' + INTERVAL '10 days')::date <= CURRENT_DATE
-            `, [validTenantId]);
-
-            const pendGroupRes = await this.dbPool.query(`
-                SELECT COALESCE(SUM(amount_cents), 0) AS pending
-                FROM group_payments
-                WHERE tenant_id = $1 AND status = 'pending'
-                  AND COALESCE(due_date, CURRENT_DATE) <= CURRENT_DATE;
-            `, [validTenantId]);
+            const [pendingResult, pendGroupRes] = await Promise.all([
+                this.dbPool.query(`
+                    SELECT COALESCE(SUM(
+                        CASE
+                            WHEN pmr.payment_type = 'monthly' THEN
+                                GREATEST(
+                                    (pmr.expected_sessions - pmr.absences - pmr.paid_sessions)
+                                        * pmr.session_price_cents::numeric / GREATEST(pmr.expected_sessions - pmr.absences, 1)
+                                        - pmr.previous_month_paid_cents,
+                                0)
+                            ELSE
+                                GREATEST(
+                                    GREATEST(pmr.expected_sessions - pmr.absences - pmr.paid_sessions, 0)
+                                        * COALESCE(pmr.session_price_cents, 0)
+                                        - pmr.previous_month_paid_cents,
+                                0)
+                        END
+                    ), 0) as pending
+                    FROM psychotherapy_monthly_records pmr
+                    WHERE pmr.tenant_id = $1 AND pmr.payment_status != 'paid'
+                      AND (to_date(pmr.month, 'YYYY-MM') + INTERVAL '1 month' + INTERVAL '10 days')::date <= CURRENT_DATE
+                `, [validTenantId]),
+                this.dbPool.query(`
+                    SELECT COALESCE(SUM(amount_cents), 0) AS pending
+                    FROM group_payments
+                    WHERE tenant_id = $1 AND status = 'pending'
+                      AND COALESCE(due_date, CURRENT_DATE) <= CURRENT_DATE;
+                `, [validTenantId])
+            ]);
 
             pendingCents = parseInt(pendingResult.rows[0].pending, 10) + parseInt(pendGroupRes.rows[0].pending, 10);
         }
