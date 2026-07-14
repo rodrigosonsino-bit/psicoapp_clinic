@@ -286,6 +286,10 @@ export interface IPsychotherapyRepository {
     getDashboardAnalytics(tenantId: string, currentMonthStr: string): Promise<DashboardAnalytics>;
     getPendingDetails(tenantId: string, currentMonthStr: string): Promise<PendingDetails>;
     listCoveredAppointmentIds(tenantId: string, month: string): Promise<string[]>;
+    /** Mapa appointmentId -> sessionId para os agendamentos do mês que já têm uma sessão vinculada
+     * (appointment_id, migration 082) — usado pelo atalho "Ver Sessão" na tela de Agendamentos, pra
+     * não precisar navegar manualmente até o Diário de Sessões e procurar o registro correspondente. */
+    listSessionLinksForMonth(tenantId: string, month: string): Promise<Record<string, string>>;
     saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment>;
     listAppointments(tenantId: string, options?: ListAppointmentsOptions): Promise<PaginatedResult<PsychotherapyAppointment>>;
     findAppointmentById(tenantId: string, id: string): Promise<PsychotherapyAppointment | null>;

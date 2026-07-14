@@ -5,6 +5,7 @@ import { ListPsychotherapyAppointmentsUseCase } from '../../application/useCases
 import { DeletePsychotherapyAppointmentUseCase } from '../../application/useCases/DeletePsychotherapyAppointmentUseCase';
 import { UpdateAppointmentStatusUseCase } from '../../application/useCases/UpdateAppointmentStatusUseCase';
 import { ListCoveredAppointmentIdsUseCase } from '../../application/useCases/ListCoveredAppointmentIdsUseCase';
+import { ListSessionLinksForMonthUseCase } from '../../application/useCases/ListSessionLinksForMonthUseCase';
 import { AppointmentStatus } from '../../domain/models/PsychotherapyAppointment';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { AppError } from '../../domain/errors/AppError';
@@ -16,7 +17,8 @@ export class AppointmentController {
         private readonly listUseCase: ListPsychotherapyAppointmentsUseCase,
         private readonly deleteUseCase: DeletePsychotherapyAppointmentUseCase,
         private readonly updateStatusUseCase: UpdateAppointmentStatusUseCase,
-        private readonly listCoveredAppointmentIdsUseCase: ListCoveredAppointmentIdsUseCase
+        private readonly listCoveredAppointmentIdsUseCase: ListCoveredAppointmentIdsUseCase,
+        private readonly listSessionLinksForMonthUseCase: ListSessionLinksForMonthUseCase
     ) {}
 
     async saveAppointment(req: Request, res: Response): Promise<Response> {
@@ -52,6 +54,12 @@ export class AppointmentController {
         const tenantId = this.getTenantId(req);
         const ids = await this.listCoveredAppointmentIdsUseCase.execute(tenantId, req.params.month);
         return res.status(200).json({ data: ids });
+    }
+
+    async listSessionLinksForMonth(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const links = await this.listSessionLinksForMonthUseCase.execute(tenantId, req.params.month);
+        return res.status(200).json({ data: links });
     }
 
     async deleteAppointment(req: Request, res: Response): Promise<Response> {

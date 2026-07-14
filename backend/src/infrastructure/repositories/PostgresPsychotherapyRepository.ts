@@ -1507,6 +1507,22 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return covered;
     }
 
+    async listSessionLinksForMonth(tenantId: string, month: string): Promise<Record<string, string>> {
+        const validTenantId = this.validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT a.id AS appointment_id, s.id AS session_id
+            FROM psychotherapy_appointments a
+            JOIN psychotherapy_sessions s ON s.appointment_id = a.id
+            WHERE a.tenant_id = $1 AND to_char(a.scheduled_at, 'YYYY-MM') = $2;
+        `, [validTenantId, month]);
+
+        const links: Record<string, string> = {};
+        for (const row of result.rows) {
+            links[row.appointment_id] = row.session_id;
+        }
+        return links;
+    }
+
     // ── Appointments ──────────────────────────────────────────────────────────
 
     async saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment> {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw, MessageCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw, MessageCircle, FileText } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { Appointment, AppointmentStatus, Patient, PaginatedResponse, MonthResponse } from '../types/api';
 import { useToast } from '../context/ToastContext';
@@ -62,6 +62,7 @@ export default function Appointments() {
   const [prefilledDate, setPrefilledDate] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [coveredAppointmentIds, setCoveredAppointmentIds] = useState<Set<string>>(new Set());
+  const [sessionLinkByAppointmentId, setSessionLinkByAppointmentId] = useState<Record<string, string>>({});
   const toast = useToast();
   const navigate = useNavigate();
   const PAGE_SIZE = 20;
@@ -99,6 +100,23 @@ export default function Appointments() {
       );
       setCoveredAppointmentIds(new Set(results.flatMap(r => r.data)));
     } catch { /* silently ignore — só afeta o indicador visual, não bloqueia a tela */ }
+  }, []);
+
+  // Atalho "Ver Sessão": mapa appointmentId -> sessionId (só para agendamentos Realizados que já
+  // têm sessão vinculada, migration 082) — evita o usuário precisar ir manualmente no Diário de
+  // Sessões procurar o registro correspondente. Mesmo padrão de busca por mês que
+  // loadCoveredAppointmentIds, por consistência.
+  const loadSessionLinks = useCallback(async (appts: Appointment[]) => {
+    const months = new Set(appts.map(a => a.scheduledAt.slice(0, 7)));
+    if (months.size === 0) { setSessionLinkByAppointmentId({}); return; }
+    try {
+      const results = await Promise.all(
+        Array.from(months).map(month =>
+          fetchApi<{ data: Record<string, string> }>(`/api/psychotherapy/appointments/session-links/${month}`).catch(() => ({ data: {} }))
+        )
+      );
+      setSessionLinkByAppointmentId(Object.assign({}, ...results.map(r => r.data)));
+    } catch { /* silently ignore — só afeta o atalho, não bloqueia a tela */ }
   }, []);
 
   const loadAppointments = useCallback(async (pg = page, patientId = filterPatientId, vt = viewType, dt = currentDate) => {
@@ -149,6 +167,7 @@ export default function Appointments() {
       setAppointments(res.data);
       setTotal(res.meta.total);
       loadCoveredAppointmentIds(res.data);
+      loadSessionLinks(res.data);
     } catch (err) {
       console.error(err);
       setError(true);
@@ -156,7 +175,7 @@ export default function Appointments() {
     } finally {
       setLoading(false);
     }
-  }, [page, filterPatientId, viewType, currentDate, toast, loadCoveredAppointmentIds]);
+  }, [page, filterPatientId, viewType, currentDate, toast, loadCoveredAppointmentIds, loadSessionLinks]);
 
   useEffect(() => { loadPatients(); }, [loadPatients]);
   useEffect(() => { loadGroups(); }, [loadGroups]);
@@ -584,6 +603,15 @@ export default function Appointments() {
                           >
                             <CalendarCheck size={14} />
                           </a>
+                        )}
+                        {a.status === 'attended' && sessionLinkByAppointmentId[a.id] && (
+                          <button
+                            className="btn-icon"
+                            title="Ver Sessão vinculada"
+                            onClick={() => navigate(`/sessions?openId=${sessionLinkByAppointmentId[a.id]}`)}
+                          >
+                            <FileText size={14} />
+                          </button>
                         )}
                         <button className="btn-icon" title="Editar" onClick={() => { setEditAppointment(a); setShowModal(true); }}>
                           <Edit2 size={14} />
