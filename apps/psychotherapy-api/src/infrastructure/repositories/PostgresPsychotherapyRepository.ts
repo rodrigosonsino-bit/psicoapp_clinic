@@ -33,8 +33,8 @@ import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } fr
 import { BookingLink } from '../../domain/models/BookingLink';
 import { encrypt, decrypt } from '../auth/cryptoHelper';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { validateTenantId } from './shared';
+import { PostgresTenantProfileRepository } from './PostgresTenantProfileRepository';
 
 /** Converte uma Date para o formato YYYY-MM no fuso America/Sao_Paulo */
 function toMonthStr(date: Date): string {
@@ -59,7 +59,6 @@ import { BusinessError } from '../../domain/errors/BusinessError';
 import {
     PatientRow,
     MonthlyRecordRow,
-    TenantProfileRow,
     ReceiptRow,
     SessionRow,
     ExpenseRow,
@@ -72,10 +71,14 @@ import {
 
 @injectable()
 export class PostgresPsychotherapyRepository implements IPsychotherapyRepository {
-    constructor(private readonly dbPool: Pool) {}
+    private readonly tenantProfileRepository: PostgresTenantProfileRepository;
+
+    constructor(private readonly dbPool: Pool) {
+        this.tenantProfileRepository = new PostgresTenantProfileRepository(dbPool);
+    }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_patients (
                 id, tenant_id, name, status, payment_type, default_session_price_cents,
@@ -128,7 +131,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listPatients(tenantId: string, pagination?: PaginationOptions): Promise<any> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         if (pagination) {
             const offset = (pagination.page - 1) * pagination.limit;
             const params: unknown[] = [validTenantId, PASTORAL_SENTINEL_EMAIL];
@@ -173,7 +176,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listIndividualPatientsForBilling(tenantId: string): Promise<PsychotherapyPatient[]> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_patients
             WHERE tenant_id = $1 AND individual_therapy_enabled = TRUE AND deleted_at IS NULL
@@ -187,7 +190,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findActivePatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT *
             FROM psychotherapy_patients
@@ -198,7 +201,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findPatientByIdIncludingDeleted(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT *
             FROM psychotherapy_patients
@@ -209,7 +212,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deletePatient(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             UPDATE psychotherapy_patients
             SET deleted_at = NOW(), updated_at = NOW()
@@ -220,7 +223,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         if (data.id) {
             const updated = await this.dbPool.query(`
                 UPDATE psychotherapy_monthly_records
@@ -329,7 +332,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     async bulkSaveMonthlyRecords(data: SaveMonthlyRecordDTO[]): Promise<PsychotherapyMonthlyRecord[]> {
         if (data.length === 0) return [];
 
-        const tenantId = this.validateTenantId(data[0].tenantId);
+        const tenantId = validateTenantId(data[0].tenantId);
         const COLS = 14;
         const values: unknown[] = [];
 
@@ -388,7 +391,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async addAdvanceCredit(data: AddAdvanceCreditDTO): Promise<PsychotherapyMonthlyRecord> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         if (data.amountCents <= 0) {
             throw new AppError('O valor adiantado deve ser maior que zero.', 400);
         }
@@ -432,7 +435,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
      * Retorna um Map<patientId, count>.
      */
     async countScheduledSessionsByPatient(tenantId: string, month: string): Promise<Map<string, number>> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
 
         // Limites do mês em UTC, considerando o fuso America/Sao_Paulo (UTC-3)
         const monthStart = new Date(`${month}-01T03:00:00.000Z`);
@@ -457,7 +460,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listMonthlyRecords(tenantId: string, month: string): Promise<PsychotherapyMonthlyRecord[]> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT *
             FROM psychotherapy_monthly_records
@@ -474,58 +477,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
-        const validTenantId = this.validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template, card_fee_rates
-            FROM tenants
-            WHERE id = $1;
-        `, [validTenantId]);
-
-        return result.rows[0] ? this.mapTenantProfile(result.rows[0]) : null;
+        return this.tenantProfileRepository.getTenantProfile(tenantId);
     }
 
     async updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile> {
-        const tenantId = this.validateTenantId(data.tenantId);
-
-        // card_fee_rates precisa distinguir "não veio no payload" (não mexe) de "veio null"
-        // (limpa) — diferente dos demais campos, que usam COALESCE e por isso nunca
-        // conseguem limpar um valor já salvo enviando null (mesma limitação de bookingPage).
-        const cardFeeRatesProvided = data.cardFeeRates !== undefined;
-        const cardFeeRatesValue = data.cardFeeRates === null || data.cardFeeRates === undefined
-            ? null
-            : JSON.stringify(data.cardFeeRates);
-
-        const result = await this.dbPool.query(`
-            UPDATE tenants
-            SET
-                full_name = COALESCE($2, full_name),
-                document = COALESCE($3, document),
-                professional_id = COALESCE($4, professional_id),
-                address = COALESCE($5, address),
-                booking_page = COALESCE($6::jsonb, booking_page),
-                whatsapp_reminder_template = COALESCE($7, whatsapp_reminder_template),
-                card_fee_rates = CASE WHEN $8 THEN $9::jsonb ELSE card_fee_rates END,
-                updated_at = NOW()
-            WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template, card_fee_rates;
-        `, [
-            tenantId,
-            data.fullName !== undefined ? data.fullName : null,
-            data.document !== undefined ? data.document : null,
-            data.professionalId !== undefined ? data.professionalId : null,
-            data.address !== undefined ? data.address : null,
-            data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null,
-            data.whatsappReminderTemplate !== undefined ? data.whatsappReminderTemplate : null,
-            cardFeeRatesProvided,
-            cardFeeRatesValue
-        ]);
-
-        if (result.rows.length === 0) throw new NotFoundError('Tenant não encontrado');
-        return this.mapTenantProfile(result.rows[0]);
+        return this.tenantProfileRepository.updateTenantProfile(data);
     }
 
     async saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         
         // 1. If it's an update, check if it exists
         if (data.id) {
@@ -668,7 +628,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listReceipts(tenantId: string, patientId?: string): Promise<PsychotherapyReceipt[]> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         let query = 'SELECT * FROM psychotherapy_receipts WHERE tenant_id = $1';
         const params: any[] = [validTenantId];
         
@@ -684,7 +644,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteReceipt(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const client = await this.dbPool.connect();
         try {
             await client.query('BEGIN');
@@ -722,7 +682,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async saveSession(data: SaveSessionDTO): Promise<PsychotherapySession> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         const client = await this.dbPool.connect();
 
         try {
@@ -809,7 +769,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         end?: Date,
         pagination?: PaginationOptions
     ): Promise<PaginatedResult<PsychotherapySession>> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         let query = 'SELECT *, COUNT(*) OVER() AS total_count FROM psychotherapy_sessions WHERE tenant_id = $1';
         const params: any[] = [validTenantId];
         
@@ -848,7 +808,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteSession(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
 
         // Sessão vinculada a um agendamento: excluir por aqui deixaria o agendamento
         // "attended"/"no_show"/"canceled" sem sessão correspondente. Precisa reverter o status
@@ -874,7 +834,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async saveExpense(data: SaveExpenseDTO): Promise<PsychotherapyExpense> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_expenses (
                 id, tenant_id, date, amount_cents, description, category, fixed_expense_id, reference_month
@@ -911,7 +871,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         end?: Date,
         pagination?: PaginationOptions
     ): Promise<PaginatedResult<PsychotherapyExpense>> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
 
         // Auto-instantiate fixed expenses for current month and any months in start-end range.
         // Usa America/Sao_Paulo explicitamente (não new Date().getMonth(), que usa o fuso do
@@ -967,7 +927,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteExpense(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             DELETE FROM psychotherapy_expenses
             WHERE tenant_id = $1 AND id = $2;
@@ -977,7 +937,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listFixedExpenses(tenantId: string): Promise<PsychotherapyFixedExpense[]> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_fixed_expenses
             WHERE tenant_id = $1
@@ -988,7 +948,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async saveFixedExpense(data: SaveFixedExpenseDTO): Promise<PsychotherapyFixedExpense> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_fixed_expenses (
                 id, tenant_id, description, amount_cents, day_of_month, category, start_date, end_date, active
@@ -1021,7 +981,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteFixedExpense(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             DELETE FROM psychotherapy_fixed_expenses
             WHERE tenant_id = $1 AND id = $2;
@@ -1033,7 +993,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async toggleFixedExpense(tenantId: string, id: string, active: boolean): Promise<PsychotherapyFixedExpense> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             UPDATE psychotherapy_fixed_expenses
             SET active = $3, updated_at = NOW()
@@ -1049,7 +1009,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async expenseExistsForMonth(tenantId: string, fixedExpenseId: string, month: string): Promise<boolean> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT 1 FROM psychotherapy_expenses
             WHERE tenant_id = $1 AND fixed_expense_id = $2 AND reference_month = $3
@@ -1060,7 +1020,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     private async checkAndInstantiateFixedExpenses(tenantId: string, monthStr: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const fixedExpenses = await this.listFixedExpenses(validTenantId);
 
         for (const fe of fixedExpenses) {
@@ -1102,7 +1062,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async getDashboardAnalytics(tenantId: string, currentMonthStr: string): Promise<DashboardAnalytics> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
 
         const [year, month] = currentMonthStr.split('-');
         const currentYearNum = parseInt(year, 10);
@@ -1322,7 +1282,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
      * pra nunca divergir do total exibido no card.
      */
     async getPendingDetails(tenantId: string, currentMonthStr: string): Promise<PendingDetails> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
 
         const [year, month] = currentMonthStr.split('-');
         const currentMonthStart = new Date(Date.UTC(parseInt(year, 10), parseInt(month, 10) - 1, 1));
@@ -1492,7 +1452,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // pagas — não é usado por nenhum cálculo financeiro (só reflete o mesmo "covered" que
     // getPendingDetails já expõe pra sessões vencidas, mas pro mês inteiro, vencido ou não).
     async listCoveredAppointmentIds(tenantId: string, month: string): Promise<string[]> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const recordsRes = await this.dbPool.query(`
             SELECT patient_id, paid_sessions FROM psychotherapy_monthly_records
             WHERE tenant_id = $1 AND month = $2 AND patient_id IS NOT NULL AND paid_sessions > 0;
@@ -1511,7 +1471,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Appointments ──────────────────────────────────────────────────────────
 
     async saveAppointment(data: SaveAppointmentDTO): Promise<PsychotherapyAppointment> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
 
         const client = await this.dbPool.connect();
         try {
@@ -1758,7 +1718,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listAppointments(tenantId: string, options: ListAppointmentsOptions = {}): Promise<PaginatedResult<PsychotherapyAppointment>> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const params: unknown[] = [validTenantId];
         let whereClause = 'WHERE tenant_id = $1';
 
@@ -1797,7 +1757,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findAppointmentById(tenantId: string, id: string): Promise<PsychotherapyAppointment | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_appointments
             WHERE tenant_id = $1 AND id = $2;
@@ -1806,7 +1766,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteAppointment(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const client = await this.dbPool.connect();
 
         try {
@@ -1889,7 +1849,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async updateAppointmentStatus(tenantId: string, id: string, status: AppointmentStatus): Promise<PsychotherapyAppointment> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const client = await this.dbPool.connect();
 
         try {
@@ -2154,7 +2114,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Google OAuth Tokens ───────────────────────────────────────────────────
 
     async saveGoogleOAuthTokens(tenantId: string, accessToken: string, refreshToken: string, expiryDate: number, calendarId?: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const encryptedAccessToken = encrypt(accessToken);
         const encryptedRefreshToken = encrypt(refreshToken);
         await this.dbPool.query(`
@@ -2170,7 +2130,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async getGoogleOAuthTokens(tenantId: string): Promise<GoogleOAuthTokens | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT tenant_id, access_token, refresh_token, expiry_date, calendar_id
             FROM google_oauth_tokens WHERE tenant_id = $1;
@@ -2187,7 +2147,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async updateGoogleAccessToken(tenantId: string, accessToken: string, expiryDate: number): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const encryptedAccessToken = encrypt(accessToken);
         await this.dbPool.query(`
             UPDATE google_oauth_tokens SET access_token = $2, expiry_date = $3, updated_at = NOW()
@@ -2211,7 +2171,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findAppointmentByGoogleEventId(tenantId: string, googleEventId: string): Promise<PsychotherapyAppointment | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_appointments
             WHERE tenant_id = $1 AND google_event_id = $2;
@@ -2220,7 +2180,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         await this.dbPool.query(`
             UPDATE psychotherapy_appointments
             SET google_event_id = $3, google_event_url = $4, updated_at = NOW()
@@ -2248,7 +2208,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Clinical Notes ────────────────────────────────────────────────────────
 
     async saveClinicalNote(data: SaveClinicalNoteDTO): Promise<ClinicalNote> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         const client = await this.dbPool.connect();
 
         try {
@@ -2314,7 +2274,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listClinicalNotes(tenantId: string, patientId: string, page = 1, limit = 20): Promise<PaginatedResult<ClinicalNote>> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const offset = (page - 1) * limit;
 
         const result = await this.dbPool.query(`
@@ -2334,7 +2294,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findClinicalNoteById(tenantId: string, id: string): Promise<ClinicalNote | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_clinical_notes
             WHERE tenant_id = $1 AND id = $2;
@@ -2343,7 +2303,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteClinicalNote(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             DELETE FROM psychotherapy_clinical_notes
             WHERE tenant_id = $1 AND id = $2;
@@ -2354,7 +2314,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Availability Slots ────────────────────────────────────────────────────
 
     async saveAvailabilitySlot(data: SaveAvailabilitySlotDTO): Promise<AvailabilitySlot> {
-        const tenantId = this.validateTenantId(data.tenantId);
+        const tenantId = validateTenantId(data.tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_availability_slots
                 (id, tenant_id, day_of_week, start_time, duration_minutes, is_active, notes, recurrence_type, start_date, modality)
@@ -2389,7 +2349,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listAvailabilitySlots(tenantId: string): Promise<AvailabilitySlot[]> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_availability_slots
             WHERE tenant_id = $1
@@ -2399,7 +2359,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteAvailabilitySlot(tenantId: string, id: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             DELETE FROM psychotherapy_availability_slots WHERE tenant_id = $1 AND id = $2;
         `, [validTenantId, id]);
@@ -2407,7 +2367,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listActiveAppointmentDatetimes(tenantId: string, from: Date, to: Date): Promise<Date[]> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT scheduled_at FROM psychotherapy_appointments
             WHERE tenant_id = $1
@@ -2421,7 +2381,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Booking Links ──────────────────────────────────────────────────────────
 
     async upsertBookingLink(tenantId: string, patientId: string, expiresAt?: Date | null): Promise<BookingLink> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_booking_links (tenant_id, patient_id, expires_at, is_active)
             VALUES ($1, $2, $3, TRUE)
@@ -2443,7 +2403,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deactivateBookingLink(tenantId: string, patientId: string): Promise<void> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         await this.dbPool.query(`
             UPDATE psychotherapy_booking_links SET is_active = FALSE, updated_at = NOW()
             WHERE tenant_id = $1 AND patient_id = $2;
@@ -2453,7 +2413,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Public booking tokens ─────────────────────────────────────────────────
 
     async getOrCreatePublicBookingToken(tenantId: string): Promise<string> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_public_booking_tokens (tenant_id)
             VALUES ($1)
@@ -2474,7 +2434,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findPatientByPhone(tenantId: string, phone: string): Promise<PsychotherapyPatient | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_patients
             WHERE tenant_id = $1 AND phone = $2
@@ -2484,13 +2444,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
-
-    private validateTenantId(tenantId: string): string {
-        if (!UUID_REGEX.test(tenantId)) {
-            throw new Error(`TenantId inválido: "${tenantId}". Esperado UUID v1-v5.`);
-        }
-        return tenantId;
-    }
 
     private computeSummaryFromRecords(month: string, records: PsychotherapyMonthlyRecord[]): PsychotherapyMonthSummary {
         return records.reduce<PsychotherapyMonthSummary>((acc, record) => {
@@ -2561,22 +2514,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.previous_month_paid_cents,
             new Date(row.created_at),
             new Date(row.updated_at)
-        );
-    }
-
-    private mapTenantProfile(row: TenantProfileRow): TenantProfile {
-        return new TenantProfile(
-            row.id,
-            row.name,
-            row.email,
-            row.full_name,
-            row.document,
-            row.professional_id,
-            row.address,
-            row.totp_enabled || false,
-            row.booking_page ?? null,
-            row.whatsapp_reminder_template ?? null,
-            row.card_fee_rates ?? null
         );
     }
 
@@ -2727,7 +2664,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async registerPayment(data: RegisterPaymentDTO): Promise<FinancialPayment> {
-        const validTenantId = this.validateTenantId(data.tenantId);
+        const validTenantId = validateTenantId(data.tenantId);
         const client = await this.dbPool.connect();
         try {
             await client.query('BEGIN');
@@ -2806,7 +2743,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async voidPayment(tenantId: string, paymentId: string, voidedBy: string, reason: string): Promise<FinancialPayment> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const client = await this.dbPool.connect();
         try {
             await client.query('BEGIN');
@@ -2879,7 +2816,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findPaymentByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<FinancialPayment | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM financial_payments
             WHERE tenant_id = $1 AND idempotency_key = $2;
@@ -2888,7 +2825,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findPaymentById(tenantId: string, id: string): Promise<FinancialPayment | null> {
-        const validTenantId = this.validateTenantId(tenantId);
+        const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM financial_payments
             WHERE tenant_id = $1 AND id = $2;
