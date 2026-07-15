@@ -31,10 +31,10 @@ import { AppointmentStatus, PsychotherapyAppointment } from '../../domain/models
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
-import { encrypt, decrypt } from '../auth/cryptoHelper';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
 import { validateTenantId } from './shared';
 import { PostgresTenantProfileRepository } from './PostgresTenantProfileRepository';
+import { PostgresGoogleOAuthRepository } from './PostgresGoogleOAuthRepository';
 
 /** Converte uma Date para o formato YYYY-MM no fuso America/Sao_Paulo */
 function toMonthStr(date: Date): string {
@@ -72,9 +72,11 @@ import {
 @injectable()
 export class PostgresPsychotherapyRepository implements IPsychotherapyRepository {
     private readonly tenantProfileRepository: PostgresTenantProfileRepository;
+    private readonly googleOAuthRepository: PostgresGoogleOAuthRepository;
 
     constructor(private readonly dbPool: Pool) {
         this.tenantProfileRepository = new PostgresTenantProfileRepository(dbPool);
+        this.googleOAuthRepository = new PostgresGoogleOAuthRepository(dbPool);
     }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
@@ -2114,60 +2116,19 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Google OAuth Tokens ───────────────────────────────────────────────────
 
     async saveGoogleOAuthTokens(tenantId: string, accessToken: string, refreshToken: string, expiryDate: number, calendarId?: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const encryptedAccessToken = encrypt(accessToken);
-        const encryptedRefreshToken = encrypt(refreshToken);
-        await this.dbPool.query(`
-            INSERT INTO google_oauth_tokens (tenant_id, access_token, refresh_token, expiry_date, calendar_id)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (tenant_id) DO UPDATE SET
-                access_token = EXCLUDED.access_token,
-                refresh_token = EXCLUDED.refresh_token,
-                expiry_date = EXCLUDED.expiry_date,
-                calendar_id = COALESCE($5, google_oauth_tokens.calendar_id),
-                updated_at = NOW();
-        `, [validTenantId, encryptedAccessToken, encryptedRefreshToken, expiryDate, calendarId ?? null]);
+        return this.googleOAuthRepository.saveGoogleOAuthTokens(tenantId, accessToken, refreshToken, expiryDate, calendarId);
     }
 
     async getGoogleOAuthTokens(tenantId: string): Promise<GoogleOAuthTokens | null> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT tenant_id, access_token, refresh_token, expiry_date, calendar_id
-            FROM google_oauth_tokens WHERE tenant_id = $1;
-        `, [validTenantId]);
-        if (!result.rows[0]) return null;
-        const row = result.rows[0];
-        return {
-            tenantId: row.tenant_id,
-            accessToken: decrypt(row.access_token),
-            refreshToken: decrypt(row.refresh_token),
-            expiryDate: row.expiry_date ? Number(row.expiry_date) : null,
-            calendarId: row.calendar_id
-        };
+        return this.googleOAuthRepository.getGoogleOAuthTokens(tenantId);
     }
 
     async updateGoogleAccessToken(tenantId: string, accessToken: string, expiryDate: number): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const encryptedAccessToken = encrypt(accessToken);
-        await this.dbPool.query(`
-            UPDATE google_oauth_tokens SET access_token = $2, expiry_date = $3, updated_at = NOW()
-            WHERE tenant_id = $1;
-        `, [validTenantId, encryptedAccessToken, expiryDate]);
+        return this.googleOAuthRepository.updateGoogleAccessToken(tenantId, accessToken, expiryDate);
     }
 
     async listAllGoogleOAuthTokens(): Promise<GoogleOAuthTokens[]> {
-        const result = await this.dbPool.query(`
-            SELECT tenant_id, access_token, refresh_token, expiry_date, calendar_id
-            FROM google_oauth_tokens
-            WHERE refresh_token IS NOT NULL AND calendar_id IS NOT NULL;
-        `);
-        return result.rows.map(row => ({
-            tenantId: row.tenant_id,
-            accessToken: decrypt(row.access_token),
-            refreshToken: decrypt(row.refresh_token),
-            expiryDate: row.expiry_date ? Number(row.expiry_date) : null,
-            calendarId: row.calendar_id
-        }));
+        return this.googleOAuthRepository.listAllGoogleOAuthTokens();
     }
 
     async findAppointmentByGoogleEventId(tenantId: string, googleEventId: string): Promise<PsychotherapyAppointment | null> {
