@@ -29,12 +29,13 @@ import { PsychotherapyFixedExpense } from '../../domain/models/PsychotherapyFixe
 import { DashboardAnalytics, PendingDetails, PendingPatientDetail, PendingSessionDetail, SaveExpenseDTO, SaveSessionDTO, SaveClinicalNoteDTO, SaveFixedExpenseDTO, AddAdvanceCreditDTO } from '../../domain/repositories/IPsychotherapyRepository';
 import { AppointmentStatus, PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
-import { AvailabilitySlot, AvailabilityRecurrenceType, AvailabilityModality } from '../../domain/models/AvailabilitySlot';
+import { AvailabilitySlot } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
 import { validateTenantId } from './shared';
 import { PostgresTenantProfileRepository } from './PostgresTenantProfileRepository';
 import { PostgresGoogleOAuthRepository } from './PostgresGoogleOAuthRepository';
+import { PostgresAvailabilitySlotRepository } from './PostgresAvailabilitySlotRepository';
 
 /** Converte uma Date para o formato YYYY-MM no fuso America/Sao_Paulo */
 function toMonthStr(date: Date): string {
@@ -65,7 +66,6 @@ import {
     FixedExpenseRow,
     AppointmentRow,
     ClinicalNoteRow,
-    AvailabilitySlotRow,
     BookingLinkRow
 } from './dbRowTypes';
 
@@ -73,10 +73,12 @@ import {
 export class PostgresPsychotherapyRepository implements IPsychotherapyRepository {
     private readonly tenantProfileRepository: PostgresTenantProfileRepository;
     private readonly googleOAuthRepository: PostgresGoogleOAuthRepository;
+    private readonly availabilitySlotRepository: PostgresAvailabilitySlotRepository;
 
     constructor(private readonly dbPool: Pool) {
         this.tenantProfileRepository = new PostgresTenantProfileRepository(dbPool);
         this.googleOAuthRepository = new PostgresGoogleOAuthRepository(dbPool);
+        this.availabilitySlotRepository = new PostgresAvailabilitySlotRepository(dbPool);
     }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
@@ -2275,56 +2277,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Availability Slots ────────────────────────────────────────────────────
 
     async saveAvailabilitySlot(data: SaveAvailabilitySlotDTO): Promise<AvailabilitySlot> {
-        const tenantId = validateTenantId(data.tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_availability_slots
-                (id, tenant_id, day_of_week, start_time, duration_minutes, is_active, notes, recurrence_type, start_date, modality)
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (id) DO UPDATE SET
-                day_of_week      = EXCLUDED.day_of_week,
-                start_time       = EXCLUDED.start_time,
-                duration_minutes = EXCLUDED.duration_minutes,
-                is_active        = EXCLUDED.is_active,
-                notes            = EXCLUDED.notes,
-                recurrence_type  = EXCLUDED.recurrence_type,
-                start_date       = EXCLUDED.start_date,
-                modality         = EXCLUDED.modality,
-                updated_at       = NOW()
-            WHERE psychotherapy_availability_slots.tenant_id = EXCLUDED.tenant_id
-            RETURNING *;
-        `, [
-            data.id ?? null,
-            tenantId,
-            data.dayOfWeek,
-            data.startTime,
-            data.durationMinutes ?? 50,
-            data.isActive ?? true,
-            data.notes ?? null,
-            data.recurrenceType ?? 'weekly',
-            data.startDate ?? null,
-            data.modality ?? 'presencial'
-        ]);
-
-        if (result.rows.length === 0) throw new NotFoundError('Horário não encontrado ou não autorizado');
-        return this.mapAvailabilitySlot(result.rows[0]);
+        return this.availabilitySlotRepository.saveAvailabilitySlot(data);
     }
 
     async listAvailabilitySlots(tenantId: string): Promise<AvailabilitySlot[]> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT * FROM psychotherapy_availability_slots
-            WHERE tenant_id = $1
-            ORDER BY day_of_week, start_time;
-        `, [validTenantId]);
-        return result.rows.map(row => this.mapAvailabilitySlot(row));
+        return this.availabilitySlotRepository.listAvailabilitySlots(tenantId);
     }
 
     async deleteAvailabilitySlot(tenantId: string, id: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            DELETE FROM psychotherapy_availability_slots WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
-        if (result.rowCount === 0) throw new NotFoundError('Horário não encontrado ou não autorizado');
+        return this.availabilitySlotRepository.deleteAvailabilitySlot(tenantId, id);
     }
 
     async listActiveAppointmentDatetimes(tenantId: string, from: Date, to: Date): Promise<Date[]> {
@@ -2555,18 +2516,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             return d.split('T')[0];
         }
         return String(d);
-    }
-
-    private mapAvailabilitySlot(row: AvailabilitySlotRow): AvailabilitySlot {
-        return new AvailabilitySlot(
-            row.id, row.tenant_id, row.day_of_week,
-            typeof row.start_time === 'string' ? row.start_time.slice(0, 5) : String(row.start_time),
-            row.duration_minutes, row.is_active, row.notes,
-            new Date(row.created_at), new Date(row.updated_at),
-            (row.recurrence_type ?? 'weekly') as AvailabilityRecurrenceType,
-            row.start_date ? new Date(row.start_date) : null,
-            (row.modality ?? 'presencial') as AvailabilityModality
-        );
     }
 
     private mapBookingLink(row: BookingLinkRow): BookingLink {
