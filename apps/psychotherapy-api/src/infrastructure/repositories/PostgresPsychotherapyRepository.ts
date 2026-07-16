@@ -31,7 +31,7 @@ import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
-import { validateTenantId, mapPatient, mapAppointment, mapExpense } from './shared';
+import { validateTenantId, mapAppointment, mapExpense } from './shared';
 import { PostgresPatientRepository } from './PostgresPatientRepository';
 import { PostgresSessionRepository } from './PostgresSessionRepository';
 import { PostgresAppointmentRepository } from './PostgresAppointmentRepository';
@@ -89,56 +89,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
-        const tenantId = validateTenantId(data.tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_patients (
-                id, tenant_id, name, status, payment_type, default_session_price_cents,
-                notes, document, phone, email, reminder_channel, full_name, individual_therapy_enabled
-            )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            ON CONFLICT (id) DO UPDATE SET
-                name = EXCLUDED.name,
-                status = EXCLUDED.status,
-                payment_type = EXCLUDED.payment_type,
-                default_session_price_cents = EXCLUDED.default_session_price_cents,
-                notes = EXCLUDED.notes,
-                document = EXCLUDED.document,
-                phone = EXCLUDED.phone,
-                email = EXCLUDED.email,
-                reminder_channel = EXCLUDED.reminder_channel,
-                full_name = EXCLUDED.full_name,
-                individual_therapy_enabled = EXCLUDED.individual_therapy_enabled,
-                updated_at = NOW()
-            WHERE psychotherapy_patients.tenant_id = EXCLUDED.tenant_id
-            RETURNING *;
-        `, [
-            data.id || null,
-            tenantId,
-            data.name,
-            data.status,
-            data.paymentType || null,
-            data.defaultSessionPriceCents ?? null,
-            data.notes || null,
-            data.document || null,
-            data.phone || null,
-            data.email || null,
-            data.reminderChannel ?? 'whatsapp',
-            data.fullName ?? null,
-            data.individualTherapyEnabled ?? true
-        ]);
-
-        if (result.rows.length === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
-
-        if (data.id) {
-            await this.dbPool.query(
-                `UPDATE psychotherapy_monthly_records
-                 SET patient_name_snapshot = $1
-                 WHERE patient_id = $2 AND tenant_id = $3`,
-                [data.name, data.id, tenantId]
-            );
-        }
-
-        return mapPatient(result.rows[0]);
+        return this.patientRepository.savePatient(data);
     }
 
     async listPatients(tenantId: string, pagination?: PaginationOptions): Promise<any> {
