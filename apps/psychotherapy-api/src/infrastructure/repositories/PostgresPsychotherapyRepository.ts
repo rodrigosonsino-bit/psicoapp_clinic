@@ -36,6 +36,7 @@ import { validateTenantId } from './shared';
 import { PostgresTenantProfileRepository } from './PostgresTenantProfileRepository';
 import { PostgresGoogleOAuthRepository } from './PostgresGoogleOAuthRepository';
 import { PostgresAvailabilitySlotRepository } from './PostgresAvailabilitySlotRepository';
+import { PostgresBookingLinkRepository } from './PostgresBookingLinkRepository';
 
 /** Converte uma Date para o formato YYYY-MM no fuso America/Sao_Paulo */
 function toMonthStr(date: Date): string {
@@ -65,8 +66,7 @@ import {
     ExpenseRow,
     FixedExpenseRow,
     AppointmentRow,
-    ClinicalNoteRow,
-    BookingLinkRow
+    ClinicalNoteRow
 } from './dbRowTypes';
 
 @injectable()
@@ -74,11 +74,13 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     private readonly tenantProfileRepository: PostgresTenantProfileRepository;
     private readonly googleOAuthRepository: PostgresGoogleOAuthRepository;
     private readonly availabilitySlotRepository: PostgresAvailabilitySlotRepository;
+    private readonly bookingLinkRepository: PostgresBookingLinkRepository;
 
     constructor(private readonly dbPool: Pool) {
         this.tenantProfileRepository = new PostgresTenantProfileRepository(dbPool);
         this.googleOAuthRepository = new PostgresGoogleOAuthRepository(dbPool);
         this.availabilitySlotRepository = new PostgresAvailabilitySlotRepository(dbPool);
+        this.bookingLinkRepository = new PostgresBookingLinkRepository(dbPool);
     }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
@@ -2303,56 +2305,25 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     // ── Booking Links ──────────────────────────────────────────────────────────
 
     async upsertBookingLink(tenantId: string, patientId: string, expiresAt?: Date | null): Promise<BookingLink> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_booking_links (tenant_id, patient_id, expires_at, is_active)
-            VALUES ($1, $2, $3, TRUE)
-            ON CONFLICT (tenant_id, patient_id) DO UPDATE SET
-                token      = gen_random_uuid(),
-                expires_at = EXCLUDED.expires_at,
-                is_active  = TRUE,
-                updated_at = NOW()
-            RETURNING *;
-        `, [validTenantId, patientId, expiresAt ?? null]);
-        return this.mapBookingLink(result.rows[0]);
+        return this.bookingLinkRepository.upsertBookingLink(tenantId, patientId, expiresAt);
     }
 
     async findBookingLinkByToken(token: string): Promise<BookingLink | null> {
-        const result = await this.dbPool.query(`
-            SELECT * FROM psychotherapy_booking_links WHERE token = $1::uuid;
-        `, [token]);
-        return result.rows[0] ? this.mapBookingLink(result.rows[0]) : null;
+        return this.bookingLinkRepository.findBookingLinkByToken(token);
     }
 
     async deactivateBookingLink(tenantId: string, patientId: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        await this.dbPool.query(`
-            UPDATE psychotherapy_booking_links SET is_active = FALSE, updated_at = NOW()
-            WHERE tenant_id = $1 AND patient_id = $2;
-        `, [validTenantId, patientId]);
+        return this.bookingLinkRepository.deactivateBookingLink(tenantId, patientId);
     }
 
     // ── Public booking tokens ─────────────────────────────────────────────────
 
     async getOrCreatePublicBookingToken(tenantId: string): Promise<string> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_public_booking_tokens (tenant_id)
-            VALUES ($1)
-            ON CONFLICT (tenant_id) DO UPDATE SET
-                is_active  = TRUE,
-                updated_at = NOW()
-            RETURNING token::text
-        `, [validTenantId]);
-        return result.rows[0].token;
+        return this.bookingLinkRepository.getOrCreatePublicBookingToken(tenantId);
     }
 
     async findPublicBookingToken(token: string): Promise<string | null> {
-        const result = await this.dbPool.query(`
-            SELECT tenant_id FROM psychotherapy_public_booking_tokens
-            WHERE token = $1::uuid AND is_active = TRUE
-        `, [token]);
-        return result.rows[0]?.tenant_id ?? null;
+        return this.bookingLinkRepository.findPublicBookingToken(token);
     }
 
     async findPatientByPhone(tenantId: string, phone: string): Promise<PsychotherapyPatient | null> {
@@ -2516,14 +2487,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             return d.split('T')[0];
         }
         return String(d);
-    }
-
-    private mapBookingLink(row: BookingLinkRow): BookingLink {
-        return new BookingLink(
-            row.id, row.token, row.tenant_id, row.patient_id,
-            row.expires_at ? new Date(row.expires_at) : null,
-            row.is_active, new Date(row.created_at), new Date(row.updated_at)
-        );
     }
 
     private mapClinicalNote(row: ClinicalNoteRow): ClinicalNote {
