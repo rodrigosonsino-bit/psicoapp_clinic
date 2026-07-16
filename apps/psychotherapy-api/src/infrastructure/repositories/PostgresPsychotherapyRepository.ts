@@ -22,7 +22,6 @@ import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
 import { TenantProfile } from '../../domain/models/TenantProfile';
 import { PsychotherapyReceipt } from '../../domain/models/PsychotherapyReceipt';
-import { PASTORAL_SENTINEL_EMAIL } from '../../domain/constants/pastoral';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
 import { PsychotherapyFixedExpense } from '../../domain/models/PsychotherapyFixedExpense';
@@ -32,7 +31,8 @@ import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
-import { validateTenantId } from './shared';
+import { validateTenantId, mapPatient } from './shared';
+import { PostgresPatientRepository } from './PostgresPatientRepository';
 import { PostgresTenantProfileRepository } from './PostgresTenantProfileRepository';
 import { PostgresGoogleOAuthRepository } from './PostgresGoogleOAuthRepository';
 import { PostgresAvailabilitySlotRepository } from './PostgresAvailabilitySlotRepository';
@@ -59,7 +59,6 @@ import { AppError } from '../../domain/errors/AppError';
 import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { BusinessError } from '../../domain/errors/BusinessError';
 import {
-    PatientRow,
     MonthlyRecordRow,
     ReceiptRow,
     SessionRow,
@@ -75,12 +74,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     private readonly googleOAuthRepository: PostgresGoogleOAuthRepository;
     private readonly availabilitySlotRepository: PostgresAvailabilitySlotRepository;
     private readonly bookingLinkRepository: PostgresBookingLinkRepository;
+    private readonly patientRepository: PostgresPatientRepository;
 
     constructor(private readonly dbPool: Pool) {
         this.tenantProfileRepository = new PostgresTenantProfileRepository(dbPool);
         this.googleOAuthRepository = new PostgresGoogleOAuthRepository(dbPool);
         this.availabilitySlotRepository = new PostgresAvailabilitySlotRepository(dbPool);
         this.bookingLinkRepository = new PostgresBookingLinkRepository(dbPool);
+        this.patientRepository = new PostgresPatientRepository(dbPool);
     }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
@@ -133,99 +134,31 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             );
         }
 
-        return this.mapPatient(result.rows[0]);
+        return mapPatient(result.rows[0]);
     }
 
     async listPatients(tenantId: string, pagination?: PaginationOptions): Promise<any> {
-        const validTenantId = validateTenantId(tenantId);
-        if (pagination) {
-            const offset = (pagination.page - 1) * pagination.limit;
-            const params: unknown[] = [validTenantId, PASTORAL_SENTINEL_EMAIL];
-            let whereClause = 'WHERE tenant_id = $1 AND (email IS NULL OR email != $2) AND deleted_at IS NULL';
-
-            if (pagination.search) {
-                params.push(`%${pagination.search}%`);
-                whereClause += ` AND name ILIKE $${params.length}`;
-            } else {
-                // Pacientes inativos somem da listagem padrão (mas continuam achável
-                // buscando pelo nome, caso precise reativar).
-                whereClause += ` AND status != 'inactive'`;
-            }
-
-            if (pagination.scope === 'individual') {
-                whereClause += ` AND individual_therapy_enabled = TRUE`;
-            }
-
-            params.push(pagination.limit, offset);
-            const result = await this.dbPool.query(`
-                SELECT *, COUNT(*) OVER() AS total_count
-                FROM psychotherapy_patients
-                ${whereClause}
-                ORDER BY status = 'inactive', name ASC
-                LIMIT $${params.length - 1} OFFSET $${params.length};
-            `, params);
-
-            if (result.rows.length === 0) return { data: [], total: 0 };
-            const total = parseInt(result.rows[0].total_count, 10);
-            return {
-                data: result.rows.map(row => this.mapPatient(row)),
-                total
-            };
-        }
-
-        const result = await this.dbPool.query(`
-            SELECT * FROM psychotherapy_patients
-            WHERE tenant_id = $1 AND deleted_at IS NULL
-            ORDER BY status = 'inactive', name ASC
-        `, [validTenantId]);
-        return result.rows.map(row => this.mapPatient(row));
+        return this.patientRepository.listPatients(tenantId, pagination);
     }
 
     async listIndividualPatientsForBilling(tenantId: string): Promise<PsychotherapyPatient[]> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT * FROM psychotherapy_patients
-            WHERE tenant_id = $1 AND individual_therapy_enabled = TRUE AND deleted_at IS NULL
-            ORDER BY status = 'inactive', name ASC
-        `, [validTenantId]);
-        return result.rows.map(row => this.mapPatient(row));
+        return this.patientRepository.listIndividualPatientsForBilling(tenantId);
     }
 
     async findPatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
-        return this.findActivePatientById(tenantId, id);
+        return this.patientRepository.findPatientById(tenantId, id);
     }
 
     async findActivePatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT *
-            FROM psychotherapy_patients
-            WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL;
-        `, [validTenantId, id]);
-
-        return result.rows[0] ? this.mapPatient(result.rows[0]) : null;
+        return this.patientRepository.findActivePatientById(tenantId, id);
     }
 
     async findPatientByIdIncludingDeleted(tenantId: string, id: string): Promise<PsychotherapyPatient | null> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT *
-            FROM psychotherapy_patients
-            WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
-
-        return result.rows[0] ? this.mapPatient(result.rows[0]) : null;
+        return this.patientRepository.findPatientByIdIncludingDeleted(tenantId, id);
     }
 
     async deletePatient(tenantId: string, id: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            UPDATE psychotherapy_patients
-            SET deleted_at = NOW(), updated_at = NOW()
-            WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL;
-        `, [validTenantId, id]);
-
-        if (result.rowCount === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
+        return this.patientRepository.deletePatient(tenantId, id);
     }
 
     async saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord> {
@@ -2327,13 +2260,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async findPatientByPhone(tenantId: string, phone: string): Promise<PsychotherapyPatient | null> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT * FROM psychotherapy_patients
-            WHERE tenant_id = $1 AND phone = $2
-            LIMIT 1
-        `, [validTenantId, phone]);
-        return result.rows[0] ? this.mapPatient(result.rows[0]) : null;
+        return this.patientRepository.findPatientByPhone(tenantId, phone);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -2366,27 +2293,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             pendingAmountCents: 0,
             totalAbsences: 0
         });
-    }
-
-    private mapPatient(row: PatientRow): PsychotherapyPatient {
-        return new PsychotherapyPatient(
-            row.id,
-            row.tenant_id,
-            row.name,
-            row.status,
-            row.payment_type,
-            row.default_session_price_cents,
-            row.notes,
-            row.document,
-            row.phone,
-            row.email,
-            new Date(row.created_at),
-            new Date(row.updated_at),
-            row.reminder_channel ?? 'whatsapp',
-            row.full_name ?? null,
-            row.whatsapp_bulk_opt_in ?? false,
-            row.individual_therapy_enabled
-        );
     }
 
     private mapMonthlyRecord(row: MonthlyRecordRow): PsychotherapyMonthlyRecord {
