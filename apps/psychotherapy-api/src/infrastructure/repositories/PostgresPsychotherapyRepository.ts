@@ -439,41 +439,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async deleteReceipt(tenantId: string, id: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const client = await this.dbPool.connect();
-        try {
-            await client.query('BEGIN');
-
-            const receiptRes = await client.query(`
-                SELECT payment_id FROM psychotherapy_receipts
-                WHERE tenant_id = $1 AND id = $2;
-            `, [validTenantId, id]);
-
-            if (receiptRes.rowCount === 0) {
-                throw new NotFoundError('Recibo não encontrado ou não autorizado');
-            }
-
-            const paymentId = receiptRes.rows[0].payment_id;
-
-            await client.query(`
-                DELETE FROM psychotherapy_receipts
-                WHERE tenant_id = $1 AND id = $2;
-            `, [validTenantId, id]);
-
-            if (paymentId) {
-                await client.query(`
-                    DELETE FROM financial_payments
-                    WHERE id = $1 AND tenant_id = $2;
-                `, [paymentId, validTenantId]);
-            }
-
-            await client.query('COMMIT');
-        } catch (err) {
-            await client.query('ROLLBACK');
-            throw err;
-        } finally {
-            client.release();
-        }
+        return this.billingRepository.deleteReceipt(tenantId, id);
     }
 
     async saveSession(data: SaveSessionDTO): Promise<PsychotherapySession> {

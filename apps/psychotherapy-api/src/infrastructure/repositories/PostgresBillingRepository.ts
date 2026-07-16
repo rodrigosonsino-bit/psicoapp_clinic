@@ -11,11 +11,52 @@ import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
  * mas cruzam billing + appointments via `computeCoveredSessions`) — não são "folha" de um
  * domínio só. `saveMonthlyRecord` é COMPLEXO — não abre transação própria, mas chama
  * `syncMonthlyRecord` (fora de transação, via `this.dbPool`) quando `data.patientId` presente.
+ * `deleteReceipt` é COMPLEXO — transação própria que deleta o recibo e o `financial_payments`
+ * vinculado (dual-write reverso do que `saveReceipt` faz, que ainda permanece no arquivo
+ * principal por enquanto).
  * Ver .claude/plans/pendencias-tecnicas-pos-quitacao-2026-07.md (item 1) e
  * .claude/plans/classificacao-postgres-psychotherapy-repository.md.
  */
 export class PostgresBillingRepository {
     constructor(private readonly dbPool: Pool) {}
+
+    async deleteReceipt(tenantId: string, id: string): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const receiptRes = await client.query(`
+                SELECT payment_id FROM psychotherapy_receipts
+                WHERE tenant_id = $1 AND id = $2;
+            `, [validTenantId, id]);
+
+            if (receiptRes.rowCount === 0) {
+                throw new NotFoundError('Recibo não encontrado ou não autorizado');
+            }
+
+            const paymentId = receiptRes.rows[0].payment_id;
+
+            await client.query(`
+                DELETE FROM psychotherapy_receipts
+                WHERE tenant_id = $1 AND id = $2;
+            `, [validTenantId, id]);
+
+            if (paymentId) {
+                await client.query(`
+                    DELETE FROM financial_payments
+                    WHERE id = $1 AND tenant_id = $2;
+                `, [paymentId, validTenantId]);
+            }
+
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+    }
 
     async saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord> {
         const tenantId = validateTenantId(data.tenantId);
