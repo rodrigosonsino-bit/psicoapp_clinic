@@ -31,8 +31,9 @@ import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
-import { validateTenantId, mapPatient } from './shared';
+import { validateTenantId, mapPatient, mapSession, mapClinicalNote } from './shared';
 import { PostgresPatientRepository } from './PostgresPatientRepository';
+import { PostgresSessionRepository } from './PostgresSessionRepository';
 import { PostgresTenantProfileRepository } from './PostgresTenantProfileRepository';
 import { PostgresGoogleOAuthRepository } from './PostgresGoogleOAuthRepository';
 import { PostgresAvailabilitySlotRepository } from './PostgresAvailabilitySlotRepository';
@@ -61,11 +62,9 @@ import { BusinessError } from '../../domain/errors/BusinessError';
 import {
     MonthlyRecordRow,
     ReceiptRow,
-    SessionRow,
     ExpenseRow,
     FixedExpenseRow,
-    AppointmentRow,
-    ClinicalNoteRow
+    AppointmentRow
 } from './dbRowTypes';
 
 @injectable()
@@ -75,6 +74,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     private readonly availabilitySlotRepository: PostgresAvailabilitySlotRepository;
     private readonly bookingLinkRepository: PostgresBookingLinkRepository;
     private readonly patientRepository: PostgresPatientRepository;
+    private readonly sessionRepository: PostgresSessionRepository;
 
     constructor(private readonly dbPool: Pool) {
         this.tenantProfileRepository = new PostgresTenantProfileRepository(dbPool);
@@ -82,6 +82,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         this.availabilitySlotRepository = new PostgresAvailabilitySlotRepository(dbPool);
         this.bookingLinkRepository = new PostgresBookingLinkRepository(dbPool);
         this.patientRepository = new PostgresPatientRepository(dbPool);
+        this.sessionRepository = new PostgresSessionRepository(dbPool);
     }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
@@ -692,7 +693,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             if (result.rows.length === 0) throw new NotFoundError('Sessão não encontrada ou não autorizada');
 
             await client.query('COMMIT');
-            return this.mapSession(result.rows[0]);
+            return mapSession(result.rows[0]);
         } catch (error) {
             await client.query('ROLLBACK');
             throw error;
@@ -708,42 +709,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         end?: Date,
         pagination?: PaginationOptions
     ): Promise<PaginatedResult<PsychotherapySession>> {
-        const validTenantId = validateTenantId(tenantId);
-        let query = 'SELECT *, COUNT(*) OVER() AS total_count FROM psychotherapy_sessions WHERE tenant_id = $1';
-        const params: any[] = [validTenantId];
-        
-        if (patientId) {
-            params.push(patientId);
-            query += ` AND patient_id = $${params.length}`;
-        }
-        
-        if (start) {
-            params.push(start);
-            query += ` AND date >= $${params.length}`;
-        }
-        
-        if (end) {
-            params.push(end);
-            query += ` AND date <= $${params.length}`;
-        }
-        
-        query += ' ORDER BY date DESC';
-        
-        if (pagination) {
-            const offset = (pagination.page - 1) * pagination.limit;
-            params.push(pagination.limit, offset);
-            query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
-        }
-        
-        query += ';';
-        
-        const result = await this.dbPool.query(query, params);
-        if (result.rows.length === 0) return { data: [], total: 0 };
-        const total = parseInt(result.rows[0].total_count, 10);
-        return {
-            data: result.rows.map(row => this.mapSession(row)),
-            total
-        };
+        return this.sessionRepository.listSessions(tenantId, patientId, start, end, pagination);
     }
 
     async deleteSession(tenantId: string, id: string): Promise<void> {
@@ -2162,7 +2128,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             if (result.rows.length === 0) throw new NotFoundError('Nota clínica não encontrada ou não autorizada');
 
             await client.query('COMMIT');
-            return this.mapClinicalNote(result.rows[0]);
+            return mapClinicalNote(result.rows[0]);
         } catch (error) {
             await client.query('ROLLBACK');
             throw error;
@@ -2172,41 +2138,15 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async listClinicalNotes(tenantId: string, patientId: string, page = 1, limit = 20): Promise<PaginatedResult<ClinicalNote>> {
-        const validTenantId = validateTenantId(tenantId);
-        const offset = (page - 1) * limit;
-
-        const result = await this.dbPool.query(`
-            SELECT *, COUNT(*) OVER() AS total_count
-            FROM psychotherapy_clinical_notes
-            WHERE tenant_id = $1 AND patient_id = $2
-            ORDER BY note_date DESC, created_at DESC
-            LIMIT $3 OFFSET $4;
-        `, [validTenantId, patientId, limit, offset]);
-
-        if (result.rows.length === 0) return { data: [], total: 0 };
-        const total = parseInt(result.rows[0].total_count, 10);
-        return {
-            data: result.rows.map(row => this.mapClinicalNote(row)),
-            total
-        };
+        return this.sessionRepository.listClinicalNotes(tenantId, patientId, page, limit);
     }
 
     async findClinicalNoteById(tenantId: string, id: string): Promise<ClinicalNote | null> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT * FROM psychotherapy_clinical_notes
-            WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
-        return result.rows[0] ? this.mapClinicalNote(result.rows[0]) : null;
+        return this.sessionRepository.findClinicalNoteById(tenantId, id);
     }
 
     async deleteClinicalNote(tenantId: string, id: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            DELETE FROM psychotherapy_clinical_notes
-            WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
-        if (result.rowCount === 0) throw new NotFoundError('Nota clínica não encontrada ou não autorizada');
+        return this.sessionRepository.deleteClinicalNote(tenantId, id);
     }
 
     // ── Availability Slots ────────────────────────────────────────────────────
@@ -2337,20 +2277,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         );
     }
 
-    private mapSession(row: SessionRow): PsychotherapySession {
-        return {
-            id: row.id,
-            tenantId: row.tenant_id,
-            patientId: row.patient_id,
-            date: new Date(row.date),
-            status: row.status,
-            notes: row.notes ?? undefined,
-            appointmentId: row.appointment_id ?? undefined,
-            createdAt: new Date(row.created_at),
-            updatedAt: new Date(row.updated_at)
-        };
-    }
-
     private mapExpense(row: ExpenseRow): PsychotherapyExpense {
         return {
             id: row.id,
@@ -2394,21 +2320,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         }
         return String(d);
     }
-
-    private mapClinicalNote(row: ClinicalNoteRow): ClinicalNote {
-        return new ClinicalNote(
-            row.id,
-            row.tenant_id,
-            row.patient_id,
-            row.session_id,
-            new Date(row.note_date),
-            row.content,
-            row.tags ?? [],
-            new Date(row.created_at),
-            new Date(row.updated_at)
-        );
-    }
-
 
     private mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
         return new PsychotherapyAppointment(
