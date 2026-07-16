@@ -31,7 +31,7 @@ import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
-import { validateTenantId, mapAppointment, mapExpense, mapMonthlyRecord } from './shared';
+import { validateTenantId, mapAppointment, mapExpense, mapMonthlyRecord, mapReceipt, toMonthStr } from './shared';
 import { PostgresPatientRepository } from './PostgresPatientRepository';
 import { PostgresSessionRepository } from './PostgresSessionRepository';
 import { PostgresAppointmentRepository } from './PostgresAppointmentRepository';
@@ -42,18 +42,6 @@ import { PostgresAvailabilitySlotRepository } from './PostgresAvailabilitySlotRe
 import { PostgresBookingLinkRepository } from './PostgresBookingLinkRepository';
 import { PostgresBillingRepository } from './PostgresBillingRepository';
 
-/** Converte uma Date para o formato YYYY-MM no fuso America/Sao_Paulo */
-function toMonthStr(date: Date): string {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Sao_Paulo',
-        year: 'numeric',
-        month: '2-digit',
-    }).formatToParts(date);
-    const y = parts.find(p => p.type === 'year')!.value;
-    const m = parts.find(p => p.type === 'month')!.value;
-    return `${y}-${m}`;
-}
-
 const SESSIONS_BY_PATIENT_STATUS: Record<string, number> = {
     weekly: 4, biweekly: 2, one_off: 0, inactive: 0,
 };
@@ -62,9 +50,6 @@ import { injectable } from 'tsyringe';
 import { AppError } from '../../domain/errors/AppError';
 import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { BusinessError } from '../../domain/errors/BusinessError';
-import {
-    ReceiptRow
-} from './dbRowTypes';
 
 @injectable()
 export class PostgresPsychotherapyRepository implements IPsychotherapyRepository {
@@ -280,146 +265,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt> {
-        const tenantId = validateTenantId(data.tenantId);
-        
-        // 1. If it's an update, check if it exists
-        if (data.id) {
-            const check = await this.dbPool.query(
-                `SELECT * FROM psychotherapy_receipts WHERE id = $1 AND tenant_id = $2`,
-                [data.id, tenantId]
-            );
-            if (check.rows.length > 0) {
-                const result = await this.dbPool.query(`
-                    UPDATE psychotherapy_receipts
-                    SET amount_cents = $3,
-                        issue_date = $4,
-                        description = $5,
-                        updated_at = NOW()
-                    WHERE id = $1 AND tenant_id = $2
-                    RETURNING *;
-                `, [data.id, tenantId, data.amountCents, data.issueDate, data.description]);
-                return this.mapReceipt(result.rows[0]);
-            }
-        }
-
-        // 2. If it's a new insert, generate receipt_number inside a transaction using tenant_receipt_sequences
-        const client = await this.dbPool.connect();
-        try {
-            await client.query('BEGIN');
-            
-            // Upsert and increment the last_value for this tenant
-            const seqResult = await client.query(`
-                INSERT INTO tenant_receipt_sequences (tenant_id, last_value)
-                VALUES ($1, 1)
-                ON CONFLICT (tenant_id) 
-                DO UPDATE SET last_value = tenant_receipt_sequences.last_value + 1
-                RETURNING last_value;
-            `, [tenantId]);
-            
-            const nextNumber = seqResult.rows[0].last_value;
-
-            // Buscar snapshots do paciente e tenant
-            const patRes = await client.query(`
-                SELECT name, document FROM psychotherapy_patients
-                WHERE id = $1 AND tenant_id = $2;
-            `, [data.patientId, tenantId]);
-            if (patRes.rows.length === 0) {
-                throw new NotFoundError('Paciente não encontrado');
-            }
-            const patient = patRes.rows[0];
-
-            const tenRes = await client.query(`
-                SELECT name, full_name, document, professional_id, address FROM tenants
-                WHERE id = $1;
-            `, [tenantId]);
-            if (tenRes.rows.length === 0) {
-                throw new NotFoundError('Tenant não encontrado');
-            }
-            const tenant = tenRes.rows[0];
-
-            // Insert the receipt with the sequence number and snapshots
-            const result = await client.query(`
-                INSERT INTO psychotherapy_receipts (
-                    id, tenant_id, patient_id, receipt_number, amount_cents, issue_date, description,
-                    is_legacy, status,
-                    patient_name_snapshot, patient_document_snapshot,
-                    tenant_name_snapshot, tenant_document_snapshot,
-                    tenant_professional_id_snapshot, tenant_address_snapshot
-                )
-                VALUES (
-                    COALESCE($1::uuid, gen_random_uuid()),
-                    $2,
-                    $3,
-                    $4,
-                    $5,
-                    $6,
-                    $7,
-                    false,
-                    'issued',
-                    $8, $9, $10, $11, $12, $13
-                )
-                RETURNING *;
-            `, [
-                data.id || null,
-                tenantId,
-                data.patientId,
-                nextNumber,
-                data.amountCents,
-                data.issueDate,
-                data.description,
-                patient.name,
-                patient.document || null,
-                tenant.full_name || tenant.name,
-                tenant.document || null,
-                tenant.professional_id || null,
-                tenant.address || null
-            ]);
-
-            const receipt = result.rows[0];
-
-            // DUAL-WRITE: Insere correspondente em financial_payments
-            const paymentId = crypto.randomUUID();
-            const monthStr = toMonthStr(new Date(data.issueDate));
-            const mrRes = await client.query(`
-                SELECT id FROM psychotherapy_monthly_records
-                WHERE tenant_id = $1 AND patient_id = $2 AND month = $3;
-            `, [tenantId, data.patientId, monthStr]);
-            const monthlyRecordId = mrRes.rows[0]?.id || null;
-
-            await client.query(`
-                INSERT INTO financial_payments (
-                    id, tenant_id, patient_id, monthly_record_id, amount_cents, currency,
-                    paid_at, method, source, status, idempotency_key, created_by
-                )
-                VALUES ($1, $2, $3, $4, $5, 'BRL', $6, 'other', 'manual', 'confirmed', $7, $2);
-            `, [
-                paymentId,
-                tenantId,
-                data.patientId,
-                monthlyRecordId,
-                data.amountCents,
-                data.issueDate,
-                `receipt_${receipt.id}`
-            ]);
-
-            // Atualiza o payment_id no recibo recém criado
-            await client.query(`
-                UPDATE psychotherapy_receipts
-                SET payment_id = $1
-                WHERE id = $2;
-            `, [paymentId, receipt.id]);
-
-            await client.query('COMMIT');
-            return this.mapReceipt(receipt);
-        } catch (error: any) {
-            await client.query('ROLLBACK');
-            if (error.code === '23505' && typeof error.detail === 'string' && error.detail.includes('idx_receipts_tenant_number')) {
-                throw new AppError('Conflito ao gerar número do recibo. Tente novamente.', 409);
-            }
-            throw error;
-        } finally {
-            client.release();
-        }
+        return this.billingRepository.saveReceipt(data);
     }
 
     async listReceipts(tenantId: string, patientId?: string): Promise<PsychotherapyReceipt[]> {
@@ -435,7 +281,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         query += ' ORDER BY issue_date DESC, receipt_number DESC;';
         
         const result = await this.dbPool.query(query, params);
-        return result.rows.map(row => this.mapReceipt(row));
+        return result.rows.map(row => mapReceipt(row));
     }
 
     async deleteReceipt(tenantId: string, id: string): Promise<void> {
@@ -1444,27 +1290,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             pendingAmountCents: 0,
             totalAbsences: 0
         });
-    }
-
-    private mapReceipt(row: ReceiptRow): PsychotherapyReceipt {
-        return new PsychotherapyReceipt(
-            row.id,
-            row.tenant_id,
-            row.patient_id,
-            row.receipt_number,
-            row.amount_cents,
-            new Date(row.issue_date),
-            row.description,
-            new Date(row.created_at),
-            new Date(row.updated_at),
-            row.patient_name_snapshot,
-            row.patient_document_snapshot,
-            row.tenant_name_snapshot,
-            row.tenant_document_snapshot,
-            row.tenant_professional_id_snapshot,
-            row.tenant_address_snapshot,
-            row.status
-        );
     }
 
     async listSeriesAppointments(tenantId: string, rootId: string): Promise<PsychotherapyAppointment[]> {

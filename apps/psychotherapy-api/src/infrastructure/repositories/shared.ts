@@ -1,10 +1,11 @@
-import { PatientRow, SessionRow, ClinicalNoteRow, AppointmentRow, ExpenseRow, MonthlyRecordRow } from './dbRowTypes';
+import { PatientRow, SessionRow, ClinicalNoteRow, AppointmentRow, ExpenseRow, MonthlyRecordRow, ReceiptRow } from './dbRowTypes';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
+import { PsychotherapyReceipt } from '../../domain/models/PsychotherapyReceipt';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -18,6 +19,22 @@ export function validateTenantId(tenantId: string): string {
         throw new Error(`TenantId inválido: "${tenantId}". Esperado UUID v1-v5.`);
     }
     return tenantId;
+}
+
+/**
+ * toMonthStr é usado tanto por saveAppointment/updateAppointmentStatus (COMPLEXOS, permanecem
+ * no arquivo principal) quanto por saveReceipt (COMPLEXO, migrado para PostgresBillingRepository).
+ * Converte uma Date para o formato YYYY-MM no fuso America/Sao_Paulo.
+ */
+export function toMonthStr(date: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+    }).formatToParts(date);
+    const y = parts.find(p => p.type === 'year')!.value;
+    const m = parts.find(p => p.type === 'month')!.value;
+    return `${y}-${m}`;
 }
 
 /**
@@ -133,6 +150,31 @@ export function mapMonthlyRecord(row: MonthlyRecordRow): PsychotherapyMonthlyRec
         row.previous_month_paid_cents,
         new Date(row.created_at),
         new Date(row.updated_at)
+    );
+}
+
+/**
+ * mapReceipt é usado tanto por saveReceipt (COMPLEXO, migrado para PostgresBillingRepository)
+ * quanto por listReceipts (FOLHA, permanece no arquivo principal por enquanto).
+ */
+export function mapReceipt(row: ReceiptRow): PsychotherapyReceipt {
+    return new PsychotherapyReceipt(
+        row.id,
+        row.tenant_id,
+        row.patient_id,
+        row.receipt_number,
+        row.amount_cents,
+        new Date(row.issue_date),
+        row.description,
+        new Date(row.created_at),
+        new Date(row.updated_at),
+        row.patient_name_snapshot,
+        row.patient_document_snapshot,
+        row.tenant_name_snapshot,
+        row.tenant_document_snapshot,
+        row.tenant_professional_id_snapshot,
+        row.tenant_address_snapshot,
+        row.status
     );
 }
 
