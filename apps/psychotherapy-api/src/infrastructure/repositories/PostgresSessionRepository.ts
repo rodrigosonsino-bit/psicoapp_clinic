@@ -3,15 +3,14 @@ import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { AppError } from '../../domain/errors/AppError';
-import { PaginationOptions, PaginatedResult, SaveSessionDTO } from '../../domain/repositories/IPsychotherapyRepository';
+import { PaginationOptions, PaginatedResult, SaveSessionDTO, SaveClinicalNoteDTO } from '../../domain/repositories/IPsychotherapyRepository';
 import { validateTenantId, mapSession, mapClinicalNote } from './shared';
 
 /**
- * Extraído de PostgresPsychotherapyRepository. `saveClinicalNote` permanece no arquivo
- * principal (COMPLEXO — transação própria com `FOR UPDATE` e invariantes contra
- * `saveAppointment`/`updateAppointmentStatus`). `saveSession` e `deleteSession` foram
- * migrados aqui preservando exatamente a transação/invariantes originais. Ver
- * .claude/plans/pendencias-tecnicas-pos-quitacao-2026-07.md (item 1) e
+ * Extraído de PostgresPsychotherapyRepository, preservando exatamente a transação/invariantes
+ * originais de `saveSession`, `deleteSession` e `saveClinicalNote` (COMPLEXOS — transação
+ * própria com `FOR UPDATE` e invariantes contra `saveAppointment`/`updateAppointmentStatus`).
+ * Ver .claude/plans/pendencias-tecnicas-pos-quitacao-2026-07.md (item 1) e
  * .claude/plans/classificacao-postgres-psychotherapy-repository.md.
  */
 export class PostgresSessionRepository {
@@ -122,6 +121,72 @@ export class PostgresSessionRepository {
         `, [validTenantId, id]);
 
         if (result.rowCount === 0) throw new NotFoundError('Sessão não encontrada ou não autorizada');
+    }
+
+    async saveClinicalNote(data: SaveClinicalNoteDTO): Promise<ClinicalNote> {
+        const tenantId = validateTenantId(data.tenantId);
+        const client = await this.dbPool.connect();
+
+        try {
+            await client.query('BEGIN');
+
+            // Trava a sessão vinculada (se houver) ANTES de inserir a nota — sem isso, um
+            // fluxo de appointment concorrente (troca de paciente/reversão) podia ler a sessão
+            // como "sem conteúdo clínico" no meio do INSERT desta nota e prosseguir (achado da
+            // 4ª revisão, 04/07/2026). Serializa contra o FOR UPDATE OF s usado nos 3 pontos de
+            // saveAppointment()/updateAppointmentStatus() e em saveSession().
+            if (data.sessionId) {
+                const session = await client.query(
+                    `SELECT patient_id FROM psychotherapy_sessions
+                     WHERE id = $1 AND tenant_id = $2
+                     FOR UPDATE`,
+                    [data.sessionId, tenantId]
+                );
+                if (session.rows.length === 0) {
+                    throw new NotFoundError('Sessão vinculada não encontrada ou não autorizada');
+                }
+                if (session.rows[0].patient_id !== data.patientId) {
+                    throw new AppError(
+                        'Esta sessão pertence a outro paciente agora (dado desatualizado na ' +
+                        'tela) — recarregue a página antes de salvar.',
+                        409
+                    );
+                }
+            }
+
+            const result = await client.query(`
+                INSERT INTO psychotherapy_clinical_notes (
+                    id, tenant_id, patient_id, session_id, note_date, content, tags
+                )
+                VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (id) DO UPDATE SET
+                    session_id = EXCLUDED.session_id,
+                    note_date = EXCLUDED.note_date,
+                    content = EXCLUDED.content,
+                    tags = EXCLUDED.tags,
+                    updated_at = NOW()
+                WHERE psychotherapy_clinical_notes.tenant_id = EXCLUDED.tenant_id
+                RETURNING *;
+            `, [
+                data.id || null,
+                tenantId,
+                data.patientId,
+                data.sessionId ?? null,
+                data.noteDate,
+                data.content,
+                data.tags ?? []
+            ]);
+
+            if (result.rows.length === 0) throw new NotFoundError('Nota clínica não encontrada ou não autorizada');
+
+            await client.query('COMMIT');
+            return mapClinicalNote(result.rows[0]);
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     async listSessions(
