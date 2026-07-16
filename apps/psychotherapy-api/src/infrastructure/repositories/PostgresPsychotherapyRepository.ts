@@ -31,10 +31,11 @@ import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { AvailabilitySlot } from '../../domain/models/AvailabilitySlot';
 import { BookingLink } from '../../domain/models/BookingLink';
 import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
-import { validateTenantId, mapPatient, mapSession, mapClinicalNote, mapAppointment } from './shared';
+import { validateTenantId, mapPatient, mapSession, mapClinicalNote, mapAppointment, mapExpense } from './shared';
 import { PostgresPatientRepository } from './PostgresPatientRepository';
 import { PostgresSessionRepository } from './PostgresSessionRepository';
 import { PostgresAppointmentRepository } from './PostgresAppointmentRepository';
+import { PostgresExpenseRepository } from './PostgresExpenseRepository';
 import { PostgresTenantProfileRepository } from './PostgresTenantProfileRepository';
 import { PostgresGoogleOAuthRepository } from './PostgresGoogleOAuthRepository';
 import { PostgresAvailabilitySlotRepository } from './PostgresAvailabilitySlotRepository';
@@ -62,9 +63,7 @@ import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { BusinessError } from '../../domain/errors/BusinessError';
 import {
     MonthlyRecordRow,
-    ReceiptRow,
-    ExpenseRow,
-    FixedExpenseRow
+    ReceiptRow
 } from './dbRowTypes';
 
 @injectable()
@@ -76,6 +75,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     private readonly patientRepository: PostgresPatientRepository;
     private readonly sessionRepository: PostgresSessionRepository;
     private readonly appointmentRepository: PostgresAppointmentRepository;
+    private readonly expenseRepository: PostgresExpenseRepository;
 
     constructor(private readonly dbPool: Pool) {
         this.tenantProfileRepository = new PostgresTenantProfileRepository(dbPool);
@@ -85,6 +85,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         this.patientRepository = new PostgresPatientRepository(dbPool);
         this.sessionRepository = new PostgresSessionRepository(dbPool);
         this.appointmentRepository = new PostgresAppointmentRepository(dbPool);
+        this.expenseRepository = new PostgresExpenseRepository(dbPool);
     }
 
     async savePatient(data: SavePatientDTO): Promise<PsychotherapyPatient> {
@@ -741,35 +742,7 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
     }
 
     async saveExpense(data: SaveExpenseDTO): Promise<PsychotherapyExpense> {
-        const tenantId = validateTenantId(data.tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_expenses (
-                id, tenant_id, date, amount_cents, description, category, fixed_expense_id, reference_month
-            )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (id) DO UPDATE SET
-                date = EXCLUDED.date,
-                amount_cents = EXCLUDED.amount_cents,
-                description = EXCLUDED.description,
-                category = EXCLUDED.category,
-                fixed_expense_id = EXCLUDED.fixed_expense_id,
-                reference_month = EXCLUDED.reference_month,
-                updated_at = NOW()
-            WHERE psychotherapy_expenses.tenant_id = EXCLUDED.tenant_id
-            RETURNING *;
-        `, [
-            data.id || null,
-            tenantId,
-            data.date,
-            data.amountCents,
-            data.description,
-            data.category,
-            data.fixedExpenseId || null,
-            data.referenceMonth || null
-        ]);
-
-        if (result.rows.length === 0) throw new NotFoundError('Despesa não encontrada ou não autorizada');
-        return this.mapExpense(result.rows[0]);
+        return this.expenseRepository.saveExpense(data);
     }
 
     async listExpenses(
@@ -828,107 +801,38 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         if (result.rows.length === 0) return { data: [], total: 0 };
         const total = parseInt(result.rows[0].total_count, 10);
         return {
-            data: result.rows.map(row => this.mapExpense(row)),
+            data: result.rows.map(row => mapExpense(row)),
             total
         };
     }
 
     async deleteExpense(tenantId: string, id: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            DELETE FROM psychotherapy_expenses
-            WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
-
-        if (result.rowCount === 0) throw new NotFoundError('Despesa não encontrada ou não autorizada');
+        return this.expenseRepository.deleteExpense(tenantId, id);
     }
 
     async listFixedExpenses(tenantId: string): Promise<PsychotherapyFixedExpense[]> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT * FROM psychotherapy_fixed_expenses
-            WHERE tenant_id = $1
-            ORDER BY day_of_month ASC, created_at DESC;
-        `, [validTenantId]);
-
-        return result.rows.map(row => this.mapFixedExpense(row));
+        return this.expenseRepository.listFixedExpenses(tenantId);
     }
 
     async saveFixedExpense(data: SaveFixedExpenseDTO): Promise<PsychotherapyFixedExpense> {
-        const tenantId = validateTenantId(data.tenantId);
-        const result = await this.dbPool.query(`
-            INSERT INTO psychotherapy_fixed_expenses (
-                id, tenant_id, description, amount_cents, day_of_month, category, start_date, end_date, active
-            )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, COALESCE($9, TRUE))
-            ON CONFLICT (id) DO UPDATE SET
-                description = EXCLUDED.description,
-                amount_cents = EXCLUDED.amount_cents,
-                day_of_month = EXCLUDED.day_of_month,
-                category = EXCLUDED.category,
-                start_date = EXCLUDED.start_date,
-                end_date = EXCLUDED.end_date,
-                active = EXCLUDED.active,
-                updated_at = NOW()
-            WHERE psychotherapy_fixed_expenses.tenant_id = EXCLUDED.tenant_id
-            RETURNING *;
-        `, [
-            data.id || null,
-            tenantId,
-            data.description,
-            data.amountCents,
-            data.dayOfMonth,
-            data.category || null,
-            data.startDate,
-            data.endDate || null,
-            data.active === undefined ? null : data.active
-        ]);
-
-        return this.mapFixedExpense(result.rows[0]);
+        return this.expenseRepository.saveFixedExpense(data);
     }
 
     async deleteFixedExpense(tenantId: string, id: string): Promise<void> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            DELETE FROM psychotherapy_fixed_expenses
-            WHERE tenant_id = $1 AND id = $2;
-        `, [validTenantId, id]);
-
-        if (result.rowCount === 0) {
-            throw new NotFoundError('Despesa fixa não encontrada ou não autorizada');
-        }
+        return this.expenseRepository.deleteFixedExpense(tenantId, id);
     }
 
     async toggleFixedExpense(tenantId: string, id: string, active: boolean): Promise<PsychotherapyFixedExpense> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            UPDATE psychotherapy_fixed_expenses
-            SET active = $3, updated_at = NOW()
-            WHERE tenant_id = $1 AND id = $2
-            RETURNING *;
-        `, [validTenantId, id, active]);
-
-        if (result.rows.length === 0) {
-            throw new NotFoundError('Despesa fixa não encontrada ou não autorizada');
-        }
-
-        return this.mapFixedExpense(result.rows[0]);
+        return this.expenseRepository.toggleFixedExpense(tenantId, id, active);
     }
 
     async expenseExistsForMonth(tenantId: string, fixedExpenseId: string, month: string): Promise<boolean> {
-        const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            SELECT 1 FROM psychotherapy_expenses
-            WHERE tenant_id = $1 AND fixed_expense_id = $2 AND reference_month = $3
-            LIMIT 1;
-        `, [validTenantId, fixedExpenseId, month]);
-
-        return result.rows.length > 0;
+        return this.expenseRepository.expenseExistsForMonth(tenantId, fixedExpenseId, month);
     }
 
     private async checkAndInstantiateFixedExpenses(tenantId: string, monthStr: string): Promise<void> {
         const validTenantId = validateTenantId(tenantId);
-        const fixedExpenses = await this.listFixedExpenses(validTenantId);
+        const fixedExpenses = await this.expenseRepository.listFixedExpenses(validTenantId);
 
         for (const fe of fixedExpenses) {
             if (!fe.active) continue;
@@ -2104,50 +2008,6 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
             row.tenant_address_snapshot,
             row.status
         );
-    }
-
-    private mapExpense(row: ExpenseRow): PsychotherapyExpense {
-        return {
-            id: row.id,
-            tenantId: row.tenant_id,
-            date: new Date(row.date),
-            amountCents: row.amount_cents,
-            description: row.description,
-            category: row.category,
-            fixedExpenseId: row.fixed_expense_id,
-            referenceMonth: row.reference_month,
-            createdAt: new Date(row.created_at),
-            updatedAt: new Date(row.updated_at)
-        };
-    }
-
-    private mapFixedExpense(row: FixedExpenseRow): PsychotherapyFixedExpense {
-        const startDateStr = this.formatDate(row.start_date) || '';
-        const endDateStr = this.formatDate(row.end_date);
-        return new PsychotherapyFixedExpense(
-            row.id,
-            row.tenant_id,
-            row.description,
-            row.amount_cents,
-            row.day_of_month,
-            row.category,
-            startDateStr,
-            endDateStr,
-            row.active,
-            new Date(row.created_at),
-            new Date(row.updated_at)
-        );
-    }
-
-    private formatDate(d: any): string | null {
-        if (!d) return null;
-        if (d instanceof Date) {
-            return d.toISOString().split('T')[0];
-        }
-        if (typeof d === 'string') {
-            return d.split('T')[0];
-        }
-        return String(d);
     }
 
     async listSeriesAppointments(tenantId: string, rootId: string): Promise<PsychotherapyAppointment[]> {

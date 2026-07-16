@@ -1,8 +1,9 @@
-import { PatientRow, SessionRow, ClinicalNoteRow, AppointmentRow } from './dbRowTypes';
+import { PatientRow, SessionRow, ClinicalNoteRow, AppointmentRow, ExpenseRow } from './dbRowTypes';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
+import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -106,4 +107,24 @@ export function mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
         new Date(row.updated_at),
         row.group_id ?? null
     );
+}
+
+/**
+ * mapExpense é usado tanto por listExpenses (COMPLEXO — chama checkAndInstantiateFixedExpenses,
+ * permanece no arquivo principal) quanto por saveExpense (FOLHA, migrado para
+ * PostgresExpenseRepository).
+ */
+export function mapExpense(row: ExpenseRow): PsychotherapyExpense {
+    return {
+        id: row.id,
+        tenantId: row.tenant_id,
+        date: new Date(row.date),
+        amountCents: row.amount_cents,
+        description: row.description,
+        category: row.category,
+        fixedExpenseId: row.fixed_expense_id,
+        referenceMonth: row.reference_month,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at)
+    };
 }
