@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import crypto from 'crypto';
-import { PendingDetails, PendingPatientDetail, PendingSessionDetail, SaveMonthlyRecordDTO, SaveReceiptDTO } from '../../domain/repositories/IPsychotherapyRepository';
+import { PendingDetails, PendingPatientDetail, PendingSessionDetail, SaveMonthlyRecordDTO, SaveReceiptDTO, RegisterPaymentDTO, FinancialPayment } from '../../domain/repositories/IPsychotherapyRepository';
 import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
 import { PsychotherapyReceipt } from '../../domain/models/PsychotherapyReceipt';
 import { NotFoundError } from '../../domain/errors/NotFoundError';
@@ -22,6 +22,200 @@ import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
  */
 export class PostgresBillingRepository {
     constructor(private readonly dbPool: Pool) {}
+
+    async registerPayment(data: RegisterPaymentDTO): Promise<FinancialPayment> {
+        const validTenantId = validateTenantId(data.tenantId);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Verificar chave de idempotência
+            const existRes = await client.query(`
+                SELECT * FROM financial_payments
+                WHERE tenant_id = $1 AND idempotency_key = $2;
+            `, [validTenantId, data.idempotencyKey]);
+
+            if (existRes.rows.length > 0) {
+                await client.query('COMMIT');
+                return this.mapFinancialPayment(existRes.rows[0]);
+            }
+
+            // 2. Lock monthly record if provided
+            let monthlyRecordId = data.monthlyRecordId || null;
+            if (monthlyRecordId) {
+                const lockRes = await client.query(`
+                    SELECT id FROM psychotherapy_monthly_records
+                    WHERE id = $1 FOR UPDATE;
+                `, [monthlyRecordId]);
+                if (lockRes.rows.length === 0) {
+                    throw new NotFoundError('Registro mensal não encontrado');
+                }
+            }
+
+            // 3. Inserir pagamento
+            // net_amount_cents/processing_fee_cents são NOT NULL desde a migration 080 (chk_fin_math
+            // exige net+fee=amount) — sem taxa informada, assume net=amount/fee=0 (mesma convenção
+            // do backfill daquela migration). Validado aqui com erro claro em vez de deixar a
+            // constraint do banco estourar sem contexto.
+            const netAmountCents = data.netAmountCents ?? data.amountCents;
+            const processingFeeCents = data.processingFeeCents ?? 0;
+            if (netAmountCents + processingFeeCents !== data.amountCents) {
+                throw new AppError('netAmountCents + processingFeeCents deve ser igual a amountCents', 400);
+            }
+
+            const id = data.id || crypto.randomUUID();
+            const payRes = await client.query(`
+                INSERT INTO financial_payments (
+                    id, tenant_id, patient_id, monthly_record_id, amount_cents,
+                    net_amount_cents, processing_fee_cents,
+                    currency, paid_at, method, source, status, provider_txid,
+                    idempotency_key, created_by
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'BRL', $8, $9, $10, 'confirmed', $11, $12, $13)
+                RETURNING *;
+            `, [
+                id, validTenantId, data.patientId, monthlyRecordId, data.amountCents,
+                netAmountCents, processingFeeCents,
+                data.paidAt, data.method, data.source, data.providerTxid || null,
+                data.idempotencyKey, data.createdBy
+            ]);
+
+            const payment = this.mapFinancialPayment(payRes.rows[0]);
+
+            // 4. Se houver monthlyRecordId, recalcular status do registro
+            if (monthlyRecordId) {
+                // Obter mês do registro
+                const recRes = await client.query(`
+                    SELECT month FROM psychotherapy_monthly_records WHERE id = $1;
+                `, [monthlyRecordId]);
+                if (recRes.rows.length > 0) {
+                    await syncMonthlyRecord(client, validTenantId, data.patientId, recRes.rows[0].month.trim());
+                }
+            }
+
+            await client.query('COMMIT');
+            return payment;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    async voidPayment(tenantId: string, paymentId: string, voidedBy: string, reason: string): Promise<FinancialPayment> {
+        const validTenantId = validateTenantId(tenantId);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Lock payment
+            const payRes = await client.query(`
+                SELECT * FROM financial_payments
+                WHERE tenant_id = $1 AND id = $2 FOR UPDATE;
+            `, [validTenantId, paymentId]);
+
+            if (payRes.rows.length === 0) {
+                throw new NotFoundError('Pagamento não encontrado');
+            }
+
+            const oldPay = payRes.rows[0];
+            if (oldPay.status === 'voided') {
+                throw new AppError('Pagamento já foi estornado', 400);
+            }
+
+            // 2. Lock monthly record if associated
+            const monthlyRecordId = oldPay.monthly_record_id;
+            if (monthlyRecordId) {
+                await client.query(`
+                    SELECT id FROM psychotherapy_monthly_records
+                    WHERE id = $1 FOR UPDATE;
+                `, [monthlyRecordId]);
+            }
+
+            // 3. Atualizar status para voided
+            const updateRes = await client.query(`
+                UPDATE financial_payments
+                SET status = 'voided', voided_at = NOW(), voided_by = $1, void_reason = $2
+                WHERE tenant_id = $3 AND id = $4
+                RETURNING *;
+            `, [voidedBy, reason, validTenantId, paymentId]);
+
+            const payment = this.mapFinancialPayment(updateRes.rows[0]);
+
+            // 4. Se houver monthlyRecordId, recalcular status do registro
+            if (monthlyRecordId) {
+                const recRes = await client.query(`
+                    SELECT month FROM psychotherapy_monthly_records WHERE id = $1;
+                `, [monthlyRecordId]);
+                if (recRes.rows.length > 0) {
+                    await syncMonthlyRecord(client, validTenantId, oldPay.patient_id, recRes.rows[0].month.trim());
+                }
+            }
+
+            // 5. Registrar no log de auditoria
+            // Achado em 2026-07-08: este INSERT usava target_type/target_id/created_by, colunas
+            // que não existem em audit_logs (schema real, migration 043: aggregate_type/
+            // aggregate_id/operator_id/justification, esta última NOT NULL). Método nunca tinha
+            // sido exercitado em produção (zero chamadores) — por isso nunca deu erro até agora.
+            await client.query(`
+                INSERT INTO audit_logs (id, tenant_id, aggregate_type, aggregate_id, action, operator_id, justification, payload)
+                VALUES (gen_random_uuid(), $1, 'financial_payment', $2, 'void_payment', $3, $4, $5);
+            `, [
+                validTenantId, paymentId, voidedBy, reason,
+                JSON.stringify({ reason, oldStatus: oldPay.status, amountCents: oldPay.amount_cents })
+            ]);
+
+            await client.query('COMMIT');
+            return payment;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    async findPaymentByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<FinancialPayment | null> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT * FROM financial_payments
+            WHERE tenant_id = $1 AND idempotency_key = $2;
+        `, [validTenantId, idempotencyKey]);
+        return result.rows[0] ? this.mapFinancialPayment(result.rows[0]) : null;
+    }
+
+    async findPaymentById(tenantId: string, id: string): Promise<FinancialPayment | null> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT * FROM financial_payments
+            WHERE tenant_id = $1 AND id = $2;
+        `, [validTenantId, id]);
+        return result.rows[0] ? this.mapFinancialPayment(result.rows[0]) : null;
+    }
+
+    private mapFinancialPayment(row: any): FinancialPayment {
+        return {
+            id: row.id,
+            tenantId: row.tenant_id,
+            patientId: row.patient_id,
+            monthlyRecordId: row.monthly_record_id,
+            amountCents: row.amount_cents,
+            netAmountCents: row.net_amount_cents,
+            processingFeeCents: row.processing_fee_cents,
+            currency: row.currency,
+            paidAt: new Date(row.paid_at),
+            method: row.method,
+            source: row.source,
+            status: row.status,
+            providerTxid: row.provider_txid,
+            idempotencyKey: row.idempotency_key,
+            voidedAt: row.voided_at ? new Date(row.voided_at) : null,
+            voidedBy: row.voided_by,
+            voidReason: row.void_reason,
+            createdBy: row.created_by,
+            createdAt: new Date(row.created_at)
+        };
+    }
 
     async saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt> {
         const tenantId = validateTenantId(data.tenantId);
