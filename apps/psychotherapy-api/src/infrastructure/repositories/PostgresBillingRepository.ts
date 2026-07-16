@@ -1,16 +1,126 @@
 import { Pool } from 'pg';
-import { PendingDetails, PendingPatientDetail, PendingSessionDetail } from '../../domain/repositories/IPsychotherapyRepository';
+import { PendingDetails, PendingPatientDetail, PendingSessionDetail, SaveMonthlyRecordDTO } from '../../domain/repositories/IPsychotherapyRepository';
+import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
+import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { validateTenantId, mapMonthlyRecord } from './shared';
+import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
 
 /**
  * Extraído de PostgresPsychotherapyRepository, preservando exatamente a lógica original.
  * `getPendingDetails` e `listCoveredAppointmentIds` são COMPLEXO-LEITURA (sem risco de escrita,
  * mas cruzam billing + appointments via `computeCoveredSessions`) — não são "folha" de um
- * domínio só. Ver .claude/plans/pendencias-tecnicas-pos-quitacao-2026-07.md (item 1) e
+ * domínio só. `saveMonthlyRecord` é COMPLEXO — não abre transação própria, mas chama
+ * `syncMonthlyRecord` (fora de transação, via `this.dbPool`) quando `data.patientId` presente.
+ * Ver .claude/plans/pendencias-tecnicas-pos-quitacao-2026-07.md (item 1) e
  * .claude/plans/classificacao-postgres-psychotherapy-repository.md.
  */
 export class PostgresBillingRepository {
     constructor(private readonly dbPool: Pool) {}
+
+    async saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord> {
+        const tenantId = validateTenantId(data.tenantId);
+        if (data.id) {
+            const updated = await this.dbPool.query(`
+                UPDATE psychotherapy_monthly_records
+                SET
+                    patient_id = $3,
+                    patient_name_snapshot = $4,
+                    status = $5,
+                    payment_type = $6,
+                    session_price_cents = $7,
+                    expected_sessions = COALESCE($8, 0),
+                    paid_sessions = COALESCE($9, 0),
+                    -- absences NÃO é atualizado aqui: é derivado de agendamentos marcados "Faltou"
+                    -- (ver syncMonthlyRecord) e não deve ser sobrescrito por um valor desatualizado
+                    -- que o cliente tinha em memória antes de uma falta ser marcada em outra tela.
+                    payment_status = COALESCE($10, 'pending'),
+                    notes = $11,
+                    previous_month_paid_cents = COALESCE($12, 0),
+                    updated_at = NOW()
+                WHERE tenant_id = $1 AND id = $2
+                RETURNING *;
+            `, [
+                tenantId,
+                data.id,
+                data.patientId || null,
+                data.patientNameSnapshot,
+                data.status,
+                data.paymentType || null,
+                data.sessionPriceCents ?? null,
+                data.expectedSessions ?? 0,
+                data.paidSessions ?? 0,
+                data.paymentStatus || 'pending',
+                data.notes || null,
+                data.previousMonthPaidCents ?? 0
+            ]);
+
+            if (updated.rows.length === 0) throw new NotFoundError('Registro mensal não encontrado ou não autorizado');
+
+            // expected_sessions é derivado da contagem real de agendamentos (ver
+            // syncMonthlyRecord), não deve ser aceito do cliente — a tela sempre reenvia o
+            // valor que tinha em memória junto de QUALQUER edição (pagar sessão, editar
+            // preço, etc.), e se esse valor estiver desatualizado (ex: cache de antes de um
+            // agendamento ser resolvido), a edição não-relacionada acaba revertendo o total
+            // esperado pro valor antigo. Resincroniza aqui pra garantir que fique sempre
+            // correto, não importa o que o cliente mandou. Vale pros dois payment_type desde
+            // 2026-07-06 (antes só "per_session" — Achado real: Felipe, 2026-07-05); "monthly"
+            // ficava com o piso antigo travado no cache do cliente até um agendamento mudar de
+            // status. Achado real: Lucas (2026-07-06).
+            if (data.patientId) {
+                await syncMonthlyRecord(this.dbPool, tenantId, data.patientId, data.month);
+                const resynced = await this.dbPool.query(
+                    `SELECT * FROM psychotherapy_monthly_records WHERE id = $1;`,
+                    [data.id]
+                );
+                if (resynced.rows.length > 0) return mapMonthlyRecord(resynced.rows[0]);
+            }
+
+            return mapMonthlyRecord(updated.rows[0]);
+        }
+
+        const result = await this.dbPool.query(`
+            INSERT INTO psychotherapy_monthly_records (
+                id, tenant_id, patient_id, month, patient_name_snapshot, status, payment_type,
+                session_price_cents, expected_sessions, paid_sessions, absences,
+                payment_status, notes, previous_month_paid_cents
+            )
+            VALUES (
+                COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7,
+                $8, COALESCE($9, 0), COALESCE($10, 0), COALESCE($11, 0),
+                COALESCE($12, 'pending'), $13, COALESCE($14, 0)
+            )
+            ON CONFLICT (tenant_id, month, patient_id) WHERE patient_id IS NOT NULL DO UPDATE SET
+                patient_name_snapshot = EXCLUDED.patient_name_snapshot,
+                status = EXCLUDED.status,
+                payment_type = EXCLUDED.payment_type,
+                session_price_cents = EXCLUDED.session_price_cents,
+                expected_sessions = EXCLUDED.expected_sessions,
+                paid_sessions = EXCLUDED.paid_sessions,
+                -- absences preservado (ver comentário equivalente no branch UPDATE acima)
+                payment_status = EXCLUDED.payment_status,
+                notes = EXCLUDED.notes,
+                previous_month_paid_cents = EXCLUDED.previous_month_paid_cents,
+                updated_at = NOW()
+            RETURNING *;
+        `, [
+            data.id || null,
+            tenantId,
+            data.patientId || null,
+            data.month,
+            data.patientNameSnapshot,
+            data.status,
+            data.paymentType || null,
+            data.sessionPriceCents ?? null,
+            data.expectedSessions ?? 0,
+            data.paidSessions ?? 0,
+            data.absences ?? 0,
+            data.paymentStatus || 'pending',
+            data.notes || null,
+            data.previousMonthPaidCents ?? 0
+        ]);
+
+        return mapMonthlyRecord(result.rows[0]);
+    }
 
     async getPendingDetails(tenantId: string, currentMonthStr: string): Promise<PendingDetails> {
         const validTenantId = validateTenantId(tenantId);
