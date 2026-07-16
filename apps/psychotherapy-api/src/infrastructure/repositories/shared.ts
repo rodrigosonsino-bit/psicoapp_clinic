@@ -1,9 +1,10 @@
-import { PatientRow, SessionRow, ClinicalNoteRow, AppointmentRow, ExpenseRow } from './dbRowTypes';
+import { PatientRow, SessionRow, ClinicalNoteRow, AppointmentRow, ExpenseRow, MonthlyRecordRow } from './dbRowTypes';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
+import { PsychotherapyMonthlyRecord } from '../../domain/models/PsychotherapyMonthlyRecord';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -106,6 +107,32 @@ export function mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
         new Date(row.created_at),
         new Date(row.updated_at),
         row.group_id ?? null
+    );
+}
+
+/**
+ * mapMonthlyRecord é usado tanto por saveMonthlyRecord/bulkSaveMonthlyRecords/addAdvanceCredit/
+ * listMonthlyRecords (COMPLEXOS/FOLHA-RESSALVA, permanecem no arquivo principal) quanto por
+ * getPendingDetails (COMPLEXO-LEITURA, migrado para PostgresBillingRepository).
+ */
+export function mapMonthlyRecord(row: MonthlyRecordRow): PsychotherapyMonthlyRecord {
+    return new PsychotherapyMonthlyRecord(
+        row.id,
+        row.tenant_id,
+        row.patient_id,
+        row.month,
+        row.patient_name_snapshot,
+        row.status,
+        row.payment_type,
+        row.session_price_cents,
+        row.expected_sessions,
+        row.paid_sessions,
+        row.absences,
+        row.payment_status,
+        row.notes,
+        row.previous_month_paid_cents,
+        new Date(row.created_at),
+        new Date(row.updated_at)
     );
 }
 
