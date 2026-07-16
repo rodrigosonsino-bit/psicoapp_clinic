@@ -1,17 +1,19 @@
 import { Pool } from 'pg';
-import { SaveExpenseDTO, SaveFixedExpenseDTO } from '../../domain/repositories/IPsychotherapyRepository';
+import { SaveExpenseDTO, SaveFixedExpenseDTO, PaginationOptions, PaginatedResult } from '../../domain/repositories/IPsychotherapyRepository';
 import { PsychotherapyExpense } from '../../domain/models/PsychotherapyExpense';
 import { PsychotherapyFixedExpense } from '../../domain/models/PsychotherapyFixedExpense';
 import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { FixedExpenseRow } from './dbRowTypes';
 import { validateTenantId, mapExpense } from './shared';
+import { checkAndInstantiateFixedExpenses } from './FixedExpenseInstantiator';
 
 /**
  * Extraído de PostgresPsychotherapyRepository (7 métodos de Expenses/Fixed Expenses
  * classificados como FOLHA — sem transação, sem side effect cross-domain) sem alterar
- * nenhuma linha de lógica. `listExpenses` e `getDashboardAnalytics` permanecem no arquivo
- * principal (COMPLEXOS — chamam `checkAndInstantiateFixedExpenses`, que grava despesas como
- * side effect antes de listar/calcular). Ver
+ * nenhuma linha de lógica. `listExpenses` (COMPLEXO — chama `checkAndInstantiateFixedExpenses`,
+ * que grava despesas como side effect antes de listar) foi migrado aqui posteriormente.
+ * `getDashboardAnalytics` permanece no arquivo principal (mesma chamada, via
+ * PostgresBillingRepository). Ver
  * .claude/plans/pendencias-tecnicas-pos-quitacao-2026-07.md (item 1) e
  * .claude/plans/classificacao-postgres-psychotherapy-repository.md.
  *
@@ -20,6 +22,67 @@ import { validateTenantId, mapExpense } from './shared';
  */
 export class PostgresExpenseRepository {
     constructor(private readonly dbPool: Pool) {}
+
+    async listExpenses(
+        tenantId: string,
+        start?: Date,
+        end?: Date,
+        pagination?: PaginationOptions
+    ): Promise<PaginatedResult<PsychotherapyExpense>> {
+        const validTenantId = validateTenantId(tenantId);
+
+        // Auto-instantiate fixed expenses for current month and any months in start-end range.
+        // Usa America/Sao_Paulo explicitamente (não new Date().getMonth(), que usa o fuso do
+        // servidor — normalmente UTC no Railway — e podia calcular o "mês atual" errado perto
+        // da virada do dia em BRT, achado na revisão de 04/07/2026).
+        const currentMonth = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+        }).format(new Date()).slice(0, 7);
+        await checkAndInstantiateFixedExpenses(this.dbPool, this, validTenantId, currentMonth);
+
+        if (start && end) {
+            let tempDate = new Date(start);
+            tempDate.setUTCDate(1);
+            while (tempDate <= end) {
+                const mStr = `${tempDate.getUTCFullYear()}-${String(tempDate.getUTCMonth() + 1).padStart(2, '0')}`;
+                await checkAndInstantiateFixedExpenses(this.dbPool, this, validTenantId, mStr);
+                tempDate.setUTCMonth(tempDate.getUTCMonth() + 1);
+            }
+        }
+
+        let query = 'SELECT *, COUNT(*) OVER() AS total_count FROM psychotherapy_expenses WHERE tenant_id = $1';
+        const params: any[] = [validTenantId];
+
+        if (start) {
+            params.push(start);
+            query += ` AND date >= $${params.length}`;
+        }
+
+        if (end) {
+            params.push(end);
+            query += ` AND date <= $${params.length}`;
+        }
+
+        query += ' ORDER BY date DESC';
+
+        if (pagination) {
+            const offset = (pagination.page - 1) * pagination.limit;
+            params.push(pagination.limit, offset);
+            query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+        }
+
+        query += ';';
+
+        const result = await this.dbPool.query(query, params);
+        if (result.rows.length === 0) return { data: [], total: 0 };
+        const total = parseInt(result.rows[0].total_count, 10);
+        return {
+            data: result.rows.map(row => mapExpense(row)),
+            total
+        };
+    }
 
     async saveExpense(data: SaveExpenseDTO): Promise<PsychotherapyExpense> {
         const tenantId = validateTenantId(data.tenantId);
