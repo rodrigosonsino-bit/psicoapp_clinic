@@ -1,7 +1,8 @@
-import { PatientRow, SessionRow, ClinicalNoteRow } from './dbRowTypes';
+import { PatientRow, SessionRow, ClinicalNoteRow, AppointmentRow } from './dbRowTypes';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapySession } from '../../domain/models/PsychotherapySession';
 import { ClinicalNote } from '../../domain/models/ClinicalNote';
+import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -77,5 +78,32 @@ export function mapClinicalNote(row: ClinicalNoteRow): ClinicalNote {
         row.tags ?? [],
         new Date(row.created_at),
         new Date(row.updated_at)
+    );
+}
+
+/**
+ * mapAppointment é usado tanto por saveAppointment/updateAppointmentStatus (COMPLEXOS,
+ * permanecem no arquivo principal) quanto pelos métodos FOLHA de leitura de appointments
+ * (migrados para PostgresAppointmentRepository).
+ */
+export function mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
+    return new PsychotherapyAppointment(
+        row.id,
+        row.tenant_id,
+        row.patient_id,
+        new Date(row.scheduled_at),
+        row.duration_minutes,
+        row.status,
+        row.recurrence,
+        row.recurrence_end_date ? new Date(row.recurrence_end_date) : null,
+        row.notes,
+        row.google_event_id ?? null,
+        row.google_event_url ?? null,
+        row.confirm_token ?? null,
+        row.confirmed_at ? new Date(row.confirmed_at) : null,
+        row.parent_id ?? null,
+        new Date(row.created_at),
+        new Date(row.updated_at),
+        row.group_id ?? null
     );
 }
