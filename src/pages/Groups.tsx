@@ -32,6 +32,7 @@ interface TherapyGroup {
 }
 
 interface GroupMember {
+  group_member_id: string;
   patient_id: string;
   name: string;
   phone: string | null;
@@ -86,6 +87,7 @@ interface SessionRecord {
   id: string;
   session_date: string;
   patient_id: string;
+  group_member_id: string;
   patient_name: string;
   attendance_status: AttendanceStatus;
   payment_status: PaymentStatus | null;
@@ -231,7 +233,7 @@ export default function Groups() {
         method: 'POST',
         body: JSON.stringify({
           sessionDate: record.session_date.slice(0, 10),
-          attendances: [{ patientId: record.patient_id, status: newStatus, notes: record.notes }]
+          attendances: [{ groupMemberId: record.group_member_id, status: newStatus, notes: record.notes }]
         })
       });
       setSessionHistory(prev => prev.map(r =>
@@ -254,7 +256,7 @@ export default function Groups() {
         method: 'POST',
         body: JSON.stringify({
           sessionDate: record.session_date.slice(0, 10),
-          attendances: [{ patientId: record.patient_id, status: record.attendance_status, notes: newNotes || null }]
+          attendances: [{ groupMemberId: record.group_member_id, status: record.attendance_status, notes: newNotes || null }]
         })
       });
       setSessionHistory(prev => prev.map(r =>
@@ -1483,7 +1485,7 @@ function RegisterSessionModal({
           sessionDate,
           sessionNotes: sessionNotes || null,
           attendances: members.map(m => ({
-            patientId: m.patient_id,
+            groupMemberId: m.group_member_id,
             status: attendances[m.patient_id] ?? 'present',
           })),
         }),

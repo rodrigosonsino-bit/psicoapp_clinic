@@ -286,6 +286,7 @@ export class GroupController {
                 gsr.id,
                 gsr.session_date,
                 gsr.patient_id,
+                gsr.group_member_id,
                 p.name          AS patient_name,
                 gsr.attendance_status,
                 gsr.notes,
@@ -403,6 +404,7 @@ export class GroupController {
 
         const result = await this.dbPool.query(`
             SELECT
+                tgm.id          AS group_member_id,
                 p.id            AS patient_id,
                 p.name,
                 p.phone,
