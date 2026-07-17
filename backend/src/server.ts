@@ -41,8 +41,25 @@ import { IReminderMessageSender } from './domain/services/IReminderMessageSender
 const app = express();
 const PORT = Number(process.env.PORT) || 3333;
 
-// Confia no cabeçalho X-Forwarded-For do Railway/proxy para o rate limiter funcionar
-app.set('trust proxy', true);
+// Número de hops de proxy reverso confiáveis à frente do container (Railway = 1 hop
+// confirmado: numReplicas=1, sem CDN/WAF adicional na frente — ver
+// pendencias-tecnicas-pos-quitacao-2026-07.md item 3). `trust proxy: true` confiava em
+// QUALQUER quantidade de hops, incluindo um valor de X-Forwarded-For forjado pelo próprio
+// cliente — permitia contornar o rate limit e falsificar o IP de auditoria do 2FA
+// (Login2faUseCase). Default 1 só em test/development — qualquer outro NODE_ENV
+// (incluindo ausente/desconhecido) exige a env explícita, para não mascarar produção
+// mal configurada.
+const TRUST_PROXY_HOPS_PATTERN = /^[1-9]\d*$/; // inteiro positivo estrito — rejeita "1.0", "1e0", espaços, hex
+function parseTrustProxyHops(raw: string | undefined): number {
+    const isNonProdDefault = raw === undefined
+        && (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development');
+    if (isNonProdDefault) return 1;
+    if (raw === undefined || !TRUST_PROXY_HOPS_PATTERN.test(raw)) {
+        throw new Error(`TRUST_PROXY_HOPS inválido: "${raw}" — precisa ser um inteiro >= 1`);
+    }
+    return Number(raw);
+}
+app.set('trust proxy', parseTrustProxyHops(process.env.TRUST_PROXY_HOPS));
 
 // ── Webhook da WhatsApp Cloud API ────────────────────────────────────────────
 // Registrado ANTES de QUALQUER middleware global (helmet/cors/rate limit/json):
@@ -62,7 +79,6 @@ const globalRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     limit: 300,
     skip: () => process.env.NODE_ENV === 'test',
-    validate: { trustProxy: false },
     handler: (_req, res) => {
         res.status(429).json({
             error: 'Muitas requisições. Tente novamente em alguns minutos.'
@@ -75,7 +91,6 @@ const strictRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     limit: 200,
     skip: (req) => process.env.NODE_ENV === 'test' || !['POST', 'PUT', 'DELETE'].includes(req.method),
-    validate: { trustProxy: false },
     handler: (_req, res) => {
         res.status(429).json({
             error: 'Muitas requisições. Tente novamente em alguns minutos.'
