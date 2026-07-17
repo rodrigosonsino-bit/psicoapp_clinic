@@ -8,6 +8,10 @@ services:
       # ── Servidor ──────────────────────────────
       - PORT=3000
       - NODE_ENV=production
+      # Nao ha reverse proxy documentado na frente deste container (porta
+      # exposta direto) - 1 aqui e um default seguro pra nao quebrar o
+      # boot; ajustar se um proxy real (nginx, CDN) for colocado na frente.
+      - TRUST_PROXY_HOPS=1
 
       # ── Banco ─────────────────────────────────
       - DATABASE_URL=postgresql://psychotherapy:psychotherapy@postgres:5432/psychotherapy_db

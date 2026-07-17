@@ -44,11 +44,9 @@ const totpTokenSchema = z.object({
  *   preferível ao email do corpo porque é uma identidade autenticada, não um dado que o próprio
  *   atacante controla. Em `/login` (pré-auth, sem tenantId ainda) cai pro email do corpo. Sem
  *   nenhum dos dois, cai só pra IP.
- * - `trust proxy` já está ligado em server.ts (Railway) — `req.ip` reflete o IP real do cliente.
- *   Achado de auditoria (Codex CLI): `app.set('trust proxy', true)` confia em toda a cadeia de
- *   `X-Forwarded-For`, não só no hop do proxy da Railway — em tese permite spoofing de IP se
- *   algum proxy intermediário não sanitizar o header. Não corrigido aqui (config pré-existente,
- *   fora do escopo desta mudança) — registrado como item novo de dívida técnica.
+ * - `trust proxy` em server.ts é parametrizado via `TRUST_PROXY_HOPS` (não mais `true`
+ *   incondicional) — `req.ip` confia só no número de hops configurado, evitando que o
+ *   próprio cliente forje `X-Forwarded-For` pra falsificar IP e contornar este rate limit.
  */
 const loginRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
