@@ -164,7 +164,7 @@ export class PostgresPatientRepository {
         const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
             SELECT * FROM psychotherapy_patients
-            WHERE tenant_id = $1 AND phone = $2
+            WHERE tenant_id = $1 AND phone = $2 AND deleted_at IS NULL
             LIMIT 1
         `, [validTenantId, phone]);
         return result.rows[0] ? mapPatient(result.rows[0]) : null;
