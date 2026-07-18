@@ -16,6 +16,17 @@ export interface CreateUpfrontCourseChargeResult {
     amountCents: number;
 }
 
+function currentMonthStrBRT(): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+    }).formatToParts(new Date());
+    const y = parts.find(p => p.type === 'year')!.value;
+    const m = parts.find(p => p.type === 'month')!.value;
+    return `${y}-${m}`;
+}
+
 @injectable()
 export class CreateUpfrontCourseChargeUseCase {
     constructor(@inject(Pool) private readonly dbPool: Pool) {}
@@ -95,14 +106,14 @@ export class CreateUpfrontCourseChargeUseCase {
             const chargeResult = await client.query(`
                 INSERT INTO group_payments (
                     id, tenant_id, group_id, patient_id, group_member_id,
-                    charge_type, original_amount_cents, amount_cents,
+                    charge_type, reference_month, original_amount_cents, amount_cents,
                     status, due_date
                 ) VALUES (
                     gen_random_uuid(), $1, $2, $3, $4,
-                    'course_upfront', $5, $5,
+                    'course_upfront', $6, $5, $5,
                     'pending', CURRENT_DATE
                 ) RETURNING id
-            `, [tenantId, groupId, patientId, groupMemberId, totalCents]);
+            `, [tenantId, groupId, patientId, groupMemberId, totalCents, currentMonthStrBRT()]);
 
             await client.query('COMMIT');
 

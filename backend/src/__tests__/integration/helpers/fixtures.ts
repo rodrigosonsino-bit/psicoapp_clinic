@@ -107,15 +107,39 @@ export async function addGroupMember(
     pool: Pool,
     groupId: string,
     patientId: string,
-    tenantId: string
+    tenantId: string,
+    /** Data de entrada no grupo. Default: bem no passado (não NOW()) pra cobrir as
+     *  datas fixas de 2025 usadas nos testes (referenceMonth/sessionDate) sem que
+     *  o membro "ainda não tivesse entrado" segundo o relógio real da máquina. */
+    joinedAt: string = '2000-01-01'
 ): Promise<string> {
     const res = await pool.query(`
         INSERT INTO therapy_group_members (group_id, patient_id, tenant_id, joined_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (group_id, patient_id) DO UPDATE SET joined_at = NOW()
+        VALUES ($1, $2, $3, $4::date)
+        ON CONFLICT (tenant_id, group_id, patient_id) WHERE left_at IS NULL
+        DO UPDATE SET joined_at = $4::date
         RETURNING id
-    `, [groupId, patientId, tenantId]);
-    return res.rows[0].id;
+    `, [groupId, patientId, tenantId, joinedAt]);
+    const memberId = res.rows[0].id;
+
+    // Toda matrícula ativa precisa de uma política de faturamento vigente desde a
+    // migration 079 (RegisterGroupSessionUseCase rejeita sessão sem ela) — mesmo
+    // comportamento default que AttachExistingGroupMemberUseCase aplica em produção.
+    // valid_from fica bem no passado (e não CURRENT_DATE) pra cobrir sessionDate
+    // fixas usadas nos testes (ex: '2025-05-10'), já que a consulta exige
+    // bp.valid_from <= sessionDate.
+    await pool.query(`
+        INSERT INTO therapy_group_member_billing_policies (
+            tenant_id, group_id, patient_id, member_id, billing_type, valid_from, approved_by, status
+        )
+        SELECT $1, $2, $3, $4, 'group_default', DATE '2000-01-01', $3, 'active'
+        WHERE NOT EXISTS (
+            SELECT 1 FROM therapy_group_member_billing_policies
+            WHERE member_id = $4 AND tenant_id = $1 AND status = 'active'
+        )
+    `, [tenantId, groupId, patientId, memberId]);
+
+    return memberId;
 }
 
 // ── Monthly Record ────────────────────────────────────────────────────────────
@@ -177,28 +201,44 @@ export async function createGroupPayment(
         /** Sobrescreve due_date (default: primeiro dia de referenceMonth). Use pra testar
          *  cenários de "vencido" (passado) vs "coberto" (futuro) em relação a CURRENT_DATE. */
         dueDate?: string;
+        /** Exigido pela constraint chk_group_payments_status_consistency quando status='paid'. */
+        paymentMethod?: string;
+        /** Exigido pela constraint chk_group_payments_status_consistency quando status='voided'. */
+        voidReason?: string;
     }
 ): Promise<GroupPaymentFixture> {
     const id             = uuidv4();
     const amountCents    = opts.amountCents    ?? 20000;
+    // Coluna reference_month é texto 'YYYY-MM' — as queries de listagem comparam
+    // com esse formato exato, então NÃO deve levar sufixo de dia (isso quebrava o
+    // JOIN silenciosamente, zerando totais agregados por mês).
     const referenceMonth = opts.referenceMonth ?? '2025-01';
     const status         = opts.status         ?? 'pending';
     const chargeType     = opts.chargeType     ?? 'monthly';
     const dueDate        = opts.dueDate        ?? `${referenceMonth}-01`;
     const amountPaidCents = opts.amountPaidCents ?? (status === 'paid' ? amountCents : null);
+    const paidAt          = status === 'paid'   ? new Date() : null;
+    const paymentMethod   = status === 'paid'   ? (opts.paymentMethod ?? 'pix') : null;
+    const voidedAt         = status === 'voided' ? new Date() : null;
+    const voidReason       = status === 'voided' ? (opts.voidReason ?? 'Estorno de teste') : null;
+    // group_member_id é NOT NULL desde a migration 070 — resolve/cria o vínculo
+    // ativo em therapy_group_members quando o call-site não o informa explicitamente.
+    const groupMemberId = opts.groupMemberId
+        ?? await addGroupMember(pool, opts.groupId, opts.patientId, opts.tenantId);
 
     await pool.query(`
         INSERT INTO group_payments (
             id, tenant_id, group_id, patient_id, group_member_id, charge_type,
             reference_month, amount_cents, original_amount_cents, amount_paid_cents,
-            status, due_date
+            status, due_date, paid_at, payment_method, voided_at, voided_by, void_reason
         ) VALUES (
             $1, $2, $3, $4, $5, $6,
             $7, $8, $8, $9,
-            $10, $11::date
+            $10, $11::date, $12, $13, $14, $15, $16
         )
-    `, [id, opts.tenantId, opts.groupId, opts.patientId, opts.groupMemberId || null, chargeType,
-        `${referenceMonth}-01`, amountCents, amountPaidCents, status, dueDate]);
+    `, [id, opts.tenantId, opts.groupId, opts.patientId, groupMemberId, chargeType,
+        referenceMonth, amountCents, amountPaidCents, status, dueDate,
+        paidAt, paymentMethod, voidedAt, voidedAt ? opts.tenantId : null, voidReason]);
 
     return {
         id, tenantId: opts.tenantId, groupId: opts.groupId,

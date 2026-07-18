@@ -51,13 +51,20 @@ describe('Migration 062 — banco limpo', () => {
         expect(res.rows).toHaveLength(0);
     });
 
-    it('índice uq_group_payments_active existe (migration 066)', async () => {
+    it('índices uq_group_payments_*_active existem (modelo de billing dividido por charge_type — migrations 072/073/074)', async () => {
+        // O índice único genérico original (migration 066) foi substituído por três
+        // índices parciais específicos por charge_type quando o modelo de billing
+        // se dividiu em monthly/upfront/session.
         const res = await pool.query(`
             SELECT indexname FROM pg_indexes
             WHERE tablename = 'group_payments'
-              AND indexname = 'uq_group_payments_active';
+              AND indexname IN (
+                'uq_group_payments_monthly_active',
+                'uq_group_payments_upfront_active',
+                'uq_group_payments_session_active'
+              );
         `);
-        expect(res.rows).toHaveLength(1);
+        expect(res.rows).toHaveLength(3);
     });
 
     it('índice uq_calendar_events_group_session existe (migration 067)', async () => {

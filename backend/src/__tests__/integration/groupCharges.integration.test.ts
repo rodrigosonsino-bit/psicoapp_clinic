@@ -159,7 +159,10 @@ describe('ReplaceGroupChargeUseCase', () => {
         );
         expect(newPayment.rows[0].status).toBe('pending');
         expect(newPayment.rows[0].amount_cents).toBe(18000);
-        expect(newPayment.rows[0].original_amount_cents).toBe(18000);
+        // original_amount_cents é mantido da cobrança original (20000), não do novo
+        // valor negociado — ver comentário "Mantém o original da primeira cobrança"
+        // em ReplaceGroupChargeUseCase.ts.
+        expect(newPayment.rows[0].original_amount_cents).toBe(20000);
     });
 
     it('#11b — rejeita substituição de cobrança que ainda está pending (não voided)', async () => {
@@ -172,12 +175,14 @@ describe('ReplaceGroupChargeUseCase', () => {
             tenantId: tenant.id, groupId: group.id, patientId: patient.id,
         });
 
+        // 409 é reservado para quando já existe uma substituição ativa; uma cobrança
+        // ainda pending (não voided) é rejeitada com 400 — ver ReplaceGroupChargeUseCase.ts.
         await expect(replaceChargeUseCase.execute({
             tenantId: tenant.id,
             groupPaymentId: payment.id,
             amountCents: 18000,
             dueDate: '2025-01-15',
-        })).rejects.toMatchObject({ statusCode: 409 });
+        })).rejects.toMatchObject({ statusCode: 400 });
     });
 
     it('#11c — rejeita valor zero', async () => {

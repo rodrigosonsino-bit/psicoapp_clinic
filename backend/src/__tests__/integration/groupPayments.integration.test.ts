@@ -137,14 +137,6 @@ describe('ConfirmGroupPaymentUseCase', () => {
             tenantId: tenant.id, groupPaymentId: payment.id, operatorId: tenant.id, paymentMethod: 'pix',
         });
 
-        // Forçar um estado inválido: inserir ledger com idempotency_key do payment
-        // mas com group_payment_id diferente — simula conflito de hash
-        await pool.query(`
-            UPDATE financial_payments
-            SET group_payment_id = gen_random_uuid()
-            WHERE group_payment_id = $1
-        `, [payment.id]);
-
         // Criar novo payment pending para testar conflito
         const payment2 = await createGroupPayment(pool, {
             tenantId: tenant.id, groupId: group.id, patientId: patient.id,
@@ -162,11 +154,13 @@ describe('ConfirmGroupPaymentUseCase', () => {
             INSERT INTO financial_payments (
                 id, tenant_id, patient_id, monthly_record_id,
                 amount_cents, currency, paid_at, method, source, status,
-                idempotency_key, created_by, group_payment_id
+                idempotency_key, created_by, group_payment_id,
+                net_amount_cents, processing_fee_cents
             ) VALUES (
                 gen_random_uuid(), $1, $2, NULL,
                 20000, 'BRL', NOW(), 'pix', 'manual', 'confirmed',
-                $3, $1, $4
+                $3, $1, $4,
+                20000, 0
             )
         `, [tenant.id, patient.id, wrongKey, anotherPaymentId]);
 
@@ -228,7 +222,7 @@ describe('VoidGroupPaymentUseCase', () => {
         // Marcar como paid diretamente sem criar ledger — estado inválido controlado
         await pool.query(`
             UPDATE group_payments
-            SET status = 'paid', amount_paid_cents = 20000, paid_at = NOW()
+            SET status = 'paid', amount_paid_cents = 20000, paid_at = NOW(), payment_method = 'pix'
             WHERE id = $1
         `, [payment.id]);
 
