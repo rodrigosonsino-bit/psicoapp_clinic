@@ -556,12 +556,20 @@ export class PostgresBillingRepository {
             `, [tenantId, data.patientId, monthStr]);
             const monthlyRecordId = mrRes.rows[0]?.id || null;
 
+            // net_amount_cents/processing_fee_cents são NOT NULL desde a migration 080 (mesma
+            // constraint chk_fin_math de registerPayment) -- sem taxa aplicável a recibo emitido
+            // manualmente, assume net=amount/fee=0 (mesma convenção usada em registerPayment).
+            // Achado ao rodar teste de integração pela primeira vez contra schema real
+            // (2026-07-18): este INSERT nunca tinha sido atualizado após a migration 080, então
+            // toda emissão de recibo novo falhava também aqui (depois de já ter sido corrigido o
+            // bug das colunas de snapshot que faltavam).
             await client.query(`
                 INSERT INTO financial_payments (
-                    id, tenant_id, patient_id, monthly_record_id, amount_cents, currency,
+                    id, tenant_id, patient_id, monthly_record_id, amount_cents,
+                    net_amount_cents, processing_fee_cents, currency,
                     paid_at, method, source, status, idempotency_key, created_by
                 )
-                VALUES ($1, $2, $3, $4, $5, 'BRL', $6, 'other', 'manual', 'confirmed', $7, $2);
+                VALUES ($1, $2, $3, $4, $5, $5, 0, 'BRL', $6, 'other', 'manual', 'confirmed', $7, $2);
             `, [
                 paymentId,
                 tenantId,
@@ -787,7 +795,14 @@ export class PostgresBillingRepository {
         return result.rows.map(row => mapReceipt(row));
     }
 
-    async deleteReceipt(tenantId: string, id: string): Promise<void> {
+    // voidedBy/reason: o financial_payment vinculado (dual-write de saveReceipt) não pode mais
+    // ser DELETEtado -- migration 056 (trg_protect_financial_payments) bloqueia fisicamente
+    // qualquer DELETE no ledger e revogou a permissão da role. Achado ao rodar teste de
+    // integração pela primeira vez contra schema real (2026-07-18): este método nunca tinha
+    // sido exercitado em produção (zero chamadores até agora), então o erro nunca apareceu.
+    // Corrigido pra estornar (mesma transição confirmed→voided de voidPayment) em vez de
+    // deletar -- exige voidedBy/reason porque o trigger exige ambos preenchidos no estorno.
+    async deleteReceipt(tenantId: string, id: string, voidedBy: string, reason: string): Promise<void> {
         const validTenantId = validateTenantId(tenantId);
         const client = await this.dbPool.connect();
         try {
@@ -811,9 +826,10 @@ export class PostgresBillingRepository {
 
             if (paymentId) {
                 await client.query(`
-                    DELETE FROM financial_payments
-                    WHERE id = $1 AND tenant_id = $2;
-                `, [paymentId, validTenantId]);
+                    UPDATE financial_payments
+                    SET status = 'voided', voided_at = NOW(), voided_by = $1, void_reason = $2
+                    WHERE id = $3 AND tenant_id = $4 AND status = 'confirmed';
+                `, [voidedBy, reason, paymentId, validTenantId]);
             }
 
             await client.query('COMMIT');
