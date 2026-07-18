@@ -262,12 +262,18 @@ export class PostgresBillingRepository {
             }
 
             // 2. Lock monthly record if provided
+            // Escopo por tenant_id no lock (defesa-em-profundidade): sem isso, um
+            // monthlyRecordId de outro tenant travava a linha alheia por FOR UPDATE
+            // antes da FK composta (monthly_record_id, tenant_id) rejeitar o INSERT
+            // abaixo -- nunca permitiu escrita cross-tenant, mas segurava lock de
+            // linha que não é deste tenant até o rollback. Achado do Codex durante a
+            // fragmentação do repositório.
             let monthlyRecordId = data.monthlyRecordId || null;
             if (monthlyRecordId) {
                 const lockRes = await client.query(`
                     SELECT id FROM psychotherapy_monthly_records
-                    WHERE id = $1 FOR UPDATE;
-                `, [monthlyRecordId]);
+                    WHERE id = $1 AND tenant_id = $2 FOR UPDATE;
+                `, [monthlyRecordId, validTenantId]);
                 if (lockRes.rows.length === 0) {
                     throw new NotFoundError('Registro mensal não encontrado');
                 }
@@ -345,12 +351,17 @@ export class PostgresBillingRepository {
             }
 
             // 2. Lock monthly record if associated
+            // monthlyRecordId vem do próprio pagamento já validado por tenant (linha
+            // 334, WHERE tenant_id = $1 AND id = $2) -- pela FK composta em
+            // financial_payments já pertence garantidamente a este tenant. Filtro
+            // aqui é só defesa-em-profundidade/consistência com registerPayment, não
+            // corrige um caminho de escrita cross-tenant que já existisse.
             const monthlyRecordId = oldPay.monthly_record_id;
             if (monthlyRecordId) {
                 await client.query(`
                     SELECT id FROM psychotherapy_monthly_records
-                    WHERE id = $1 FOR UPDATE;
-                `, [monthlyRecordId]);
+                    WHERE id = $1 AND tenant_id = $2 FOR UPDATE;
+                `, [monthlyRecordId, validTenantId]);
             }
 
             // 3. Atualizar status para voided
