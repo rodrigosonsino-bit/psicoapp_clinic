@@ -139,8 +139,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return this.billingRepository.listReceipts(tenantId, patientId);
     }
 
-    async deleteReceipt(tenantId: string, id: string): Promise<void> {
-        return this.billingRepository.deleteReceipt(tenantId, id);
+    async deleteReceipt(tenantId: string, id: string, voidedBy: string, reason: string): Promise<void> {
+        return this.billingRepository.deleteReceipt(tenantId, id, voidedBy, reason);
     }
 
     async saveSession(data: SaveSessionDTO): Promise<PsychotherapySession> {
