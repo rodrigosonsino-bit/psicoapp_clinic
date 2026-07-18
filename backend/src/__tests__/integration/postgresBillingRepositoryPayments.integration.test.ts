@@ -137,6 +137,24 @@ describe('PostgresBillingRepository.registerPayment', () => {
 
         expect(payment.monthlyRecordId).toBe(record.id);
     });
+
+    it('lança NotFoundError (em vez de travar a linha) quando monthlyRecordId pertence a outro tenant', async () => {
+        const tenant = await createTenant(pool);
+        const otherTenant = await createTenant(pool);
+        const patient = await createPatient(pool, tenant.id);
+        const otherPatient = await createPatient(pool, otherTenant.id);
+        const otherTenantRecord = await createMonthlyRecord(pool, otherTenant.id, otherPatient.id);
+
+        await expect(billingRepo.registerPayment(
+            basePaymentDto({
+                tenantId: tenant.id, patientId: patient.id, createdBy: tenant.id,
+                monthlyRecordId: otherTenantRecord.id,
+            })
+        )).rejects.toThrow(NotFoundError);
+
+        const count = await pool.query('SELECT COUNT(*) FROM financial_payments WHERE tenant_id = $1', [tenant.id]);
+        expect(Number(count.rows[0].count)).toBe(0);
+    });
 });
 
 describe('PostgresBillingRepository.voidPayment', () => {
