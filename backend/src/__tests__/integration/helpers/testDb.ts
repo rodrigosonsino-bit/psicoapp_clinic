@@ -22,9 +22,22 @@ let pool: Pool | null = null;
 /**
  * Obtém (criando se necessário) o pool de conexão com o banco de teste isolado.
  * O container é singleton — todas as suítes de integração do mesmo processo compartilham.
+ *
+ * Se `TEST_DATABASE_URL` estiver definida, usa esse banco diretamente (ex.: um projeto
+ * Neon/Postgres real na nuvem) em vez de subir um container local — útil em ambientes sem
+ * runtime de container (Docker) disponível. Ainda aplica as migrations normalmente; quem
+ * define a env var é responsável por apontar pra um banco descartável, nunca produção.
  */
 export async function getTestPool(): Promise<Pool> {
     if (pool) return pool;
+
+    const externalUrl = process.env.TEST_DATABASE_URL;
+    if (externalUrl) {
+        console.log('[testDb] Usando TEST_DATABASE_URL (sem container local)...');
+        pool = new Pool({ connectionString: externalUrl, ssl: { rejectUnauthorized: false } });
+        await applyMigrations(externalUrl);
+        return pool;
+    }
 
     console.log('[testDb] Iniciando container PostgreSQL...');
     container = await new PostgreSqlContainer('postgres:15-alpine')
@@ -46,7 +59,7 @@ export async function getTestPool(): Promise<Pool> {
 }
 
 /**
- * Para o container e fecha o pool. Chamar no afterAll da suíte raiz.
+ * Para o container (se houver) e fecha o pool. Chamar no afterAll da suíte raiz.
  */
 export async function teardownTestDb(): Promise<void> {
     if (pool) {

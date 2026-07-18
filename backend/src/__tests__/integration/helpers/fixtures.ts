@@ -40,10 +40,15 @@ export interface PatientFixture {
 export async function createPatient(
     pool: Pool,
     tenantId: string,
-    overrides: Partial<{ name: string; document: string; individualTherapyEnabled: boolean }> = {}
+    overrides: Partial<{ name: string; document: string; individualTherapyEnabled: boolean; status: string }> = {}
 ): Promise<PatientFixture> {
     const id   = uuidv4();
     const name = overrides.name ?? `Paciente ${id.slice(0, 8)}`;
+    // 'active' não é um valor válido de status desde a migration 086 (o campo representa
+    // cadência de sessão: weekly/biweekly/monthly/one_off/inactive, não estado de vínculo) —
+    // achado ao rodar a suíte de integração contra um schema totalmente migrado pela primeira
+    // vez nesta sessão (psychotherapy_patients_status_check rejeitava toda inserção default).
+    const status = overrides.status ?? 'weekly';
 
     await pool.query(`
         INSERT INTO psychotherapy_patients (
@@ -51,11 +56,11 @@ export async function createPatient(
             payment_type, default_session_price_cents,
             individual_therapy_enabled
         ) VALUES (
-            $1, $2, $3, $3, 'active',
+            $1, $2, $3, $3, $4,
             'per_session', 15000,
-            $4
+            $5
         )
-    `, [id, tenantId, name, overrides.individualTherapyEnabled ?? false]);
+    `, [id, tenantId, name, status, overrides.individualTherapyEnabled ?? false]);
 
     return { id, tenantId, name };
 }
@@ -111,6 +116,36 @@ export async function addGroupMember(
         RETURNING id
     `, [groupId, patientId, tenantId]);
     return res.rows[0].id;
+}
+
+// ── Monthly Record ────────────────────────────────────────────────────────────
+
+export interface MonthlyRecordFixture {
+    id: string;
+    tenantId: string;
+    patientId: string;
+    month: string;
+}
+
+export async function createMonthlyRecord(
+    pool: Pool,
+    tenantId: string,
+    patientId: string,
+    overrides: Partial<{ month: string; patientName: string; status: string; paymentType: string }> = {}
+): Promise<MonthlyRecordFixture> {
+    const id          = uuidv4();
+    const month       = overrides.month ?? '2025-01';
+    const patientName = overrides.patientName ?? `Paciente ${id.slice(0, 8)}`;
+    const status       = overrides.status ?? 'weekly';
+    const paymentType = overrides.paymentType ?? 'per_session';
+
+    await pool.query(`
+        INSERT INTO psychotherapy_monthly_records (
+            id, tenant_id, patient_id, month, patient_name_snapshot, status, payment_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [id, tenantId, patientId, month, patientName, status, paymentType]);
+
+    return { id, tenantId, patientId, month };
 }
 
 // ── Group Payment (pending) ───────────────────────────────────────────────────
