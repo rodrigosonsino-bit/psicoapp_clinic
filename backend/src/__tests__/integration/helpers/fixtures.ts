@@ -112,10 +112,23 @@ export async function addGroupMember(
     const res = await pool.query(`
         INSERT INTO therapy_group_members (group_id, patient_id, tenant_id, joined_at)
         VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (group_id, patient_id) DO UPDATE SET joined_at = NOW()
         RETURNING id
     `, [groupId, patientId, tenantId]);
-    return res.rows[0].id;
+    const memberId = res.rows[0].id;
+
+    // Mesmo padrão usado por AttachExistingGroupMemberUseCase.ts em produção: todo
+    // membro precisa de uma política de faturamento ativa pra RegisterGroupSessionUseCase aceitar sessões.
+    await pool.query(`
+        INSERT INTO therapy_group_member_billing_policies (
+            id, tenant_id, group_id, patient_id, member_id,
+            billing_type, valid_from, approved_by, status
+        ) VALUES (
+            gen_random_uuid(), $1, $2, $3, $4,
+            'group_default', '2000-01-01'::date, $3, 'active'
+        )
+    `, [tenantId, groupId, patientId, memberId]);
+
+    return memberId;
 }
 
 // ── Monthly Record ────────────────────────────────────────────────────────────

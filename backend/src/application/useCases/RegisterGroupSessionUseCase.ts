@@ -344,8 +344,8 @@ export class RegisterGroupSessionUseCase {
                 $4, $5,
                 $6, 'none', $7, $8
             )
-            ON CONFLICT (tenant_id, patient_id, group_id, scheduled_at)
-            WHERE group_id IS NOT NULL
+            ON CONFLICT (tenant_id, group_id, patient_id, calendar_event_id)
+            WHERE group_id IS NOT NULL AND status <> 'canceled'
             DO UPDATE SET
                 status     = EXCLUDED.status,
                 notes      = COALESCE(EXCLUDED.notes, psychotherapy_appointments.notes),
