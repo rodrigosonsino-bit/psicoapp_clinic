@@ -113,7 +113,7 @@ export function createAuthRoutes(): Router {
     // Google Calendar OAuth
     const googleAuthController = container.resolve(GoogleAuthController);
     router.get('/google/auth-url', authMiddleware, asyncHandler((req, res) => googleAuthController.getAuthUrl(req, res)));
-    router.get('/google/connect', authMiddleware, (req, res) => googleAuthController.connect(req, res));
+    router.get('/google/connect', authMiddleware, asyncHandler((req, res) => googleAuthController.connect(req, res)));
     router.get('/google/callback', asyncHandler((req, res) => googleAuthController.callback(req, res)));
     router.get('/google/status', authMiddleware, asyncHandler((req, res) => googleAuthController.status(req, res)));
     router.delete('/google/disconnect', authMiddleware, asyncHandler((req, res) => googleAuthController.disconnect(req, res)));

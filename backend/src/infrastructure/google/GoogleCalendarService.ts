@@ -1,5 +1,7 @@
+import crypto from 'crypto';
 import { google, calendar_v3 } from 'googleapis';
 import { injectable, inject } from 'tsyringe';
+import { Pool } from 'pg';
 import { IPsychotherapyRepository } from '../../domain/repositories/IPsychotherapyRepository';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { logger } from '../logger';
@@ -11,6 +13,7 @@ type OAuth2Client = any;
 
 const CALENDAR_NAME = process.env.GOOGLE_CALENDAR_NAME ?? 'Sessões_Terapia';
 const TIMEZONE = process.env.TZ_CALENDAR ?? 'America/Sao_Paulo';
+const STATE_TTL_MINUTES = 10;
 
 export interface GoogleAuthUrl {
     url: string;
@@ -23,7 +26,8 @@ export class GoogleCalendarService {
     private readonly redirectUri: string;
 
     constructor(
-        @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository
+        @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository,
+        @inject(Pool) private readonly dbPool: Pool
     ) {
         this.clientId = process.env.GOOGLE_CLIENT_ID ?? '';
         this.clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? '';
@@ -36,17 +40,62 @@ export class GoogleCalendarService {
         return new google.auth.OAuth2(this.clientId, this.clientSecret, this.redirectUri);
     }
 
-    getAuthorizationUrl(tenantId: string): string {
+    /**
+     * Gera a URL de consentimento com um `state` aleatório real (32 bytes),
+     * gravando `sha256(token)` + `tenant_id` + `expires_at` em
+     * `google_oauth_states` (tabela já existente desde a migration 041, mas
+     * até aqui desconectada do fluxo real — o `state` era o `tenantId` cru,
+     * aceito sem validação no callback, permitindo CSRF de OAuth: um
+     * atacante podia forjar seu próprio `code` e vinculá-lo ao tenant de
+     * outra pessoa. Mesmo padrão já usado em GmailAuthService.
+     */
+    async getAuthorizationUrl(tenantId: string): Promise<string> {
+        const token = crypto.randomBytes(32).toString('hex');
+        const stateHash = crypto.createHash('sha256').update(token).digest('hex');
+
+        await this.dbPool.query(
+            `INSERT INTO google_oauth_states (state_hash, tenant_id, expires_at)
+             VALUES ($1, $2, NOW() + INTERVAL '${STATE_TTL_MINUTES} minutes')`,
+            [stateHash, tenantId]
+        );
+
         const oauth2Client = this.createOAuth2Client();
         return oauth2Client.generateAuthUrl({
             access_type: 'offline',
             scope: ['https://www.googleapis.com/auth/calendar'],
-            state: tenantId,
+            state: token,
             prompt: 'consent',
         });
     }
 
-    async exchangeCodeForTokens(code: string, tenantId: string): Promise<void> {
+    /**
+     * Valida o `state` recebido no callback: busca por `sha256(state)`,
+     * exige `expires_at > NOW() AND consumed_at IS NULL`, marca
+     * `consumed_at = NOW()` na mesma operação atômica (`UPDATE ... RETURNING`
+     * — nunca ler depois escrever em passos separados, contra replay).
+     * Lança erro explícito se inválido/expirado/já consumido.
+     */
+    private async consumeState(state: string): Promise<string> {
+        const stateHash = crypto.createHash('sha256').update(state).digest('hex');
+
+        const result = await this.dbPool.query<{ tenant_id: string }>(
+            `UPDATE google_oauth_states
+             SET consumed_at = NOW()
+             WHERE state_hash = $1 AND expires_at > NOW() AND consumed_at IS NULL
+             RETURNING tenant_id`,
+            [stateHash]
+        );
+
+        const tenantId = result.rows[0]?.tenant_id;
+        if (!tenantId) {
+            throw new Error('State OAuth do Google Calendar inválido, expirado ou já utilizado.');
+        }
+        return tenantId;
+    }
+
+    /** `state` é validado/consumido aqui — o `tenantId` usado no restante do fluxo vem só disso, nunca de um valor cru recebido do cliente. */
+    async exchangeCodeForTokens(code: string, state: string): Promise<void> {
+        const tenantId = await this.consumeState(state);
         const oauth2Client = this.createOAuth2Client();
         const { tokens } = await oauth2Client.getToken(code);
 

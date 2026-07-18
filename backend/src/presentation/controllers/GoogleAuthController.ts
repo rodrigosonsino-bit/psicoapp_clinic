@@ -16,7 +16,7 @@ export class GoogleAuthController {
     ) {}
 
     /** GET /auth/google/auth-url — retorna a URL do consent screen como JSON (chamado via fetch autenticado) */
-    getAuthUrl(req: Request, res: Response): Response {
+    async getAuthUrl(req: Request, res: Response): Promise<Response> {
         const clientId = process.env.GOOGLE_CLIENT_ID;
         const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
         if (!clientId || !clientSecret) {
@@ -29,22 +29,28 @@ export class GoogleAuthController {
         const tenantId = (req as AuthenticatedRequest).tenantId || (req as AuthenticatedRequest).userId;
         if (!tenantId) throw new AppError('Tenant não identificado', 401);
 
-        const url = this.googleCalendar.getAuthorizationUrl(tenantId);
+        const url = await this.googleCalendar.getAuthorizationUrl(tenantId);
         return res.json({ url });
     }
 
     /** GET /auth/google/connect — redireciona para consent screen (mantido para compatibilidade) */
-    connect(req: Request, res: Response): void {
+    async connect(req: Request, res: Response): Promise<void> {
         const tenantId = (req as AuthenticatedRequest).tenantId || (req as AuthenticatedRequest).userId;
         if (!tenantId) throw new AppError('Tenant não identificado', 401);
 
-        const url = this.googleCalendar.getAuthorizationUrl(tenantId);
+        const url = await this.googleCalendar.getAuthorizationUrl(tenantId);
         res.redirect(url);
     }
 
-    /** GET /auth/google/callback — recebe o code e armazena tokens */
+    /**
+     * GET /auth/google/callback — recebe code+state, valida state, troca por
+     * tokens. `state` NÃO é mais tratado como `tenantId` direto (CSRF de
+     * OAuth corrigido) — GoogleCalendarService.exchangeCodeForTokens valida
+     * o `state` contra `google_oauth_states` e só então resolve o tenant
+     * real, o mesmo padrão já usado em GmailAuthController/GmailAuthService.
+     */
     async callback(req: Request, res: Response): Promise<void> {
-        const { code, state: tenantId, error } = req.query as Record<string, string>;
+        const { code, state, error } = req.query as Record<string, string>;
 
         if (error) {
             logger.warn({ error }, 'Google OAuth negado pelo usuário');
@@ -52,13 +58,13 @@ export class GoogleAuthController {
             return;
         }
 
-        if (!code || !tenantId) {
+        if (!code || !state) {
             res.redirect(`${APP_FRONTEND_URL}/profile?google=error`);
             return;
         }
 
         try {
-            await this.googleCalendar.exchangeCodeForTokens(code, tenantId);
+            await this.googleCalendar.exchangeCodeForTokens(code, state);
             res.redirect(`${APP_FRONTEND_URL}/profile?google=connected`);
         } catch (err) {
             logger.error({ err }, 'Erro ao trocar code Google por tokens');
