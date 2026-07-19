@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import 'dotenv/config';
-import { initSentry, closeSentry } from './infrastructure/sentry';
+import { initSentry, closeSentry, captureFatalException } from './infrastructure/sentry';
 
 // Inicializado antes de qualquer módulo da aplicação (express, container, rotas) para
 // preservar a auto-instrumentação do SDK das libs carregadas depois — SENTRY_DSN
@@ -343,6 +343,7 @@ if (require.main === module) {
         })
         .catch(async err => {
             logger.error({ err }, '❌ Falha ao conectar ao banco de dados durante a inicialização.');
+            captureFatalException(err);
             await closeSentry();
             process.exit(1);
         });
