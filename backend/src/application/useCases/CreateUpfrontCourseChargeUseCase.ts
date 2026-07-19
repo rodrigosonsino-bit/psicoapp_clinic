@@ -92,14 +92,17 @@ export class CreateUpfrontCourseChargeUseCase {
             }
 
             // 3. Criar a cobrança upfront
+            // reference_month é NOT NULL na tabela mas não tem significado pra course_upfront
+            // (GroupController.listGroupPayments casa esse charge_type pelo mês de paid_at, não
+            // por reference_month) — usa o mês corrente só pra satisfazer a constraint.
             const chargeResult = await client.query(`
                 INSERT INTO group_payments (
                     id, tenant_id, group_id, patient_id, group_member_id,
-                    charge_type, original_amount_cents, amount_cents,
+                    charge_type, reference_month, original_amount_cents, amount_cents,
                     status, due_date
                 ) VALUES (
                     gen_random_uuid(), $1, $2, $3, $4,
-                    'course_upfront', $5, $5,
+                    'course_upfront', TO_CHAR(CURRENT_DATE, 'YYYY-MM'), $5, $5,
                     'pending', CURRENT_DATE
                 ) RETURNING id
             `, [tenantId, groupId, patientId, groupMemberId, totalCents]);
