@@ -22,6 +22,6 @@ describe('ListPsychotherapyPatientsUseCase', () => {
         expect(result.data).toHaveLength(1);
         expect(result.data[0].name).toBe('Alice');
         expect(result.total).toBe(1);
-        expect(repositoryMock.listPatients).toHaveBeenCalledWith(tenantId, { page: 1, limit: 20 });
+        expect(repositoryMock.listPatients).toHaveBeenCalledWith(tenantId, { page: 1, limit: 20, search: undefined, scope: 'all' });
     });
 });

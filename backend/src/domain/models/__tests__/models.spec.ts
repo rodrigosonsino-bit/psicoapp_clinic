@@ -53,7 +53,8 @@ describe('Models', () => {
                 address: 'Address',
                 twoFactorEnabled: false,
                 bookingPage: null,
-                whatsappReminderTemplate: null
+                whatsappReminderTemplate: null,
+                cardFeeRates: null
             });
         });
     });
