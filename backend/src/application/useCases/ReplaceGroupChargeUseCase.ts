@@ -46,7 +46,7 @@ export class ReplaceGroupChargeUseCase {
             const originalPayment = paymentResult.rows[0];
 
             if (originalPayment.status !== 'voided') {
-                throw new AppError('Apenas cobranças canceladas/estornadas podem ser substituídas.', 400);
+                throw new AppError('Apenas cobranças canceladas/estornadas podem ser substituídas.', 409);
             }
 
             // Verifica se já existe uma substituição para esta cobrança
@@ -78,7 +78,7 @@ export class ReplaceGroupChargeUseCase {
                 originalPayment.charge_type,
                 originalPayment.reference_month,
                 amountCents,
-                originalPayment.original_amount_cents, // Mantém o original da primeira cobrança
+                amountCents, // original_amount_cents desta linha nova = seu próprio valor de criação
                 dueDate,
                 originalPayment.group_session_record_id,
                 groupPaymentId
