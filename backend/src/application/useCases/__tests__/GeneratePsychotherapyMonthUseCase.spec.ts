@@ -15,13 +15,13 @@ describe('GeneratePsychotherapyMonthUseCase', () => {
         const activePatient = new PsychotherapyPatient('id1', tenantId, 'Bob', 'weekly', 'monthly', 12000, null, null, null, null, new Date(), new Date());
         const inactivePatient = new PsychotherapyPatient('id2', tenantId, 'Alice', 'inactive', 'monthly', 12000, null, null, null, null, new Date(), new Date());
         
-        (repositoryMock.listPatients as any).mockResolvedValue([activePatient]);
+        repositoryMock.listIndividualPatientsForBilling.mockResolvedValue([activePatient]);
         repositoryMock.countScheduledSessionsByPatient.mockResolvedValue(new Map());
         repositoryMock.bulkSaveMonthlyRecords.mockResolvedValue([]);
 
         await useCase.execute(tenantId, month);
-        
-        expect(repositoryMock.listPatients).toHaveBeenCalledWith(tenantId);
+
+        expect(repositoryMock.listIndividualPatientsForBilling).toHaveBeenCalledWith(tenantId);
         expect(repositoryMock.bulkSaveMonthlyRecords).toHaveBeenCalled();
         
         // Ensure it saved a record for the active patient

@@ -13,6 +13,7 @@ describe('ListPsychotherapyMonthUseCase', () => {
         const month = '2023-10';
         
         repositoryMock.listMonthlyRecords.mockResolvedValue([]);
+        repositoryMock.listPatients.mockResolvedValue([]);
 
         const result = await useCase.execute(tenantId, month);
         

@@ -227,6 +227,9 @@ describe('E2E - API Integration Tests', () => {
             ];
 
             mockRepo.listMonthlyRecords.mockResolvedValue(mockRecords);
+            mockRepo.listPatients.mockResolvedValue([
+                { id: 'pat-1', name: 'Patient A', status: 'weekly', individualTherapyEnabled: true }
+            ] as any);
 
             const res = await request(app)
                 .get('/api/psychotherapy/months/2026-06')
@@ -238,7 +241,7 @@ describe('E2E - API Integration Tests', () => {
         });
 
         it('POST /api/psychotherapy/months/:month/generate - Should generate monthly records', async () => {
-            mockRepo.listPatients.mockResolvedValue([
+            mockRepo.listIndividualPatientsForBilling.mockResolvedValue([
                 { id: 'pat-1', name: 'Patient A', status: 'weekly', paymentType: 'monthly', defaultSessionPriceCents: 10000 }
             ] as any);
             mockRepo.countScheduledSessionsByPatient.mockResolvedValue(new Map());
