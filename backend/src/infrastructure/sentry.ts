@@ -9,6 +9,16 @@ import { AppError } from '../domain/errors/AppError';
 const SENSITIVE_KEY_PATTERN =
     /token|senha|password|secret|authorization|cookie|jwt|cpf|rg|email|telefone|phone|endereco|address|nota|note|prontuario|diagnos|sintoma|symptom|clinical|health|paciente_nome|patient_name/i;
 
+// Sentry carrega a URL completa (com query string) em event.request.url e em
+// breadcrumb.data.url das requisições HTTP — scrubObject só filtra por nome de
+// chave, então não pega valores de query como ?search=<nome do paciente> ou
+// ?code=<token OAuth>. Removemos a query string inteira em vez de tentar filtrar
+// parâmetro a parâmetro (achado da revisão automática do Codex no PR #25).
+function stripQueryString(url: string): string {
+    const separatorIndex = url.search(/[?#]/);
+    return separatorIndex === -1 ? url : url.slice(0, separatorIndex);
+}
+
 function scrubObject(value: unknown, depth = 0): unknown {
     if (value === null || value === undefined || depth > 5) return value;
     if (Array.isArray(value)) return value.map(item => scrubObject(item, depth + 1));
@@ -35,6 +45,9 @@ export function initSentry(): void {
             // e mantemos só metadados de navegação (categoria, tipo, timestamp).
             if (breadcrumb.data) {
                 breadcrumb.data = scrubObject(breadcrumb.data) as Record<string, unknown>;
+                if (typeof breadcrumb.data.url === 'string') {
+                    breadcrumb.data.url = stripQueryString(breadcrumb.data.url);
+                }
             }
             return breadcrumb;
         },
@@ -43,6 +56,9 @@ export function initSentry(): void {
                 delete event.request.data;
                 delete event.request.cookies;
                 delete event.request.query_string;
+                if (event.request.url) {
+                    event.request.url = stripQueryString(event.request.url);
+                }
                 if (event.request.headers) {
                     event.request.headers = scrubObject(event.request.headers) as Record<string, string>;
                 }
@@ -85,6 +101,16 @@ export function captureServerException(err: unknown, req?: Request): void {
         }
         Sentry.captureException(err);
     });
+}
+
+/**
+ * Reporta falhas fora do ciclo de requisição HTTP (ex.: boot do servidor, conexão
+ * inicial com o banco) — sem req/scope de tenant, mas ainda precisam ir pro Sentry
+ * (achado da revisão automática do Codex no PR #25: uma falha de boot em produção
+ * antes não gerava evento nenhum).
+ */
+export function captureFatalException(err: unknown): void {
+    Sentry.captureException(err);
 }
 
 export async function closeSentry(timeoutMs = 2000): Promise<void> {
