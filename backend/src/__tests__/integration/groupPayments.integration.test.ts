@@ -48,10 +48,10 @@ describe('ConfirmGroupPaymentUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id);
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
             tenantId: tenant.id, groupId: group.id,
-            patientId: patient.id, amountCents: 15000,
+            patientId: patient.id, groupMemberId: memberId, amountCents: 15000,
         });
 
         await confirmUseCase.execute({
@@ -78,10 +78,10 @@ describe('ConfirmGroupPaymentUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id);
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
             tenantId: tenant.id, groupId: group.id,
-            patientId: patient.id,
+            patientId: patient.id, groupMemberId: memberId,
         });
 
         await confirmUseCase.execute({
@@ -100,9 +100,9 @@ describe('ConfirmGroupPaymentUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id);
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
         });
 
         // Executa as duas confirmações concorrentemente
@@ -127,9 +127,9 @@ describe('ConfirmGroupPaymentUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id);
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
         });
 
         // Primeiro: confirmar normalmente
@@ -137,35 +137,27 @@ describe('ConfirmGroupPaymentUseCase', () => {
             tenantId: tenant.id, groupPaymentId: payment.id, operatorId: tenant.id, paymentMethod: 'pix',
         });
 
-        // Forçar um estado inválido: inserir ledger com idempotency_key do payment
-        // mas com group_payment_id diferente — simula conflito de hash
-        await pool.query(`
-            UPDATE financial_payments
-            SET group_payment_id = gen_random_uuid()
-            WHERE group_payment_id = $1
-        `, [payment.id]);
-
         // Criar novo payment pending para testar conflito
         const payment2 = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
             referenceMonth: '2025-02',
         });
 
         // Inserir manualmente ledger com chave de idempotência do payment2 mas grupo_payment_id errado
         const wrongKey = `group_confirm_${payment2.id}`;
         const anotherPaymentId = (await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
             referenceMonth: '2025-03',
         })).id;
 
         await pool.query(`
             INSERT INTO financial_payments (
                 id, tenant_id, patient_id, monthly_record_id,
-                amount_cents, currency, paid_at, method, source, status,
+                amount_cents, net_amount_cents, processing_fee_cents, currency, paid_at, method, source, status,
                 idempotency_key, created_by, group_payment_id
             ) VALUES (
                 gen_random_uuid(), $1, $2, NULL,
-                20000, 'BRL', NOW(), 'pix', 'manual', 'confirmed',
+                20000, 20000, 0, 'BRL', NOW(), 'pix', 'manual', 'confirmed',
                 $3, $1, $4
             )
         `, [tenant.id, patient.id, wrongKey, anotherPaymentId]);
@@ -185,9 +177,9 @@ describe('VoidGroupPaymentUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id);
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
         });
 
         // Confirmar primeiro
@@ -220,15 +212,15 @@ describe('VoidGroupPaymentUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id);
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
         });
 
         // Marcar como paid diretamente sem criar ledger — estado inválido controlado
         await pool.query(`
             UPDATE group_payments
-            SET status = 'paid', amount_paid_cents = 20000, paid_at = NOW()
+            SET status = 'paid', amount_paid_cents = 20000, paid_at = NOW(), payment_method = 'pix'
             WHERE id = $1
         `, [payment.id]);
 

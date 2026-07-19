@@ -107,13 +107,18 @@ export async function addGroupMember(
     pool: Pool,
     groupId: string,
     patientId: string,
-    tenantId: string
+    tenantId: string,
+    /** CreateGroupChargesUseCase/AdvanceInstallmentsUseCase exigem joined_at < referenceMonth + 1
+     *  mês — testes que usam meses de referência fixos no passado precisam retroceder joined_at
+     *  também, senão o membro nunca aparece como elegível (default: NOW(), igual ao fluxo real de
+     *  AttachExistingGroupMemberUseCase). */
+    joinedAt?: string
 ): Promise<string> {
     const res = await pool.query(`
         INSERT INTO therapy_group_members (group_id, patient_id, tenant_id, joined_at)
-        VALUES ($1, $2, $3, NOW())
+        VALUES ($1, $2, $3, COALESCE($4::timestamptz, NOW()))
         RETURNING id
-    `, [groupId, patientId, tenantId]);
+    `, [groupId, patientId, tenantId, joinedAt ?? null]);
     const memberId = res.rows[0].id;
 
     // Mesmo padrão usado por AttachExistingGroupMemberUseCase.ts em produção: todo
@@ -199,19 +204,26 @@ export async function createGroupPayment(
     const chargeType     = opts.chargeType     ?? 'monthly';
     const dueDate        = opts.dueDate        ?? `${referenceMonth}-01`;
     const amountPaidCents = opts.amountPaidCents ?? (status === 'paid' ? amountCents : null);
+    // chk_group_payments_status_consistency (migration 060) exige paid_at+payment_method
+    // quando status='paid', e voided_at+void_reason quando status='voided'.
+    const paidAt         = status === 'paid' ? new Date() : null;
+    const paymentMethod  = status === 'paid' ? 'pix' : null;
+    const voidedAt       = status === 'voided' ? new Date() : null;
+    const voidReason     = status === 'voided' ? 'Fixture de teste' : null;
 
     await pool.query(`
         INSERT INTO group_payments (
             id, tenant_id, group_id, patient_id, group_member_id, charge_type,
             reference_month, amount_cents, original_amount_cents, amount_paid_cents,
-            status, due_date
+            status, due_date, paid_at, payment_method, voided_at, void_reason
         ) VALUES (
             $1, $2, $3, $4, $5, $6,
             $7, $8, $8, $9,
-            $10, $11::date
+            $10, $11::date, $12, $13, $14, $15
         )
     `, [id, opts.tenantId, opts.groupId, opts.patientId, opts.groupMemberId || null, chargeType,
-        `${referenceMonth}-01`, amountCents, amountPaidCents, status, dueDate]);
+        referenceMonth, amountCents, amountPaidCents, status, dueDate,
+        paidAt, paymentMethod, voidedAt, voidReason]);
 
     return {
         id, tenantId: opts.tenantId, groupId: opts.groupId,
