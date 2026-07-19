@@ -40,7 +40,10 @@ export interface PatientFixture {
 export async function createPatient(
     pool: Pool,
     tenantId: string,
-    overrides: Partial<{ name: string; document: string; individualTherapyEnabled: boolean; status: string }> = {}
+    overrides: Partial<{
+        name: string; document: string; individualTherapyEnabled: boolean; status: string;
+        paymentType: string; defaultSessionPriceCents: number;
+    }> = {}
 ): Promise<PatientFixture> {
     const id   = uuidv4();
     const name = overrides.name ?? `Paciente ${id.slice(0, 8)}`;
@@ -49,6 +52,8 @@ export async function createPatient(
     // achado ao rodar a suíte de integração contra um schema totalmente migrado pela primeira
     // vez nesta sessão (psychotherapy_patients_status_check rejeitava toda inserção default).
     const status = overrides.status ?? 'weekly';
+    const paymentType = overrides.paymentType ?? 'per_session';
+    const defaultSessionPriceCents = overrides.defaultSessionPriceCents ?? 15000;
 
     await pool.query(`
         INSERT INTO psychotherapy_patients (
@@ -57,10 +62,10 @@ export async function createPatient(
             individual_therapy_enabled
         ) VALUES (
             $1, $2, $3, $3, $4,
-            'per_session', 15000,
-            $5
+            $5, $6,
+            $7
         )
-    `, [id, tenantId, name, status, overrides.individualTherapyEnabled ?? false]);
+    `, [id, tenantId, name, status, paymentType, defaultSessionPriceCents, overrides.individualTherapyEnabled ?? false]);
 
     return { id, tenantId, name };
 }
@@ -149,7 +154,12 @@ export async function createMonthlyRecord(
     pool: Pool,
     tenantId: string,
     patientId: string,
-    overrides: Partial<{ month: string; patientName: string; status: string; paymentType: string }> = {}
+    overrides: Partial<{
+        month: string; patientName: string; status: string; paymentType: string;
+        sessionPriceCents: number; expectedSessions: number; paidSessions: number;
+        absences: number; previousMonthPaidCents: number; paymentStatus: 'paid' | 'pending' | 'partial';
+        expectedAmountCents: number;
+    }> = {}
 ): Promise<MonthlyRecordFixture> {
     const id          = uuidv4();
     const month       = overrides.month ?? '2025-01';
@@ -159,9 +169,20 @@ export async function createMonthlyRecord(
 
     await pool.query(`
         INSERT INTO psychotherapy_monthly_records (
-            id, tenant_id, patient_id, month, patient_name_snapshot, status, payment_type
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [id, tenantId, patientId, month, patientName, status, paymentType]);
+            id, tenant_id, patient_id, month, patient_name_snapshot, status, payment_type,
+            session_price_cents, expected_sessions, paid_sessions, absences,
+            previous_month_paid_cents, payment_status, expected_amount_cents
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    `, [
+        id, tenantId, patientId, month, patientName, status, paymentType,
+        overrides.sessionPriceCents ?? null,
+        overrides.expectedSessions ?? 0,
+        overrides.paidSessions ?? 0,
+        overrides.absences ?? 0,
+        overrides.previousMonthPaidCents ?? 0,
+        overrides.paymentStatus ?? 'pending',
+        overrides.expectedAmountCents ?? null,
+    ]);
 
     return { id, tenantId, patientId, month };
 }
