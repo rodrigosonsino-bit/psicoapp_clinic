@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../../domain/errors/AppError';
 import { logger } from '../../infrastructure/logger';
+import { captureServerException } from '../../infrastructure/sentry';
 
 /**
  * Middleware global de tratamento de erros do Express.
@@ -14,6 +15,10 @@ export function errorHandler(
     next: NextFunction
 ) {
     const isProduction = process.env.NODE_ENV === 'production';
+
+    // Reporta ao Sentry só erros não-operacionais (bugs de verdade) — captureServerException
+    // já filtra AppError 4xx e ZodError internamente para não gerar ruído.
+    captureServerException(err, req);
 
     // Log detalhado usando Pino
     logger.error({
