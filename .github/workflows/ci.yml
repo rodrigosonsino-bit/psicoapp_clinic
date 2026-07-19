@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build + testes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      JWT_SECRET: test-only-jwt-secret-not-for-production-use-1234567890
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            packages/whatsapp-core/package-lock.json
+            backend/package-lock.json
+
+      - name: Verificar Docker (necessário para Testcontainers)
+        run: docker info
+
+      - name: Instalar e buildar packages/whatsapp-core
+        working-directory: packages/whatsapp-core
+        run: |
+          npm ci
+          npm run build
+
+      - name: Instalar dependências do backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Typecheck / build do backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Rodar suíte completa de testes (unit + integração)
+        working-directory: backend
+        run: npm test
+
+  frontend:
+    name: Frontend (lint + typecheck + build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build
