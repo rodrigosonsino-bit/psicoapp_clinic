@@ -48,8 +48,8 @@ describe('CreateGroupChargesUseCase', () => {
         const patient2 = await createPatient(pool, tenant.id);
         const group    = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
 
-        await addGroupMember(pool, group.id, patient1.id, tenant.id);
-        await addGroupMember(pool, group.id, patient2.id, tenant.id);
+        await addGroupMember(pool, group.id, patient1.id, tenant.id, '2025-01-01');
+        await addGroupMember(pool, group.id, patient2.id, tenant.id, '2025-01-01');
 
         const result = await createChargesUseCase.execute({
             tenantId: tenant.id, groupId: group.id,
@@ -64,7 +64,7 @@ describe('CreateGroupChargesUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        await addGroupMember(pool, group.id, patient.id, tenant.id, '2025-01-01');
 
         await createChargesUseCase.execute({
             tenantId: tenant.id, groupId: group.id,
@@ -90,7 +90,7 @@ describe('CreateGroupChargesUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        await addGroupMember(pool, group.id, patient.id, tenant.id, '2025-01-01');
 
         await Promise.all([
             createChargesUseCase.execute({
@@ -129,11 +129,11 @@ describe('ReplaceGroupChargeUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
 
         // Criar cobrança e dar void
         const payment = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id, amountCents: 20000,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId, amountCents: 20000,
         });
         await pool.query(`
             UPDATE group_payments
@@ -166,10 +166,10 @@ describe('ReplaceGroupChargeUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
-        await addGroupMember(pool, group.id, patient.id, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
 
         const payment = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
         });
 
         await expect(replaceChargeUseCase.execute({
@@ -184,8 +184,9 @@ describe('ReplaceGroupChargeUseCase', () => {
         const tenant  = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group   = await createGroup(pool, tenant.id, { monthlyFeeCents: 20000 });
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
-            tenantId: tenant.id, groupId: group.id, patientId: patient.id,
+            tenantId: tenant.id, groupId: group.id, patientId: patient.id, groupMemberId: memberId,
         });
 
         await expect(replaceChargeUseCase.execute({

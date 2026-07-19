@@ -51,11 +51,11 @@ describe('Migration 062 — banco limpo', () => {
         expect(res.rows).toHaveLength(0);
     });
 
-    it('índice uq_group_payments_active existe (migration 066)', async () => {
+    it('índice uq_group_payments_monthly_active existe (migration 072)', async () => {
         const res = await pool.query(`
             SELECT indexname FROM pg_indexes
             WHERE tablename = 'group_payments'
-              AND indexname = 'uq_group_payments_active';
+              AND indexname = 'uq_group_payments_monthly_active';
         `);
         expect(res.rows).toHaveLength(1);
     });
@@ -94,10 +94,12 @@ describe('Trigger — original_amount_cents é imutável', () => {
         const tenant = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group = await createGroup(pool, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
             tenantId: tenant.id,
             groupId: group.id,
             patientId: patient.id,
+            groupMemberId: memberId,
             amountCents: 10000,
         });
 
@@ -110,10 +112,12 @@ describe('Trigger — original_amount_cents é imutável', () => {
         const tenant = await createTenant(pool);
         const patient = await createPatient(pool, tenant.id);
         const group = await createGroup(pool, tenant.id);
+        const memberId = await addGroupMember(pool, group.id, patient.id, tenant.id);
         const payment = await createGroupPayment(pool, {
             tenantId: tenant.id,
             groupId: group.id,
             patientId: patient.id,
+            groupMemberId: memberId,
             amountCents: 10000,
         });
 
