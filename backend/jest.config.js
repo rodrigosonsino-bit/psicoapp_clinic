@@ -21,7 +21,7 @@ module.exports = {
       statements: 70,
     },
   },
-  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/', '/__tests__/.*/helpers/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@whiskeysockets/baileys$': '<rootDir>/src/mocks/baileysMock.ts',
