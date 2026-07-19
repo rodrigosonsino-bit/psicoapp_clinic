@@ -22,6 +22,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
     "@antigravity/whatsapp-core": "file:../packages/whatsapp-core",
+    "@sentry/node": "^10.66.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.79.2",
     "cors": "^2.8.5",

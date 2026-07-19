@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@sentry/react": "^10.66.0",
     "date-fns": "^4.4.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.17.0",

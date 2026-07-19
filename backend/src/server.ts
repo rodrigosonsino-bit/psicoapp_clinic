@@ -1,5 +1,13 @@
 import 'reflect-metadata';
 import 'dotenv/config';
+import { initSentry, closeSentry } from './infrastructure/sentry';
+
+// Inicializado antes de qualquer módulo da aplicação (express, container, rotas) para
+// preservar a auto-instrumentação do SDK das libs carregadas depois — SENTRY_DSN
+// indefinido faz o SDK ficar inerte (no-op), então isso é seguro em dev/test/CI sem
+// credencial configurada.
+initSentry();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -333,8 +341,9 @@ if (require.main === module) {
                 }, { timezone: 'America/Sao_Paulo' });
             });
         })
-        .catch(err => {
+        .catch(async err => {
             logger.error({ err }, '❌ Falha ao conectar ao banco de dados durante a inicialização.');
+            await closeSentry();
             process.exit(1);
         });
 
@@ -348,6 +357,7 @@ if (require.main === module) {
         } catch (err) {
             logger.error({ err }, 'Erro durante o encerramento gracioso do broadcast.');
         } finally {
+            await closeSentry();
             process.exit(0);
         }
     };
