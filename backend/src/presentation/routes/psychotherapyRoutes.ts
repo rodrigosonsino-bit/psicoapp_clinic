@@ -360,6 +360,10 @@ export function createPsychotherapyRoutes(): Router {
         validateBody(confirmBankStatementBatchSchema),
         asyncHandler((req, res) => bankStatementController.confirmBatch(req, res))
     );
+    router.post(
+        '/psychotherapy/bank-statements/poll-now',
+        asyncHandler((req, res) => bankStatementController.pollEmailImportsNow(req, res))
+    );
 
     // Profile
     router.get('/profile', asyncHandler((req, res) => profileController.getProfile(req, res)));

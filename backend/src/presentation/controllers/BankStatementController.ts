@@ -6,6 +6,7 @@ import { AppError } from '../../domain/errors/AppError';
 import { ImportBankStatementUseCase } from '../../application/useCases/ImportBankStatementUseCase';
 import { ConfirmBankStatementTransactionUseCase } from '../../application/useCases/ConfirmBankStatementTransactionUseCase';
 import { IgnoreBankStatementTransactionUseCase } from '../../application/useCases/IgnoreBankStatementTransactionUseCase';
+import { EmailBankStatementPollUseCase } from '../../application/useCases/EmailBankStatementPollUseCase';
 import { logger } from '../../infrastructure/logger';
 
 interface MulterRequest extends AuthenticatedRequest {
@@ -18,6 +19,7 @@ export class BankStatementController {
         private readonly importUseCase: ImportBankStatementUseCase,
         private readonly confirmUseCase: ConfirmBankStatementTransactionUseCase,
         private readonly ignoreUseCase: IgnoreBankStatementTransactionUseCase,
+        private readonly emailPollUseCase: EmailBankStatementPollUseCase,
         @inject(Pool) private readonly dbPool: Pool
     ) {}
 
@@ -204,5 +206,11 @@ export class BankStatementController {
                 results
             }
         });
+    }
+
+    async pollEmailImportsNow(_req: Request, res: Response): Promise<Response> {
+        await this.emailPollUseCase.execute();
+        logger.info('[BankStatement] Manual email poll triggered');
+        return res.status(200).json({ data: { message: 'Email polling executado' } });
     }
 }
