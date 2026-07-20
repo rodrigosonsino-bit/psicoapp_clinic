@@ -304,6 +304,10 @@ export function createPsychotherapyRoutes(): Router {
     const mpWebhookController: InstanceType<typeof MercadoPagoWebhookController> = container.resolve(MercadoPagoWebhookController);
     router.post('/psychotherapy/webhooks/mercadopago', asyncHandler((req, res) => mpWebhookController.handleWebhook(req, res)));
 
+    // TODO: remover após validar fix do GMAIL_BANK_STATEMENT_ALIAS — endpoint temporário de teste
+    const bankStatementController = container.resolve(BankStatementController);
+    router.post('/psychotherapy/bank-statements/poll-now', asyncHandler((req, res) => bankStatementController.pollEmailImportsNow(req, res)));
+
     // ── Rotas protegidas ──────────────────────────────────────────────────────
     router.use(authMiddleware);
 
@@ -359,10 +363,6 @@ export function createPsychotherapyRoutes(): Router {
         '/psychotherapy/bank-statements/transactions/confirm-batch',
         validateBody(confirmBankStatementBatchSchema),
         asyncHandler((req, res) => bankStatementController.confirmBatch(req, res))
-    );
-    router.post(
-        '/psychotherapy/bank-statements/poll-now',
-        asyncHandler((req, res) => bankStatementController.pollEmailImportsNow(req, res))
     );
 
     // Profile
