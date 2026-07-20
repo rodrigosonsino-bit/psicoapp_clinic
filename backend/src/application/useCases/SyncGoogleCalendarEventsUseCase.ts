@@ -257,23 +257,44 @@ export class SyncGoogleCalendarEventsUseCase {
     }
 
     /**
-     * Detecta um caso legado em que o agendamento RAIZ de uma série recorrente
-     * ficou vinculado ao ID de uma OCORRÊNCIA específica (formato
+     * Detecta um caso em que o agendamento RAIZ de uma série recorrente ficou
+     * vinculado ao ID de uma OCORRÊNCIA específica (formato
      * "{idBase}_{timestamp}") em vez do ID do evento mestre. Tentar fazer
      * `events.update` nesse ID com RRULE é inválido para a API do Google
-     * ("Invalid start time"). Em vez de tentar contornar a validação, limpamos
-     * o vínculo e deixamos o próximo push recriar o evento mestre corretamente.
+     * ("Invalid start time").
+     *
+     * BUG HISTÓRICO (corrigido aqui, 2026-07-20): a versão anterior limpava o
+     * vínculo (`updateAppointmentGoogleEvent(..., '', '')`) e deixava o
+     * próximo push recriar o evento mestre do zero. Isso abria um loop
+     * infinito sempre que, em algum ciclo posterior, o agendamento fosse
+     * relinkado a outra ocorrência (ex.: via `unlinkedSibling`/`anyExisting`
+     * em `syncSeriesGroup`, que sempre vincula pelo `event.id` — formato de
+     * ocorrência): a próxima passada detectava "corrompido" de novo, limpava
+     * de novo, recriava de novo — cada recriação sendo uma SÉRIE SEMANAL
+     * NOVA no Google Calendar. Um caso real gerou ~98 séries fantasmas
+     * duplicadas do mesmo paciente no mesmo horário, todas com RRULE
+     * semanal, poluindo a agenda real todas as semanas até a data de término
+     * da recorrência.
+     *
+     * Fix: o ID mestre é sempre o prefixo do ID de ocorrência antes do
+     * timestamp final (convenção estável da API do Google Calendar pra
+     * `events.list({singleEvents:true})`) — reparamos IN PLACE pra esse ID
+     * mestre em vez de limpar, nunca recriando um evento que já existe.
      */
     private async repairCorruptedSeriesLink(
         tenantId: string,
         appt: PsychotherapyAppointment
     ): Promise<PsychotherapyAppointment> {
-        const looksLikeOccurrenceId = /_[0-9]{8}T[0-9]{6}Z$/.test(appt.googleEventId ?? '');
-        if (appt.parentId || !looksLikeOccurrenceId) return appt;
+        const occurrenceMatch = /^(.+)_[0-9]{8}T[0-9]{6}Z$/.exec(appt.googleEventId ?? '');
+        if (appt.parentId || !occurrenceMatch) return appt;
 
-        await this.repository.updateAppointmentGoogleEvent(appt.id, tenantId, '', '');
+        const masterEventId = occurrenceMatch[1];
+        await this.repository.updateAppointmentGoogleEvent(appt.id, tenantId, masterEventId, appt.googleEventUrl ?? '');
         const fresh = await this.repository.findAppointmentById(tenantId, appt.id);
-        logger.warn({ tenantId, appointmentId: appt.id, badEventId: appt.googleEventId }, '🩹 Vínculo corrompido (raiz de série apontava para ID de ocorrência) — corrigindo');
+        logger.warn(
+            { tenantId, appointmentId: appt.id, badEventId: appt.googleEventId, repairedTo: masterEventId },
+            '🩹 Vínculo corrompido (raiz de série apontava para ID de ocorrência) — reparado para o ID do evento mestre, sem recriar'
+        );
         return fresh ?? appt;
     }
 
