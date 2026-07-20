@@ -330,9 +330,9 @@ if (require.main === module) {
                 });
 
                 // Cron 3: Ingestão automática de extrato bancário via e-mail (Gmail),
-                // toda segunda-feira às 6h (horário de Brasília) — o Nubank envia o
-                // extrato semanalmente, não precisa de polling mais frequente.
-                nodeCron.schedule('0 6 * * 1', async () => {
+                // diariamente às 6h (horário de Brasília) — processa e-mails de extrato
+                // recebidos do Nubank via polling da API Gmail.
+                nodeCron.schedule('0 6 * * *', async () => {
                     try {
                         await container.resolve(EmailBankStatementPollUseCase).execute();
                     } catch (err) {
