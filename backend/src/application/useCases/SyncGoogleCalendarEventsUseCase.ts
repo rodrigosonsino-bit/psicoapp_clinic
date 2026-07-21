@@ -6,6 +6,7 @@ import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { logger } from '../../infrastructure/logger';
 import { PASTORAL_SENTINEL_EMAIL, PASTORAL_TITLE_REGEX } from '../../domain/constants/pastoral';
+import { Pool } from 'pg';
 
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:3000';
 
@@ -33,7 +34,8 @@ const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:3000';
 export class SyncGoogleCalendarEventsUseCase {
     constructor(
         @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository,
-        @inject('GoogleCalendarService') private readonly googleCalendar: GoogleCalendarService
+        @inject('GoogleCalendarService') private readonly googleCalendar: GoogleCalendarService,
+        @inject(Pool) private readonly dbPool: Pool
     ) {}
 
     private isPastoralEvent(summary: string): boolean {
@@ -52,7 +54,7 @@ export class SyncGoogleCalendarEventsUseCase {
 
             for (const config of configs) {
                 try {
-                    await this.syncTenantEvents(config);
+                    await this.withTenantLock(config, () => this.syncTenantEvents(config));
                 } catch (tenantErr) {
                     logger.error({ err: tenantErr, tenantId: config.tenantId }, 'Erro ao sincronizar eventos para o tenant');
                 }
@@ -66,7 +68,34 @@ export class SyncGoogleCalendarEventsUseCase {
         const configs = await this.repository.listAllGoogleOAuthTokens();
         const config = configs.find(c => c.tenantId === tenantId);
         if (!config) return;
-        await this.syncTenantEvents(config);
+        await this.withTenantLock(config, () => this.syncTenantEvents(config));
+    }
+
+    private async withTenantLock(config: GoogleOAuthTokens, work: () => Promise<void>): Promise<void> {
+        const client = await this.dbPool.connect();
+        const lockKey = `gcal-sync:${config.tenantId}`;
+        let acquired = false;
+        try {
+            const result = await client.query<{ acquired: boolean }>(
+                `SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired`,
+                [lockKey]
+            );
+            acquired = result.rows[0]?.acquired === true;
+            if (!acquired) {
+                logger.info({ tenantId: config.tenantId }, 'Sync Google Calendar já está ativo para o tenant; execução ignorada');
+                return;
+            }
+            await work();
+        } finally {
+            if (acquired) {
+                try {
+                    await client.query(`SELECT pg_advisory_unlock(hashtextextended($1, 0))`, [lockKey]);
+                } catch (unlockErr) {
+                    logger.error({ err: unlockErr, tenantId: config.tenantId }, 'Falha ao liberar lock do Google Calendar');
+                }
+            }
+            client.release();
+        }
     }
 
     private async syncTenantEvents(config: GoogleOAuthTokens): Promise<void> {
@@ -154,15 +183,10 @@ export class SyncGoogleCalendarEventsUseCase {
 
     /**
      * Agendamentos do app que PERDERAM o evento espelhado no Google Calendar
-     * — por exemplo, um push anterior que falhou (evento removido
-     * externamente, 404 ao atualizar) limpa a referência (string vazia) mas
-     * não garante a recriação imediata. Cria o evento que falta para cada um.
-     *
-     * Importante: só considera `googleEventId === ''` (string vazia, deixada
-     * explicitamente por uma tentativa de sync que falhou), nunca `null`.
-     * `null` significa que o agendamento nunca passou por sincronização —
-     * normalmente dados históricos importados em lote — e não deve ganhar
-     * um evento novo retroativamente.
+     * — por exemplo, um push anterior que falhou ou um evento removido
+     * externamente. O estado explícito evita usar string vazia como sentinel e
+     * preserva registros históricos `null/idle`, que não devem ganhar evento
+     * retroativamente.
      */
     private async createMissingGcalEvents(tenantId: string, timeMin: Date, timeMax: Date): Promise<void> {
         const { data: appointments } = await this.repository.listAppointments(tenantId, {
@@ -171,7 +195,15 @@ export class SyncGoogleCalendarEventsUseCase {
             limit: 200
         });
 
-        const missing = appointments.filter(a => a.googleEventId === '');
+        const staleProcessingBefore = Date.now() - 10 * 60_000;
+        const missing = appointments.filter(a =>
+            a.status !== 'canceled' && (
+                a.googleSyncState === 'pending' ||
+                a.googleSyncState === 'error' ||
+                (a.googleSyncState === 'processing' &&
+                    (a.googleSyncUpdatedAt?.getTime() ?? 0) < staleProcessingBefore)
+            )
+        );
         if (missing.length === 0) return;
 
         for (const appt of missing) {
@@ -219,8 +251,13 @@ export class SyncGoogleCalendarEventsUseCase {
         const patient = await this.repository.findPatientById(tenantId, existingAppt.patientId);
         if (!patient) return;
 
-        // Limpa a referência ao evento apagado antes de recriar.
-        await this.repository.updateAppointmentGoogleEvent(existingAppt.id, tenantId, '', '');
+        // Avança a geração via CAS. O ID da nova geração é determinístico, então
+        // cron/manual concorrentes convergem para o mesmo evento.
+        await this.repository.advanceAppointmentGoogleEventGeneration(
+            existingAppt.id,
+            tenantId,
+            existingAppt.googleEventGeneration
+        );
         const fresh = await this.repository.findAppointmentById(tenantId, existingAppt.id);
         if (!fresh) return;
 

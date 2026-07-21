@@ -123,7 +123,12 @@ export function mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
         row.parent_id ?? null,
         new Date(row.created_at),
         new Date(row.updated_at),
-        row.group_id ?? null
+        row.group_id ?? null,
+        row.google_sync_state ?? 'idle',
+        row.google_event_generation ?? 0,
+        row.google_sync_attempts ?? 0,
+        row.google_sync_last_error ?? null,
+        row.google_sync_updated_at ? new Date(row.google_sync_updated_at) : null
     );
 }
 
