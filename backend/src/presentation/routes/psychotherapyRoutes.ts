@@ -314,7 +314,6 @@ export function createPsychotherapyRoutes(): Router {
     const controller = container.resolve(PsychotherapyController);
     const profileController = container.resolve(ProfileController);
     const receiptController = container.resolve(ReceiptController);
-    const bankStatementController = container.resolve(BankStatementController);
 
     // Patients & Months
     router.get('/psychotherapy/patients', validateQuery(listPatientsQuerySchema), asyncHandler((req, res) => controller.listPatients(req, res)));
