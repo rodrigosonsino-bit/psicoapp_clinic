@@ -197,7 +197,7 @@ export class SyncGoogleCalendarEventsUseCase {
 
         const staleProcessingBefore = Date.now() - 10 * 60_000;
         const missing = appointments.filter(a =>
-            a.status !== 'canceled' && (
+            (a.status === 'scheduled' || a.status === 'confirmed') && (
                 a.googleSyncState === 'pending' ||
                 a.googleSyncState === 'error' ||
                 (a.googleSyncState === 'processing' &&
@@ -246,7 +246,10 @@ export class SyncGoogleCalendarEventsUseCase {
     private async restoreIfStillActiveInApp(tenantId: string, googleEventId: string): Promise<void> {
         const existingAppt = await this.repository.findAppointmentByGoogleEventId(tenantId, googleEventId);
         if (!existingAppt) return; // Já não existe no app (ex.: apagado via PsicoApp) — nada a fazer.
-        if (existingAppt.status === 'canceled') return; // App também considera cancelado — consistente.
+        // Somente compromissos ainda pendentes são restauráveis. `attended` e
+        // `no_show` são estados terminais: restaurar um root recorrente antigo
+        // recriaria toda a série futura já encerrada no app.
+        if (existingAppt.status !== 'scheduled' && existingAppt.status !== 'confirmed') return;
 
         const patient = await this.repository.findPatientById(tenantId, existingAppt.patientId);
         if (!patient) return;
