@@ -6,6 +6,7 @@ import { IPsychotherapyRepository } from '../../domain/repositories/IPsychothera
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
 import { logger } from '../logger';
 import { PASTORAL_SUMMARY_PREFIX } from '../../domain/constants/pastoral';
+import { GoogleCalendarEventIdFactory } from './GoogleCalendarEventIdFactory';
 
 // Usa o OAuth2Client embutido no googleapis para evitar conflito de versões com google-auth-library
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +25,7 @@ export class GoogleCalendarService {
     private readonly clientId: string;
     private readonly clientSecret: string;
     private readonly redirectUri: string;
+    private readonly eventIdFactory = new GoogleCalendarEventIdFactory();
 
     constructor(
         @inject('IPsychotherapyRepository') private readonly repository: IPsychotherapyRepository,
@@ -187,7 +189,8 @@ export class GoogleCalendarService {
         patientPhone: string | null,
         confirmUrl: string,
         isPastoral = false,
-        forceCreate = false
+        forceCreate = false,
+        recoveryDepth = 0
     ): Promise<void> {
         const auth = await this.getAuthenticatedClient(tenantId);
         if (!auth) {
@@ -245,6 +248,12 @@ export class GoogleCalendarService {
                     { method: 'popup', minutes: 60 },
                 ],
             },
+            extendedProperties: {
+                private: {
+                    psicoappAppointmentId: appointment.id,
+                    psicoappTenantFingerprint: this.eventIdFactory.tenantFingerprint(tenantId),
+                },
+            },
         };
 
         // Root de série recorrente: adicionar RRULE para que o GCal exiba como evento recorrente
@@ -261,37 +270,151 @@ export class GoogleCalendarService {
         }
 
         try {
+            await this.repository.markAppointmentGoogleSyncProcessing(appointment.id, tenantId);
+
             if (appointment.googleEventId) {
                 // Atualiza evento existente
-                await calendar.events.update({
+                const updated = await calendar.events.update({
                     calendarId,
                     eventId: appointment.googleEventId,
                     requestBody: eventBody,
                 });
+                await this.repository.updateAppointmentGoogleEvent(
+                    appointment.id,
+                    tenantId,
+                    appointment.googleEventId,
+                    updated.data.htmlLink ?? appointment.googleEventUrl
+                );
                 logger.info({ appointmentId: appointment.id, eventId: appointment.googleEventId }, '🔄 Evento Google Calendar atualizado');
             } else {
-                // Cria novo evento
-                const created = await calendar.events.insert({
-                    calendarId,
-                    requestBody: eventBody,
-                });
+                const deterministicId = this.eventIdFactory.create(
+                    tenantId,
+                    appointment.id,
+                    appointment.googleEventGeneration
+                );
+                const createBody: calendar_v3.Schema$Event = { ...eventBody, id: deterministicId };
+                let eventId = deterministicId;
+                let eventUrl: string | null = null;
+
+                try {
+                    const created = await calendar.events.insert({
+                        calendarId,
+                        requestBody: createBody,
+                    });
+                    eventId = created.data.id ?? deterministicId;
+                    eventUrl = created.data.htmlLink ?? null;
+                } catch (insertErr: any) {
+                    if (this.errorCode(insertErr) !== 409) throw insertErr;
+
+                    // O Google já concluiu um insert anterior com o mesmo ID, mas a
+                    // persistência local pode ter falhado. Reconciliar, nunca inserir
+                    // outro evento com ID aleatório.
+                    let existing;
+                    try {
+                        existing = await calendar.events.get({ calendarId, eventId: deterministicId });
+                    } catch (getErr: any) {
+                        if ([404, 410].includes(this.errorCode(getErr))) {
+                            await this.recreateWithNextGeneration(
+                                tenantId, appointment, patientName, patientPhone,
+                                confirmUrl, isPastoral, forceCreate, recoveryDepth
+                            );
+                            return;
+                        }
+                        throw getErr;
+                    }
+
+                    if (existing.data.status === 'cancelled') {
+                        await this.recreateWithNextGeneration(
+                            tenantId, appointment, patientName, patientPhone,
+                            confirmUrl, isPastoral, forceCreate, recoveryDepth
+                        );
+                        return;
+                    }
+
+                    const privateMetadata = existing.data.extendedProperties?.private;
+                    if (privateMetadata?.psicoappAppointmentId !== appointment.id ||
+                        privateMetadata?.psicoappTenantFingerprint !== this.eventIdFactory.tenantFingerprint(tenantId)) {
+                        throw new Error('Conflito de ID do Google Calendar com evento de outra origem.');
+                    }
+
+                    const updated = await calendar.events.update({
+                        calendarId,
+                        eventId: deterministicId,
+                        requestBody: eventBody,
+                    });
+                    eventId = updated.data.id ?? deterministicId;
+                    eventUrl = updated.data.htmlLink ?? existing.data.htmlLink ?? null;
+                    logger.warn(
+                        { appointmentId: appointment.id, eventId: deterministicId },
+                        '♻️ Conflito idempotente do Google Calendar reconciliado sem duplicar evento'
+                    );
+                }
 
                 await this.repository.updateAppointmentGoogleEvent(
                     appointment.id,
                     tenantId,
-                    created.data.id!,
-                    created.data.htmlLink!
+                    eventId,
+                    eventUrl
                 );
-                logger.info({ appointmentId: appointment.id, eventId: created.data.id }, '✅ Evento criado no Google Calendar');
+                logger.info({ appointmentId: appointment.id, eventId }, '✅ Evento criado/vinculado no Google Calendar');
             }
         } catch (err: any) {
-            // Se evento não existe mais no Google, remove a referência local e tenta recriar
-            if (err?.code === 404 && appointment.googleEventId) {
-                logger.warn({ appointmentId: appointment.id }, 'Evento Google Calendar não encontrado — recriando');
-                await this.repository.updateAppointmentGoogleEvent(appointment.id, tenantId, '', '');
+            if ([404, 410].includes(this.errorCode(err)) && appointment.googleEventId) {
+                await this.recreateWithNextGeneration(
+                    tenantId, appointment, patientName, patientPhone,
+                    confirmUrl, isPastoral, forceCreate, recoveryDepth
+                );
             } else {
+                await this.markSyncErrorSafely(appointment.id, tenantId, err);
                 logger.error({ err, appointmentId: appointment.id }, 'Erro ao sincronizar evento Google Calendar');
             }
+        }
+    }
+
+    private async recreateWithNextGeneration(
+        tenantId: string,
+        appointment: PsychotherapyAppointment,
+        patientName: string,
+        patientPhone: string | null,
+        confirmUrl: string,
+        isPastoral: boolean,
+        forceCreate: boolean,
+        recoveryDepth: number
+    ): Promise<void> {
+        if (recoveryDepth >= 2) {
+            const error = new Error('Limite de recuperação de evento Google removido excedido.');
+            await this.markSyncErrorSafely(appointment.id, tenantId, error);
+            throw error;
+        }
+
+        await this.repository.advanceAppointmentGoogleEventGeneration(
+            appointment.id,
+            tenantId,
+            appointment.googleEventGeneration
+        );
+        const fresh = await this.repository.findAppointmentById(tenantId, appointment.id);
+        if (!fresh) throw new Error('Agendamento não encontrado após avançar geração do evento Google.');
+
+        logger.warn(
+            { appointmentId: appointment.id, previousGeneration: appointment.googleEventGeneration },
+            'Evento Google removido; recriando com nova geração idempotente'
+        );
+        await this.syncAppointment(
+            tenantId, fresh, patientName, patientPhone, confirmUrl,
+            isPastoral, forceCreate, recoveryDepth + 1
+        );
+    }
+
+    private errorCode(error: any): number {
+        return Number(error?.code ?? error?.response?.status ?? 0);
+    }
+
+    private async markSyncErrorSafely(appointmentId: string, tenantId: string, error: any): Promise<void> {
+        const message = String(error?.message ?? 'Falha desconhecida no Google Calendar').slice(0, 1000);
+        try {
+            await this.repository.markAppointmentGoogleSyncError(appointmentId, tenantId, message);
+        } catch (stateErr) {
+            logger.error({ err: stateErr, appointmentId }, 'Falha ao persistir estado de erro do Google Calendar');
         }
     }
 

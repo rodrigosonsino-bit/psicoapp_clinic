@@ -147,9 +147,13 @@ export class PostgresAppointmentRepository {
                 INSERT INTO psychotherapy_appointments (
                     id, tenant_id, patient_id, scheduled_at, duration_minutes,
                     status, recurrence, recurrence_end_date, notes, parent_id,
-                    calendar_event_id, group_id
+                    calendar_event_id, group_id, google_sync_state, google_sync_updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                    $13,
+                    NOW()
+                )
                 ON CONFLICT (id) DO UPDATE SET
                     patient_id = EXCLUDED.patient_id,
                     scheduled_at = EXCLUDED.scheduled_at,
@@ -161,6 +165,12 @@ export class PostgresAppointmentRepository {
                     parent_id = EXCLUDED.parent_id,
                     calendar_event_id = EXCLUDED.calendar_event_id,
                     group_id = EXCLUDED.group_id,
+                    google_sync_state = CASE
+                        WHEN EXCLUDED.status = 'canceled' THEN 'deleted'
+                        ELSE 'pending'
+                    END,
+                    google_sync_last_error = NULL,
+                    google_sync_updated_at = NOW(),
                     updated_at = NOW()
                 WHERE psychotherapy_appointments.tenant_id = EXCLUDED.tenant_id
                 RETURNING *;
@@ -176,7 +186,8 @@ export class PostgresAppointmentRepository {
                 data.notes ?? null,
                 data.parentId || null,
                 calendarEventId,
-                data.groupId || null
+                data.groupId || null,
+                (data.status ?? 'scheduled') === 'canceled' ? 'deleted' : 'pending'
             ]);
 
             if (result.rows.length === 0) {
@@ -678,13 +689,78 @@ export class PostgresAppointmentRepository {
         return result.rows[0] ? mapAppointment(result.rows[0]) : null;
     }
 
-    async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string): Promise<void> {
+    async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null): Promise<void> {
         const validTenantId = validateTenantId(tenantId);
-        await this.dbPool.query(`
+        if (!googleEventId.trim()) {
+            throw new AppError('ID do evento Google não pode ser vazio');
+        }
+        const result = await this.dbPool.query(`
             UPDATE psychotherapy_appointments
-            SET google_event_id = $3, google_event_url = $4, updated_at = NOW()
-            WHERE id = $1 AND tenant_id = $2;
+            SET google_event_id = $3,
+                google_event_url = $4,
+                google_sync_state = 'synced',
+                google_sync_attempts = 0,
+                google_sync_last_error = NULL,
+                google_sync_updated_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $2
+            RETURNING id;
         `, [id, validTenantId, googleEventId, googleEventUrl]);
+        if (result.rowCount !== 1) {
+            throw new NotFoundError('Agendamento não encontrado ao persistir vínculo com Google Calendar');
+        }
+    }
+
+    async markAppointmentGoogleSyncProcessing(id: string, tenantId: string): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            UPDATE psychotherapy_appointments
+            SET google_sync_state = 'processing',
+                google_sync_attempts = google_sync_attempts + 1,
+                google_sync_last_error = NULL,
+                google_sync_updated_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $2
+            RETURNING id;
+        `, [id, validTenantId]);
+        if (result.rowCount !== 1) {
+            throw new NotFoundError('Agendamento não encontrado ao iniciar sincronização com Google Calendar');
+        }
+    }
+
+    async markAppointmentGoogleSyncError(id: string, tenantId: string, errorMessage: string): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            UPDATE psychotherapy_appointments
+            SET google_sync_state = 'error',
+                google_sync_last_error = LEFT($3, 1000),
+                google_sync_updated_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $2
+            RETURNING id;
+        `, [id, validTenantId, errorMessage]);
+        if (result.rowCount !== 1) {
+            throw new NotFoundError('Agendamento não encontrado ao registrar falha de sincronização com Google Calendar');
+        }
+    }
+
+    async advanceAppointmentGoogleEventGeneration(id: string, tenantId: string, expectedGeneration: number): Promise<number | null> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query<{ google_event_generation: number }>(`
+            UPDATE psychotherapy_appointments
+            SET google_event_generation = google_event_generation + 1,
+                google_event_id = NULL,
+                google_event_url = NULL,
+                google_sync_state = 'pending',
+                google_sync_last_error = NULL,
+                google_sync_updated_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+              AND tenant_id = $2
+              AND google_event_generation = $3
+            RETURNING google_event_generation;
+        `, [id, validTenantId, expectedGeneration]);
+        return result.rows[0]?.google_event_generation ?? null;
     }
 
     async findAppointmentByConfirmToken(token: string): Promise<PsychotherapyAppointment | null> {

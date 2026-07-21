@@ -283,8 +283,20 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return this.appointmentRepository.findAppointmentByGoogleEventId(tenantId, googleEventId);
     }
 
-    async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string): Promise<void> {
+    async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null): Promise<void> {
         return this.appointmentRepository.updateAppointmentGoogleEvent(id, tenantId, googleEventId, googleEventUrl);
+    }
+
+    async markAppointmentGoogleSyncProcessing(id: string, tenantId: string): Promise<void> {
+        return this.appointmentRepository.markAppointmentGoogleSyncProcessing(id, tenantId);
+    }
+
+    async markAppointmentGoogleSyncError(id: string, tenantId: string, errorMessage: string): Promise<void> {
+        return this.appointmentRepository.markAppointmentGoogleSyncError(id, tenantId, errorMessage);
+    }
+
+    async advanceAppointmentGoogleEventGeneration(id: string, tenantId: string, expectedGeneration: number): Promise<number | null> {
+        return this.appointmentRepository.advanceAppointmentGoogleEventGeneration(id, tenantId, expectedGeneration);
     }
 
     async findAppointmentByConfirmToken(token: string): Promise<PsychotherapyAppointment | null> {

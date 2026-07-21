@@ -1,5 +1,6 @@
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'attended' | 'canceled' | 'no_show';
 export type RecurrenceType = 'none' | 'weekly' | 'biweekly' | 'monthly';
+export type GoogleSyncState = 'idle' | 'pending' | 'processing' | 'synced' | 'error' | 'deleted';
 
 export class PsychotherapyAppointment {
     constructor(
@@ -19,6 +20,11 @@ export class PsychotherapyAppointment {
         public readonly parentId: string | null = null,
         public readonly createdAt: Date = new Date(),
         public readonly updatedAt: Date = new Date(),
-        public readonly groupId: string | null = null
+        public readonly groupId: string | null = null,
+        public readonly googleSyncState: GoogleSyncState = 'idle',
+        public readonly googleEventGeneration: number = 0,
+        public readonly googleSyncAttempts: number = 0,
+        public readonly googleSyncLastError: string | null = null,
+        public readonly googleSyncUpdatedAt: Date | null = null
     ) {}
 }

@@ -174,7 +174,7 @@ export interface AppointmentRow {
     scheduled_at: Date;
     duration_minutes: number;
     status: 'scheduled' | 'confirmed' | 'attended' | 'canceled' | 'no_show';
-    recurrence: 'none' | 'weekly' | 'biweekly';
+    recurrence: 'none' | 'weekly' | 'biweekly' | 'monthly';
     recurrence_end_date: Date | null;
     notes: string | null;
     google_event_id: string | null;
@@ -185,4 +185,9 @@ export interface AppointmentRow {
     created_at: Date;
     updated_at: Date;
     group_id: string | null;
+    google_sync_state: 'idle' | 'pending' | 'processing' | 'synced' | 'error' | 'deleted';
+    google_event_generation: number;
+    google_sync_attempts: number;
+    google_sync_last_error: string | null;
+    google_sync_updated_at: Date | null;
 }
