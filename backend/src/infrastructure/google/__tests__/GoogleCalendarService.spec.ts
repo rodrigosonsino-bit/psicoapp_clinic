@@ -115,6 +115,32 @@ describe('GoogleCalendarService idempotency', () => {
             .toHaveBeenCalledWith(appointmentId, tenantId, 'legacy-event', 'https://calendar/legacy');
     });
 
+    it('repara root recorrente vinculado a uma ocorrência antes de enviar RRULE', async () => {
+        const occurrenceId = 'legacy-master_20260721T164000Z';
+        const recurring = new PsychotherapyAppointment(
+            appointmentId, tenantId, 'patient-1', new Date('2026-07-21T16:40:00.000Z'),
+            50, 'confirmed', 'biweekly', new Date('2026-12-15T23:59:59.000Z'),
+            null, occurrenceId, 'https://calendar.google/event', 'confirm-token', null
+        );
+        const repaired = new PsychotherapyAppointment(
+            appointmentId, tenantId, 'patient-1', recurring.scheduledAt,
+            50, 'confirmed', 'biweekly', recurring.recurrenceEndDate,
+            null, 'legacy-master', recurring.googleEventUrl, 'confirm-token', null
+        );
+        repository.findAppointmentById.mockResolvedValue(repaired);
+        update.mockResolvedValue({ data: { id: 'legacy-master', htmlLink: recurring.googleEventUrl } });
+
+        await service.syncAppointment(tenantId, recurring, 'FRAN', null, 'https://confirm');
+
+        expect(repository.updateAppointmentGoogleEvent).toHaveBeenNthCalledWith(
+            1, appointmentId, tenantId, 'legacy-master', recurring.googleEventUrl
+        );
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'legacy-master' }));
+        expect(update.mock.calls[0][0].requestBody.recurrence).toEqual([
+            'RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261215T235959Z'
+        ]);
+    });
+
     it('repete o mesmo ID quando o Google criou mas a persistência local falhou', async () => {
         insert
             .mockResolvedValueOnce({ data: { id: expectedId, htmlLink: 'https://calendar/new' } })
