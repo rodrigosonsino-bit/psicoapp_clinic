@@ -219,7 +219,12 @@ export class SyncGoogleCalendarEventsUseCase {
 
                 const isPastoral = patient.email === PASTORAL_SENTINEL_EMAIL;
                 await this.googleCalendar.syncAppointment(tenantId, appt, patient.name, patient.phone, this.confirmUrlFor(appt), isPastoral, forceCreate);
-                logger.info({ tenantId, appointmentId: appt.id, forceCreate }, '🆕 Evento ausente recriado no Google Calendar a partir do PsicoApp (app é a referência)');
+                const refreshed = await this.repository.findAppointmentById(tenantId, appt.id);
+                if (refreshed?.googleEventId) {
+                    logger.info({ tenantId, appointmentId: appt.id, forceCreate, googleEventId: refreshed.googleEventId }, '🆕 Evento ausente reconciliado no Google Calendar a partir do PsicoApp (app é a referência)');
+                } else {
+                    logger.debug({ tenantId, appointmentId: appt.id, forceCreate }, 'Filho de série coberto pelo RRULE — aguardando vinculação da ocorrência pelo pull-sync');
+                }
             } catch (err) {
                 logger.error({ err, tenantId, appointmentId: appt.id }, 'Erro ao recriar evento ausente no Google Calendar');
             }
@@ -445,8 +450,13 @@ export class SyncGoogleCalendarEventsUseCase {
         // Carregar membros da série do banco para vincular filhos criados pelo app sem googleEventId
         // (gerados via SavePsychotherapyAppointmentUseCase, que não sincroniza filhos individualmente).
         let seriesMembers: PsychotherapyAppointment[] = [];
+        let seriesPatient: PsychotherapyPatient | null = null;
         if (rootId !== null) {
             seriesMembers = await this.repository.listSeriesAppointments(config.tenantId, rootId);
+            const root = seriesMembers.find(member => member.id === rootId);
+            if (root) {
+                seriesPatient = await this.repository.findPatientById(config.tenantId, root.patientId);
+            }
         }
 
         for (const event of events) {
@@ -480,9 +490,12 @@ export class SyncGoogleCalendarEventsUseCase {
 
                 // Não vinculado ainda — tentar linkar a um filho de série criado pelo app sem googleEventId,
                 // ou a qualquer agendamento órfão do paciente no mesmo horário.
-                const patient = this.isPastoralEvent(event.summary ?? '')
+                // Uma vez identificado o root pelo recurringEventId, sua relação com o
+                // paciente é autoritativa. Reaplicar heurísticas de nome/telefone aqui
+                // pode escolher outro homônimo ou falhar após edição manual do título.
+                const patient = seriesPatient ?? (this.isPastoralEvent(event.summary ?? '')
                     ? patients.find(p => p.email === PASTORAL_SENTINEL_EMAIL)
-                    : this.findExistingPatient(this.parsePatientFromEvent(event), patients);
+                    : this.findExistingPatient(this.parsePatientFromEvent(event), patients));
 
                 if (!patient) {
                     logger.info({ tenantId: config.tenantId, eventId: event.id }, '⏭️ Ocorrência de série sem paciente correspondente no PsicoApp — ignorada (app é a referência)');
