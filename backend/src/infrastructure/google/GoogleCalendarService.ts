@@ -198,6 +198,33 @@ export class GoogleCalendarService {
             return;
         }
 
+        // Um root recorrente deve apontar para o evento mestre. IDs expandidos
+        // (`master_YYYYMMDDTHHMMSSZ`) representam uma ocorrência e rejeitam PUT
+        // com RRULE (HTTP 400). Corrigir aqui protege todos os chamadores do
+        // serviço, inclusive mudanças de status e o retry do cron.
+        const occurrenceMatch = /^(.+)_[0-9]{8}T[0-9]{6}Z$/.exec(appointment.googleEventId ?? '');
+        if (!appointment.parentId && appointment.recurrence !== 'none' && occurrenceMatch) {
+            const masterEventId = occurrenceMatch[1];
+            await this.repository.updateAppointmentGoogleEvent(
+                appointment.id,
+                tenantId,
+                masterEventId,
+                appointment.googleEventUrl
+            );
+            const repaired = await this.repository.findAppointmentById(tenantId, appointment.id);
+            if (!repaired) {
+                throw new Error('Agendamento não encontrado após reparar vínculo com evento mestre.');
+            }
+            logger.warn(
+                { appointmentId: appointment.id, badEventId: appointment.googleEventId, repairedTo: masterEventId },
+                'Vínculo de root recorrente reparado para o evento mestre antes do push'
+            );
+            return this.syncAppointment(
+                tenantId, repaired, patientName, patientPhone, confirmUrl,
+                isPastoral, forceCreate, recoveryDepth
+            );
+        }
+
         const stored = await this.repository.getGoogleOAuthTokens(tenantId);
         const calendarId = stored?.calendarId ?? 'primary';
         const calendar = google.calendar({ version: 'v3', auth });
