@@ -316,7 +316,7 @@ export default function BankReconciliation() {
                             fontSize: '0.875rem'
                         }}>
                             <span>
-                                Mostrando apenas transações do extrato importado (<strong>{importResult.fileName || 'arquivo'}</strong>).
+                                Mostrando apenas transações do extrato importado.
                             </span>
                             <button
                                 className="btn-link"
