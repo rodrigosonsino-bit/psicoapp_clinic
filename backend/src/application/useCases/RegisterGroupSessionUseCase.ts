@@ -258,9 +258,12 @@ export class RegisterGroupSessionUseCase {
                 appointmentsProcessed,
             };
 
-        } catch (error) {
+        } catch (error: any) {
             await client.query('ROLLBACK');
             logger.error({ error, tenantId, groupId, sessionDate }, '❌ Erro ao registrar sessão de grupo. ROLLBACK executado.');
+            if (error.code === '23P01') {
+                throw new AppError('Este horário conflita com outro agendamento ativo.', 409);
+            }
             throw error;
         } finally {
             client.release();
