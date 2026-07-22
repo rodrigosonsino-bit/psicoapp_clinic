@@ -301,16 +301,28 @@ export class GoogleCalendarService {
 
             if (appointment.googleEventId) {
                 // Atualiza evento existente
+                const updateRequestBody: calendar_v3.Schema$Event = { ...eventBody };
+                if (appointment.status !== 'canceled' && !appointment.googleMeetLink) {
+                    updateRequestBody.conferenceData = {
+                        createRequest: {
+                            requestId: crypto.randomUUID(),
+                            conferenceSolutionKey: { type: 'hangoutsMeet' }
+                        }
+                    };
+                }
+
                 const updated = await calendar.events.update({
                     calendarId,
                     eventId: appointment.googleEventId,
-                    requestBody: eventBody,
+                    requestBody: updateRequestBody,
+                    conferenceDataVersion: 1,
                 });
                 await this.repository.updateAppointmentGoogleEvent(
                     appointment.id,
                     tenantId,
                     appointment.googleEventId,
-                    updated.data.htmlLink ?? appointment.googleEventUrl
+                    updated.data.htmlLink ?? appointment.googleEventUrl,
+                    updated.data.hangoutLink ?? appointment.googleMeetLink
                 );
                 logger.info({ appointmentId: appointment.id, eventId: appointment.googleEventId }, '🔄 Evento Google Calendar atualizado');
             } else {
@@ -320,16 +332,27 @@ export class GoogleCalendarService {
                     appointment.googleEventGeneration
                 );
                 const createBody: calendar_v3.Schema$Event = { ...eventBody, id: deterministicId };
+                if (appointment.status !== 'canceled') {
+                    createBody.conferenceData = {
+                        createRequest: {
+                            requestId: crypto.randomUUID(),
+                            conferenceSolutionKey: { type: 'hangoutsMeet' }
+                        }
+                    };
+                }
                 let eventId = deterministicId;
                 let eventUrl: string | null = null;
+                let meetLink: string | null = null;
 
                 try {
                     const created = await calendar.events.insert({
                         calendarId,
                         requestBody: createBody,
+                        conferenceDataVersion: 1,
                     });
                     eventId = created.data.id ?? deterministicId;
                     eventUrl = created.data.htmlLink ?? null;
+                    meetLink = created.data.hangoutLink ?? null;
                 } catch (insertErr: any) {
                     if (this.errorCode(insertErr) !== 409) throw insertErr;
 
@@ -364,13 +387,25 @@ export class GoogleCalendarService {
                         throw new Error('Conflito de ID do Google Calendar com evento de outra origem.');
                     }
 
+                    const updateRequestBody: calendar_v3.Schema$Event = { ...eventBody };
+                    if (appointment.status !== 'canceled' && !existing.data.hangoutLink) {
+                        updateRequestBody.conferenceData = {
+                            createRequest: {
+                                requestId: crypto.randomUUID(),
+                                conferenceSolutionKey: { type: 'hangoutsMeet' }
+                            }
+                        };
+                    }
+
                     const updated = await calendar.events.update({
                         calendarId,
                         eventId: deterministicId,
-                        requestBody: eventBody,
+                        requestBody: updateRequestBody,
+                        conferenceDataVersion: 1,
                     });
                     eventId = updated.data.id ?? deterministicId;
                     eventUrl = updated.data.htmlLink ?? existing.data.htmlLink ?? null;
+                    meetLink = updated.data.hangoutLink ?? existing.data.hangoutLink ?? null;
                     logger.warn(
                         { appointmentId: appointment.id, eventId: deterministicId },
                         '♻️ Conflito idempotente do Google Calendar reconciliado sem duplicar evento'
@@ -381,7 +416,8 @@ export class GoogleCalendarService {
                     appointment.id,
                     tenantId,
                     eventId,
-                    eventUrl
+                    eventUrl,
+                    meetLink
                 );
                 logger.info({ appointmentId: appointment.id, eventId }, '✅ Evento criado/vinculado no Google Calendar');
             }

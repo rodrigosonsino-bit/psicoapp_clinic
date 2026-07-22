@@ -128,7 +128,8 @@ export function mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
         row.google_event_generation ?? 0,
         row.google_sync_attempts ?? 0,
         row.google_sync_last_error ?? null,
-        row.google_sync_updated_at ? new Date(row.google_sync_updated_at) : null
+        row.google_sync_updated_at ? new Date(row.google_sync_updated_at) : null,
+        row.google_meet_link ?? null
     );
 }
 

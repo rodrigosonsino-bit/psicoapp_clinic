@@ -692,7 +692,13 @@ export class PostgresAppointmentRepository {
         return result.rows[0] ? mapAppointment(result.rows[0]) : null;
     }
 
-    async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null): Promise<void> {
+    async updateAppointmentGoogleEvent(
+        id: string,
+        tenantId: string,
+        googleEventId: string,
+        googleEventUrl: string | null,
+        googleMeetLink?: string | null
+    ): Promise<void> {
         const validTenantId = validateTenantId(tenantId);
         if (!googleEventId.trim()) {
             throw new AppError('ID do evento Google não pode ser vazio');
@@ -701,6 +707,7 @@ export class PostgresAppointmentRepository {
             UPDATE psychotherapy_appointments
             SET google_event_id = $3,
                 google_event_url = $4,
+                google_meet_link = COALESCE($5, google_meet_link),
                 google_sync_state = 'synced',
                 google_sync_attempts = 0,
                 google_sync_last_error = NULL,
@@ -708,7 +715,7 @@ export class PostgresAppointmentRepository {
                 updated_at = NOW()
             WHERE id = $1 AND tenant_id = $2
             RETURNING id;
-        `, [id, validTenantId, googleEventId, googleEventUrl]);
+        `, [id, validTenantId, googleEventId, googleEventUrl, googleMeetLink ?? null]);
         if (result.rowCount !== 1) {
             throw new NotFoundError('Agendamento não encontrado ao persistir vínculo com Google Calendar');
         }

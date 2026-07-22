@@ -305,7 +305,7 @@ export interface IPsychotherapyRepository {
     listClinicalNotes(tenantId: string, patientId: string, page?: number, limit?: number): Promise<PaginatedResult<ClinicalNote>>;
     findClinicalNoteById(tenantId: string, id: string): Promise<ClinicalNote | null>;
     deleteClinicalNote(tenantId: string, id: string): Promise<void>;
-    updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null): Promise<void>;
+    updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null, googleMeetLink?: string | null): Promise<void>;
     markAppointmentGoogleSyncProcessing(id: string, tenantId: string): Promise<void>;
     markAppointmentGoogleSyncError(id: string, tenantId: string, errorMessage: string): Promise<void>;
     advanceAppointmentGoogleEventGeneration(id: string, tenantId: string, expectedGeneration: number): Promise<number | null>;

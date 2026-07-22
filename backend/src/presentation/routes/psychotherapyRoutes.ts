@@ -12,6 +12,7 @@ import { AppointmentController } from '../controllers/AppointmentController';
 import { ExportController } from '../controllers/ExportController';
 import { ClinicalNoteController } from '../controllers/ClinicalNoteController';
 import { ProntuarioController } from '../controllers/ProntuarioController';
+import { TranscriptionController } from '../controllers/TranscriptionController';
 import { PixController } from '../controllers/PixController';
 import { AppointmentConfirmController } from '../controllers/AppointmentConfirmController';
 import { BookingController } from '../controllers/BookingController';
@@ -63,6 +64,11 @@ const confirmBankStatementBatchSchema = z.object({
 const bankStatementUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024, files: 1 }
+});
+
+const sessionAudioUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024, files: 1 } // Suporta até 50MB
 });
 
 // Rate limit dedicado ao endpoint de import (parsing de arquivo é mais caro
@@ -317,6 +323,18 @@ export function createPsychotherapyRoutes(): Router {
     const controller = container.resolve(PsychotherapyController);
     const profileController = container.resolve(ProfileController);
     const receiptController = container.resolve(ReceiptController);
+    const transcriptionController = container.resolve(TranscriptionController);
+
+    // Transcrição de sessões com IA
+    router.post(
+        '/psychotherapy/sessions/:id/transcribe',
+        sessionAudioUpload.single('audio'),
+        asyncHandler((req, res) => transcriptionController.transcribeSession(req, res))
+    );
+    router.get(
+        '/psychotherapy/sessions/:id/transcription',
+        asyncHandler((req, res) => transcriptionController.getTranscription(req, res))
+    );
 
     // Patients & Months
     router.get('/psychotherapy/patients', validateQuery(listPatientsQuerySchema), asyncHandler((req, res) => controller.listPatients(req, res)));
