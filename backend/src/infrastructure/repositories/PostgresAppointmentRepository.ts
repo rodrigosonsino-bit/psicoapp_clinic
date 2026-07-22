@@ -18,12 +18,12 @@ import { syncMonthlyRecord } from './MonthlyRecordSynchronizer';
  * classificados como FOLHA — sem transação, sem invariante de concorrência) sem alterar
  * nenhuma linha de lógica, e posteriormente os 3 COMPLEXOS (`saveAppointment`,
  * `deleteAppointment`, `updateAppointmentStatus` — transação própria com `FOR UPDATE`, chamam
- * `syncMonthlyRecord`). **Assimetria proposital confirmada em 3 rodadas de auditoria, não
- * mexer sem reler**: `saveAppointment` chama `syncMonthlyRecord` DEPOIS do `COMMIT` (fora da
- * transação, via `this.dbPool`), enquanto `deleteAppointment`/`updateAppointmentStatus` chamam
- * DENTRO da transação (via `client`). Ver
- * .claude/plans/pendencias-tecnicas-pos-quitacao-2026-07.md (item 1) e
- * .claude/plans/classificacao-postgres-psychotherapy-repository.md.
+ * `syncMonthlyRecord`).
+ *
+ * NOTA DE REVISÃO (21/07/2026): A assimetria transacional anterior de saveAppointment (onde
+ * syncMonthlyRecord era chamado fora da transação via dbPool, ao passo que nos outros métodos
+ * era interno) foi resolvida por completo. Agora todas as sincronizações de registros mensais
+ * rodam de forma atômica dentro das transações antes de efetuar o COMMIT.
  */
 export class PostgresAppointmentRepository {
     constructor(private readonly dbPool: Pool) {}
@@ -258,21 +258,21 @@ export class PostgresAppointmentRepository {
                 `, [tenantId, id]);
             }
 
-            await client.query('COMMIT');
-
             const appointment = mapAppointment(result.rows[0]);
             const newMonth = toMonthStr(data.scheduledAt);
-            await syncMonthlyRecord(this.dbPool, tenantId, data.patientId, newMonth);
+            await syncMonthlyRecord(client, tenantId, data.patientId, newMonth);
             if (oldMonth && oldMonth !== newMonth) {
                 // Se o paciente também mudou, o mês antigo pertence ao paciente ANTERIOR, não
                 // ao novo (achado da revisão de 04/07/2026).
-                await syncMonthlyRecord(this.dbPool, tenantId, oldPatientId ?? data.patientId, oldMonth);
+                await syncMonthlyRecord(client, tenantId, oldPatientId ?? data.patientId, oldMonth);
             }
             if (patientChanged && oldPatientId) {
                 // Mesmo sem mudança de mês, o registro mensal do paciente anterior no mês
                 // atual também precisa ser recalculado (perdeu este agendamento).
-                await syncMonthlyRecord(this.dbPool, tenantId, oldPatientId, newMonth);
+                await syncMonthlyRecord(client, tenantId, oldPatientId, newMonth);
             }
+
+            await client.query('COMMIT');
 
             return appointment;
         } catch (error: any) {
@@ -495,8 +495,11 @@ export class PostgresAppointmentRepository {
 
             await client.query('COMMIT');
             return mapAppointment(appointment);
-        } catch (error) {
+        } catch (error: any) {
             await client.query('ROLLBACK');
+            if (error.code === '23P01') {
+                throw new AppError('Este horário conflita com outro agendamento ativo.', 409);
+            }
             throw error;
         } finally {
             client.release();

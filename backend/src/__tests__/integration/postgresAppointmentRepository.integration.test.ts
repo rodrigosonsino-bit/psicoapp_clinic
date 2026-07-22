@@ -15,7 +15,7 @@
 import 'reflect-metadata';
 import { Pool } from 'pg';
 import { getTestPool, teardownTestDb, truncateTables } from './helpers/testDb';
-import { createTenant, createPatient } from './helpers/fixtures';
+import { createTenant, createPatient, createGroup } from './helpers/fixtures';
 import { PostgresAppointmentRepository } from '../../infrastructure/repositories/PostgresAppointmentRepository';
 import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { AppError } from '../../domain/errors/AppError';
@@ -24,7 +24,7 @@ jest.setTimeout(120_000);
 
 const TABLES = [
     'psychotherapy_clinical_notes', 'psychotherapy_sessions', 'psychotherapy_appointments',
-    'calendar_events', 'psychotherapy_monthly_records', 'psychotherapy_patients', 'tenants',
+    'calendar_events', 'psychotherapy_monthly_records', 'psychotherapy_patients', 'therapy_groups', 'tenants',
 ];
 
 let pool: Pool;
@@ -216,5 +216,128 @@ describe('PostgresAppointmentRepository.deleteAppointment', () => {
         await expect(
             appointmentRepo.deleteAppointment(tenant.id, '00000000-0000-0000-0000-000000000000')
         ).rejects.toThrow(NotFoundError);
+    });
+});
+
+describe('PostgresAppointmentRepository - Proteção Física de Agenda / Concorrência', () => {
+    it('bloqueia agendamentos individuais sobrepostos no mesmo tenant (concorrência)', async () => {
+        const tenant = await createTenant(pool);
+        const patientA = await createPatient(pool, tenant.id);
+        const patientB = await createPatient(pool, tenant.id);
+        const date = new Date('2025-02-10T14:00:00Z');
+
+        // Cria o primeiro agendamento
+        await appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientA.id, scheduledAt: date,
+        });
+
+        // Tenta criar outro agendamento no mesmo horário para o mesmo tenant
+        await expect(appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientB.id, scheduledAt: date,
+        })).rejects.toThrow(AppError);
+    });
+
+    it('garante que apenas uma de duas tentativas simultâneas no mesmo horário é bem-sucedida', async () => {
+        const tenant = await createTenant(pool);
+        const patientA = await createPatient(pool, tenant.id);
+        const patientB = await createPatient(pool, tenant.id);
+        const date = new Date('2025-02-12T09:00:00Z');
+
+        const promises = [
+            appointmentRepo.saveAppointment({ tenantId: tenant.id, patientId: patientA.id, scheduledAt: date }),
+            appointmentRepo.saveAppointment({ tenantId: tenant.id, patientId: patientB.id, scheduledAt: date })
+        ];
+
+        const results = await Promise.allSettled(promises);
+        const fulfilled = results.filter(r => r.status === 'fulfilled');
+        const rejected = results.filter(r => r.status === 'rejected');
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(AppError);
+        expect(((rejected[0] as PromiseRejectedResult).reason as AppError).statusCode).toBe(409);
+    });
+
+    it('permite agendamentos no mesmo horário em tenants diferentes', async () => {
+        const tenant1 = await createTenant(pool);
+        const tenant2 = await createTenant(pool);
+        const patient1 = await createPatient(pool, tenant1.id);
+        const patient2 = await createPatient(pool, tenant2.id);
+        const date = new Date('2025-02-10T14:00:00Z');
+
+        await expect(appointmentRepo.saveAppointment({
+            tenantId: tenant1.id, patientId: patient1.id, scheduledAt: date,
+        })).resolves.toBeDefined();
+
+        await expect(appointmentRepo.saveAppointment({
+            tenantId: tenant2.id, patientId: patient2.id, scheduledAt: date,
+        })).resolves.toBeDefined();
+    });
+
+    it('permite múltiplos agendamentos no mesmo horário para o mesmo grupo (mesmo calendar_event_id)', async () => {
+        const tenant = await createTenant(pool);
+        const patientA = await createPatient(pool, tenant.id);
+        const patientB = await createPatient(pool, tenant.id);
+        const group = await createGroup(pool, tenant.id);
+        const date = new Date('2025-02-10T14:00:00Z');
+
+        // Cria o primeiro agendamento do grupo
+        const app1 = await appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientA.id, scheduledAt: date, groupId: group.id,
+        });
+
+        // Cria o segundo agendamento do grupo (deve compartilhar o mesmo calendarEventId)
+        const app2 = await appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientB.id, scheduledAt: date, groupId: group.id,
+        });
+
+        const dbApp1 = await pool.query('SELECT calendar_event_id FROM psychotherapy_appointments WHERE id = $1', [app1.id]);
+        const dbApp2 = await pool.query('SELECT calendar_event_id FROM psychotherapy_appointments WHERE id = $1', [app2.id]);
+        expect(dbApp1.rows[0].calendar_event_id).toBe(dbApp2.rows[0].calendar_event_id);
+    });
+
+    it('agendamento cancelado não bloqueia novo agendamento no mesmo slot', async () => {
+        const tenant = await createTenant(pool);
+        const patientA = await createPatient(pool, tenant.id);
+        const patientB = await createPatient(pool, tenant.id);
+        const date = new Date('2025-02-10T14:00:00Z');
+
+        // Cria o primeiro agendamento
+        const app1 = await appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientA.id, scheduledAt: date,
+        });
+
+        // Cancela o primeiro agendamento
+        await appointmentRepo.updateAppointmentStatus(tenant.id, app1.id, 'canceled');
+
+        // Agora deve ser possível criar um novo agendamento no mesmo horário
+        const app2 = await appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientB.id, scheduledAt: date,
+        });
+
+        expect(app2.id).toBeDefined();
+    });
+
+    it('restauração concorrente de cancelado contra novo agendamento ativo falha', async () => {
+        const tenant = await createTenant(pool);
+        const patientA = await createPatient(pool, tenant.id);
+        const patientB = await createPatient(pool, tenant.id);
+        const date = new Date('2025-02-10T14:00:00Z');
+
+        // 1. Cria e cancela agendamento do Paciente A
+        const appA = await appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientA.id, scheduledAt: date,
+        });
+        await appointmentRepo.updateAppointmentStatus(tenant.id, appA.id, 'canceled');
+
+        // 2. Cria agendamento ativo para Paciente B no mesmo horário
+        await appointmentRepo.saveAppointment({
+            tenantId: tenant.id, patientId: patientB.id, scheduledAt: date,
+        });
+
+        // 3. Tenta restaurar o agendamento do Paciente A (deve falhar por conflito)
+        await expect(
+            appointmentRepo.updateAppointmentStatus(tenant.id, appA.id, 'confirmed')
+        ).rejects.toThrow(AppError);
     });
 });
