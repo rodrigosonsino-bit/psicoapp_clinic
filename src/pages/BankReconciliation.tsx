@@ -33,6 +33,7 @@ const EMAIL_STATUS_LABEL: Record<BankStatementEmailImport['status'], string> = {
 
 export default function BankReconciliation() {
     const [importResult, setImportResult] = useState<BankStatementImportResult | null>(null);
+    const [selectedImportId, setSelectedImportId] = useState<string>('all');
     const [transactions, setTransactions] = useState<BankStatementTransaction[]>([]);
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(false);
@@ -47,6 +48,7 @@ export default function BankReconciliation() {
     const [batchRunning, setBatchRunning] = useState(false);
     const [emailImports, setEmailImports] = useState<BankStatementEmailImport[]>([]);
     const [showEmailImports, setShowEmailImports] = useState(false);
+    const [syncingEmails, setSyncingEmails] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const toast = useToast();
@@ -117,10 +119,8 @@ export default function BankReconciliation() {
     }, []);
 
     useEffect(() => {
-        if (importResult) {
-            loadTransactions(importResult.importId, statusFilter);
-        }
-    }, [importResult, statusFilter, loadTransactions]);
+        loadTransactions(selectedImportId, statusFilter);
+    }, [selectedImportId, statusFilter, loadTransactions]);
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -137,6 +137,7 @@ export default function BankReconciliation() {
             );
 
             setImportResult(res.data);
+            setSelectedImportId(res.data.importId);
             setStatusFilter('pending');
             setRowOverrides({});
             setRowErrors({});
@@ -154,6 +155,33 @@ export default function BankReconciliation() {
         }
     };
 
+    const handleSyncEmails = async () => {
+        setSyncingEmails(true);
+        try {
+            await fetchApi('/api/psychotherapy/bank-statements/poll-now', { method: 'POST' });
+            toast.success('Busca de e-mails concluída.');
+            await loadEmailImports();
+            
+            const res = await fetchApi<{
+                data: { id: string; transaction_count: number; skipped_line_count: number; duplicate_fitid_count: number } | null
+            }>('/api/psychotherapy/bank-statements/imports/latest');
+            if (res.data) {
+                setImportResult({
+                    importId: res.data.id,
+                    transactionCount: res.data.transaction_count,
+                    skippedLineCount: res.data.skipped_line_count,
+                    duplicateFitidCount: res.data.duplicate_fitid_count
+                });
+            }
+            refreshCurrent();
+        } catch (err) {
+            console.error(err);
+            toast.error(err instanceof Error ? err.message : 'Erro ao buscar e-mails do extrato.');
+        } finally {
+            setSyncingEmails(false);
+        }
+    };
+
     const getOverride = (tx: BankStatementTransaction) =>
         rowOverrides[tx.id] ?? {
             patientId: tx.suggested_patient_id ?? '',
@@ -168,7 +196,7 @@ export default function BankReconciliation() {
     };
 
     const refreshCurrent = () => {
-        if (importResult) loadTransactions(importResult.importId, statusFilter);
+        loadTransactions(selectedImportId, statusFilter);
     };
 
     const handleConfirm = async (tx: BankStatementTransaction) => {
@@ -256,6 +284,14 @@ export default function BankReconciliation() {
                     <Upload size={18} />
                     {uploading ? 'Importando...' : 'Importar extrato (.csv)'}
                 </label>
+                <button
+                    className="btn btn-secondary"
+                    onClick={handleSyncEmails}
+                    disabled={syncingEmails || uploading}
+                    style={{ marginLeft: '1rem' }}
+                >
+                    {syncingEmails ? 'Buscando e-mails...' : 'Verificar e-mails de extrato'}
+                </button>
                 {importResult && (
                     <span className="bank-reconciliation-import-summary">
                         Último import: {importResult.transactionCount} transações
@@ -267,6 +303,38 @@ export default function BankReconciliation() {
 
             {importResult && (
                 <>
+                    {selectedImportId !== 'all' && (
+                        <div className="bank-reconciliation-filter-alert" style={{
+                            margin: '1rem 0',
+                            padding: '0.75rem 1rem',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: '0.875rem'
+                        }}>
+                            <span>
+                                Mostrando apenas transações do extrato importado (<strong>{importResult.fileName || 'arquivo'}</strong>).
+                            </span>
+                            <button
+                                className="btn-link"
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#3b82f6',
+                                    cursor: 'pointer',
+                                    fontWeight: 500,
+                                    textDecoration: 'underline',
+                                    padding: 0
+                                }}
+                                onClick={() => setSelectedImportId('all')}
+                            >
+                                Ver todas as pendências
+                            </button>
+                        </div>
+                    )}
                     <div className="bank-reconciliation-toolbar">
                         <div className="bank-reconciliation-filters">
                             {(['pending', 'confirmed', 'ignored', 'all'] as const).map(s => (

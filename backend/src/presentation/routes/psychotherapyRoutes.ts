@@ -38,7 +38,10 @@ const monthParamSchema = z.object({
 
 // Conciliação de extrato bancário
 const importIdParamSchema = z.object({
-    importId: z.string().uuid('ID de import inválido')
+    importId: z.union([
+        z.string().uuid(),
+        z.literal('all')
+    ], { errorMap: () => ({ message: 'ID de import inválido' }) })
 });
 
 const bankStatementTransactionsQuerySchema = z.object({

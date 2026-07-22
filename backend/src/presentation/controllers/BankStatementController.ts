@@ -125,15 +125,20 @@ export class BankStatementController {
         const { importId } = req.params;
         const { status } = req.query as { status?: string };
 
-        const params: unknown[] = [tenantId, importId];
+        const params: unknown[] = [tenantId];
         let query = `
             SELECT id, fitid, posted_at, amount_cents, raw_description, payer_name_guess,
                    suggested_patient_id, suggested_month, suggested_sessions, match_confidence,
                    possible_pix_duplicate, status, confirmed_patient_id, confirmed_month,
                    confirmed_sessions, confirmed_at, ignored_at, created_at
             FROM psychotherapy_bank_statement_transactions
-            WHERE tenant_id = $1 AND import_id = $2
+            WHERE tenant_id = $1
         `;
+
+        if (importId !== 'all') {
+            params.push(importId);
+            query += ` AND import_id = $${params.length}`;
+        }
 
         if (status) {
             params.push(status);
