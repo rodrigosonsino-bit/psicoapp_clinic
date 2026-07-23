@@ -302,7 +302,7 @@ export class GoogleCalendarService {
             if (appointment.googleEventId) {
                 // Atualiza evento existente
                 const updateRequestBody: calendar_v3.Schema$Event = { ...eventBody };
-                if (appointment.status !== 'canceled' && !appointment.googleMeetLink) {
+                if (appointment.status !== 'canceled' && appointment.modality === 'online' && !appointment.googleMeetLink) {
                     updateRequestBody.conferenceData = {
                         createRequest: {
                             requestId: crypto.randomUUID(),
@@ -332,7 +332,7 @@ export class GoogleCalendarService {
                     appointment.googleEventGeneration
                 );
                 const createBody: calendar_v3.Schema$Event = { ...eventBody, id: deterministicId };
-                if (appointment.status !== 'canceled') {
+                if (appointment.status !== 'canceled' && appointment.modality === 'online') {
                     createBody.conferenceData = {
                         createRequest: {
                             requestId: crypto.randomUUID(),
@@ -388,7 +388,7 @@ export class GoogleCalendarService {
                     }
 
                     const updateRequestBody: calendar_v3.Schema$Event = { ...eventBody };
-                    if (appointment.status !== 'canceled' && !existing.data.hangoutLink) {
+                    if (appointment.status !== 'canceled' && appointment.modality === 'online' && !existing.data.hangoutLink) {
                         updateRequestBody.conferenceData = {
                             createRequest: {
                                 requestId: crypto.randomUUID(),

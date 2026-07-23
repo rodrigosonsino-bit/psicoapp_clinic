@@ -817,7 +817,8 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
       ? (appointment.notes.startsWith('[PASTORAL_SUMMARY]:')
         ? appointment.notes.split('\n').slice(1).join('\n').trim()
         : appointment.notes)
-      : ''
+      : '',
+    modality: appointment?.modality ?? 'online'
   });
 
   const handlePatientChange = (patientId: string) => {
@@ -1047,6 +1048,13 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
               <input type="number" min={10} max={240} className="form-control"
                 value={formData.durationMinutes}
                 onChange={e => setFormData({ ...formData, durationMinutes: Number(e.target.value) })} disabled={submitting} />
+            </div>
+            <div className="form-group" style={{ minWidth: '130px' }}>
+              <label className="form-label">Modalidade</label>
+              <select className="form-control" value={formData.modality} onChange={e => setFormData({ ...formData, modality: e.target.value as 'online' | 'presencial' })} disabled={submitting}>
+                <option value="online">Online</option>
+                <option value="presencial">Presencial</option>
+              </select>
             </div>
           </div>
 

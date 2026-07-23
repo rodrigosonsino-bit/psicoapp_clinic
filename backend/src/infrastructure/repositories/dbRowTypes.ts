@@ -191,4 +191,5 @@ export interface AppointmentRow {
     google_sync_last_error: string | null;
     google_sync_updated_at: Date | null;
     google_meet_link?: string | null;
+    modality: 'online' | 'presencial';
 }

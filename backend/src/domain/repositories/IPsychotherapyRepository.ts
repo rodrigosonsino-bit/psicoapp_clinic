@@ -134,6 +134,7 @@ export interface SaveAppointmentDTO {
     parentId?: string | null;
     calendarEventId?: string | null;
     groupId?: string | null;
+    modality?: 'online' | 'presencial';
 }
 
 export interface ListAppointmentsOptions {

@@ -147,12 +147,13 @@ export class PostgresAppointmentRepository {
                 INSERT INTO psychotherapy_appointments (
                     id, tenant_id, patient_id, scheduled_at, duration_minutes,
                     status, recurrence, recurrence_end_date, notes, parent_id,
-                    calendar_event_id, group_id, google_sync_state, google_sync_updated_at
+                    calendar_event_id, group_id, google_sync_state, google_sync_updated_at, modality
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
                     $13,
-                    NOW()
+                    NOW(),
+                    $14
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     patient_id = EXCLUDED.patient_id,
@@ -165,6 +166,7 @@ export class PostgresAppointmentRepository {
                     parent_id = EXCLUDED.parent_id,
                     calendar_event_id = EXCLUDED.calendar_event_id,
                     group_id = EXCLUDED.group_id,
+                    modality = EXCLUDED.modality,
                     google_sync_state = CASE
                         WHEN EXCLUDED.status = 'canceled' THEN 'deleted'
                         ELSE 'pending'
@@ -184,10 +186,11 @@ export class PostgresAppointmentRepository {
                 data.recurrence ?? 'none',
                 data.recurrenceEndDate ?? null,
                 data.notes ?? null,
-                data.parentId || null,
+                data.parentId ?? null,
                 calendarEventId,
-                data.groupId || null,
-                (data.status ?? 'scheduled') === 'canceled' ? 'deleted' : 'pending'
+                data.groupId ?? null,
+                syncState,
+                data.modality ?? 'online'
             ]);
 
             if (result.rows.length === 0) {

@@ -108,6 +108,7 @@ export interface Session {
   status: 'attended' | 'justified_absence' | 'unjustified_absence' | 'canceled';
   notes?: string | null;
   googleMeetLink?: string | null;
+  modality?: 'online' | 'presencial';
   createdAt?: string;
   updatedAt?: string;
 }
