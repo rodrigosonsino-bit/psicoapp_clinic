@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Users2, Calendar, CalendarDays, Receipt, CreditCard, FileText, LogOut, Settings, Menu, X, Landmark } from 'lucide-react';
+import { Home, Users, Users2, Calendar, CalendarDays, Receipt, CreditCard, FileText, LogOut, Settings, Menu, X, Landmark, BookOpen } from 'lucide-react';
 import { tokenStorage } from '../services/auth';
 import { useState, useEffect } from 'react';
 import './Layout.css';
@@ -36,6 +36,7 @@ export default function Layout() {
     { path: '/patients', icon: <Users size={20} />, label: 'Pacientes' },
     { path: '/groups', icon: <Users2 size={20} />, label: 'Grupos Terapêuticos' },
     { path: '/appointments', icon: <Calendar size={20} />, label: 'Agendamentos' },
+    { path: '/sessions', icon: <BookOpen size={20} />, label: 'Prontuários' },
     { path: '/availability', icon: <CalendarDays size={20} />, label: 'Minha Disponibilidade' },
     { path: '/expenses', icon: <CreditCard size={20} />, label: 'Despesas' },
     { path: '/monthly-records', icon: <Calendar size={20} />, label: 'Faturamento Mensal' },
