@@ -189,7 +189,7 @@ export class PostgresAppointmentRepository {
                 data.parentId ?? null,
                 calendarEventId,
                 data.groupId ?? null,
-                syncState,
+                data.status === 'canceled' ? 'deleted' : 'pending',
                 data.modality ?? 'online'
             ]);
 

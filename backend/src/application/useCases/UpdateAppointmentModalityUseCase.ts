@@ -14,17 +14,14 @@ export class UpdateAppointmentModalityUseCase {
     ) { }
 
     async execute(tenantId: string, appointmentId: string, modality: 'online' | 'presencial'): Promise<PsychotherapyAppointment> {
-        const appointment = await this.repository.findById(appointmentId);
+        const appointment = await this.repository.findAppointmentById(tenantId, appointmentId);
         if (!appointment) {
             throw new AppError('Agendamento não encontrado', 404);
         }
         if (appointment.tenantId !== tenantId) {
             throw new AppError('Acesso negado', 403);
         }
-
         const oldModality = appointment.modality;
-        appointment.modality = modality;
-
         // Ao invés de criar um save parcial, vou fazer o update completo via saveAppointment
         const saved = await this.repository.saveAppointment({
             id: appointment.id,
@@ -33,7 +30,7 @@ export class UpdateAppointmentModalityUseCase {
             scheduledAt: appointment.scheduledAt,
             durationMinutes: appointment.durationMinutes,
             status: appointment.status,
-            modality: appointment.modality,
+            modality: modality,
             notes: appointment.notes,
             recurrence: appointment.recurrence,
             recurrenceEndDate: appointment.recurrenceEndDate,
@@ -42,7 +39,18 @@ export class UpdateAppointmentModalityUseCase {
 
         if (oldModality !== modality) {
             try {
-                await this.googleCalendarService.syncAppointment(saved);
+                const patient = await this.repository.findPatientById(tenantId, appointment.patientId);
+                const baseUrl = process.env.PUBLIC_APP_URL || 'https://psicoapp-lemon.vercel.app';
+                const confirmUrl = `${baseUrl}/c/${saved.confirmToken}`;
+                if (patient) {
+                    await this.googleCalendarService.syncAppointment(
+                        tenantId,
+                        saved,
+                        patient.name,
+                        patient.phone || null,
+                        confirmUrl
+                    );
+                }
             } catch (err: any) {
                 console.error('Erro ao sincronizar com Google Calendar (modality change):', err);
             }
