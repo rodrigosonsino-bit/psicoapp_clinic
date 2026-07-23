@@ -4,6 +4,7 @@ import { SavePsychotherapyAppointmentUseCase } from '../../application/useCases/
 import { ListPsychotherapyAppointmentsUseCase } from '../../application/useCases/ListPsychotherapyAppointmentsUseCase';
 import { DeletePsychotherapyAppointmentUseCase } from '../../application/useCases/DeletePsychotherapyAppointmentUseCase';
 import { UpdateAppointmentStatusUseCase } from '../../application/useCases/UpdateAppointmentStatusUseCase';
+import { UpdateAppointmentModalityUseCase } from '../../application/useCases/UpdateAppointmentModalityUseCase';
 import { ListCoveredAppointmentIdsUseCase } from '../../application/useCases/ListCoveredAppointmentIdsUseCase';
 import { ListSessionLinksForMonthUseCase } from '../../application/useCases/ListSessionLinksForMonthUseCase';
 import { AppointmentStatus } from '../../domain/models/PsychotherapyAppointment';
@@ -18,7 +19,8 @@ export class AppointmentController {
         private readonly deleteUseCase: DeletePsychotherapyAppointmentUseCase,
         private readonly updateStatusUseCase: UpdateAppointmentStatusUseCase,
         private readonly listCoveredAppointmentIdsUseCase: ListCoveredAppointmentIdsUseCase,
-        private readonly listSessionLinksForMonthUseCase: ListSessionLinksForMonthUseCase
+        private readonly listSessionLinksForMonthUseCase: ListSessionLinksForMonthUseCase,
+        private readonly updateModalityUseCase: UpdateAppointmentModalityUseCase
     ) {}
 
     async saveAppointment(req: Request, res: Response): Promise<Response> {
@@ -79,9 +81,7 @@ export class AppointmentController {
     async updateModality(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);
         const { modality } = req.body as { modality: 'online' | 'presencial' };
-        // resolve from container directly instead of injecting to avoid modifying constructor
-        const updateModalityUseCase = req.container?.resolve('UpdateAppointmentModalityUseCase') || require('tsyringe').container.resolve(require('../../application/useCases/UpdateAppointmentModalityUseCase').UpdateAppointmentModalityUseCase);
-        const appointment = await updateModalityUseCase.execute(tenantId, req.params.id, modality);
+        const appointment = await this.updateModalityUseCase.execute(tenantId, req.params.id, modality);
         return res.status(200).json({ data: appointment });
     }
 
