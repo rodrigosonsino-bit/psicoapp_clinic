@@ -36,7 +36,7 @@ export default function Layout() {
     { path: '/patients', icon: <Users size={20} />, label: 'Pacientes' },
     { path: '/groups', icon: <Users2 size={20} />, label: 'Grupos Terapêuticos' },
     { path: '/appointments', icon: <Calendar size={20} />, label: 'Agendamentos' },
-    { path: '/sessions', icon: <BookOpen size={20} />, label: 'Prontuários' },
+    { path: '/sessions', icon: <BookOpen size={20} />, label: 'Diário de Sessões' },
     { path: '/availability', icon: <CalendarDays size={20} />, label: 'Minha Disponibilidade' },
     { path: '/expenses', icon: <CreditCard size={20} />, label: 'Despesas' },
     { path: '/monthly-records', icon: <Calendar size={20} />, label: 'Faturamento Mensal' },
