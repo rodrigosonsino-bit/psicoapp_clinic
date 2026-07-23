@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { fetchApi } from '../services/api';
 import type { SessionTranscription } from '../types/api';
-import { Video, Upload, Loader2, CheckCircle2, AlertCircle, FileAudio, Sparkles, Copy, ExternalLink } from 'lucide-react';
+import { Video, Upload, Loader2, CheckCircle2, AlertCircle, FileAudio, Sparkles, Copy, ExternalLink, FileText, Mic } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import './SessionTranscriptionPanel.css';
 
@@ -32,6 +32,9 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
   const [editedSoap, setEditedSoap] = useState('');
   const [loadingExisting, setLoadingExisting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // 'audio' = upload de áudio | 'text' = colar texto manualmente
+  const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio');
+  const [manualText, setManualText] = useState('');
 
   // Cleanup on unmount: stop any running intervals and abort pending fetches
   useEffect(() => {
@@ -128,6 +131,31 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
     }
   };
 
+  const handleTextSubmit = async () => {
+    if (manualText.trim().length < 10) {
+      toast.error('Digite ao menos 10 caracteres de transcrição.');
+      return;
+    }
+    const controller = makeAbortController();
+    abortControllerRef.current = controller;
+    try {
+      setPanelState('processing');
+      const data = await fetchApi<SessionTranscription>(
+        `/api/psychotherapy/sessions/${sessionId}/transcribe/text`,
+        { method: 'POST', body: JSON.stringify({ text: manualText.trim() }) }
+      );
+      if (!isMountedRef.current) return;
+      setTranscription(data);
+      setEditedSoap(data.soapDraft || '');
+      setPanelState('done');
+      toast.success('Prontuário SOAP gerado com sucesso!');
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setPanelState('error');
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao gerar o prontuário.');
+    }
+  };
+
   const handleCopySoap = () => {
     navigator.clipboard.writeText(editedSoap);
     toast.success('Rascunho SOAP copiado!');
@@ -136,6 +164,7 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
   const handleReset = () => {
     setPanelState('idle');
     setSelectedFile(null);
+    setManualText('');
     setUploadProgress(0);
     if (fileRef.current) fileRef.current.value = '';
   };
@@ -192,63 +221,123 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
           <h3 className="stp-section-title">Transcrição e Prontuário IA</h3>
         </div>
 
-        {/* State: idle or file selected */}
+        {/* State: idle or error — dual input mode */}
         {(panelState === 'idle' || panelState === 'error') && !transcription && (
           <div className="stp-upload-area" id="transcription-upload-area">
-            <FileAudio size={40} className="stp-upload-icon" />
-            <p className="stp-upload-title">Enviar Gravação da Sessão</p>
-            <p className="stp-upload-hint">MP3, M4A, WAV, OGG, WEBM — até 50MB</p>
 
-            {selectedFile ? (
-              <div className="stp-file-selected">
-                <span className="stp-file-name">{selectedFile.name}</span>
-                <span className="stp-file-size">
-                  ({(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)
-                </span>
-              </div>
-            ) : null}
-
-            <div className="stp-upload-actions">
+            {/* Mode switcher */}
+            <div className="stp-mode-tabs">
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={() => fileRef.current?.click()}
-                id="select-audio-btn"
+                id="mode-audio-btn"
+                className={`stp-mode-tab ${inputMode === 'audio' ? 'active' : ''}`}
+                onClick={() => setInputMode('audio')}
               >
-                <Upload size={16} />
-                {selectedFile ? 'Trocar arquivo' : 'Selecionar áudio'}
+                <Mic size={14} /> Upload de Áudio
               </button>
-
-              {selectedFile && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleUpload}
-                  id="start-transcription-btn"
-                >
-                  <Sparkles size={16} />
-                  Transcrever com IA
-                </button>
-              )}
+              <button
+                type="button"
+                id="mode-text-btn"
+                className={`stp-mode-tab ${inputMode === 'text' ? 'active' : ''}`}
+                onClick={() => setInputMode('text')}
+              >
+                <FileText size={14} /> Colar Texto
+              </button>
             </div>
+
+            {/* ── Modo: Áudio ── */}
+            {inputMode === 'audio' && (
+              <>
+                <FileAudio size={36} className="stp-upload-icon" />
+                <p className="stp-upload-title">Enviar Gravação da Sessão</p>
+                <p className="stp-upload-hint">MP3, M4A, WAV, OGG, WEBM — até 50MB</p>
+
+                {selectedFile && (
+                  <div className="stp-file-selected">
+                    <span className="stp-file-name">{selectedFile.name}</span>
+                    <span className="stp-file-size">
+                      ({(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)
+                    </span>
+                  </div>
+                )}
+
+                <div className="stp-upload-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => fileRef.current?.click()}
+                    id="select-audio-btn"
+                  >
+                    <Upload size={16} />
+                    {selectedFile ? 'Trocar arquivo' : 'Selecionar áudio'}
+                  </button>
+
+                  {selectedFile && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleUpload}
+                      id="start-transcription-btn"
+                    >
+                      <Sparkles size={16} />
+                      Transcrever com IA
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="audio/*,video/mp4,video/webm"
+                  className="stp-file-input"
+                  onChange={handleFileChange}
+                  id="audio-file-input"
+                />
+              </>
+            )}
+
+            {/* ── Modo: Texto manual ── */}
+            {inputMode === 'text' && (
+              <>
+                <FileText size={36} className="stp-upload-icon" />
+                <p className="stp-upload-title">Colar Transcrição da Sessão</p>
+                <p className="stp-upload-hint">
+                  Digite ou cole o texto da sessão. O Gemini irá gerar o prontuário SOAP automaticamente.
+                </p>
+
+                <textarea
+                  className="stp-soap-textarea"
+                  style={{ minHeight: 160, width: '100%', marginTop: 8 }}
+                  placeholder="Psicólogo: Como você está hoje?&#10;Paciente: Estive me sentindo ansioso..."
+                  value={manualText}
+                  onChange={e => setManualText(e.target.value)}
+                  id="manual-text-input"
+                />
+
+                <div className="stp-upload-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleTextSubmit}
+                    disabled={manualText.trim().length < 10}
+                    id="submit-text-btn"
+                  >
+                    <Sparkles size={16} />
+                    Gerar Prontuário SOAP
+                  </button>
+                </div>
+              </>
+            )}
 
             {panelState === 'error' && (
               <p className="stp-error-msg">
                 <AlertCircle size={14} />
-                Ocorreu um erro. Verifique o arquivo e tente novamente.
+                Ocorreu um erro. Verifique e tente novamente.
               </p>
             )}
-
-            <input
-              ref={fileRef}
-              type="file"
-              accept="audio/*,video/mp4,video/webm"
-              className="stp-file-input"
-              onChange={handleFileChange}
-              id="audio-file-input"
-            />
           </div>
         )}
+
 
         {/* State: uploading / processing */}
         {(panelState === 'uploading' || panelState === 'processing') && (

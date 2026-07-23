@@ -331,6 +331,11 @@ export function createPsychotherapyRoutes(): Router {
         sessionAudioUpload.single('audio'),
         asyncHandler((req, res) => transcriptionController.transcribeSession(req, res))
     );
+    // Transcrição a partir de texto manual (sem áudio — gera apenas o SOAP)
+    router.post(
+        '/psychotherapy/sessions/:id/transcribe/text',
+        asyncHandler((req, res) => transcriptionController.transcribeFromText(req, res))
+    );
     router.get(
         '/psychotherapy/sessions/:id/transcription',
         asyncHandler((req, res) => transcriptionController.getTranscription(req, res))

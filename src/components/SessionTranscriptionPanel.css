@@ -6,6 +6,44 @@
   padding-top: 4px;
 }
 
+/* ── Mode Switcher ── */
+.stp-mode-tabs {
+  display: flex;
+  gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-bottom: 8px;
+}
+
+.stp-mode-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.stp-mode-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.05);
+}
+
+.stp-mode-tab.active {
+  color: var(--brand-primary);
+  background: rgba(109, 93, 252, 0.15);
+}
+
 /* ── Loading ── */
 .stp-loading {
   display: flex;
