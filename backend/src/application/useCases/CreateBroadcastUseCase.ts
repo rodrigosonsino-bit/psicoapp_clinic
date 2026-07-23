@@ -44,7 +44,7 @@ export class CreateBroadcastUseCase {
         }
 
         const client = await this.sessionManager.getSession(input.tenantId);
-        if (!client || !client.isConnected()) {
+        if (!client) {
             throw new AppError('WhatsApp não está conectado. Conecte o WhatsApp antes de enviar mensagens em massa.', 409);
         }
 
