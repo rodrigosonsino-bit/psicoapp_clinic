@@ -9,7 +9,7 @@ export class UpdateAppointmentModalityUseCase {
     constructor(
         @inject('IPsychotherapyRepository')
         private repository: IPsychotherapyRepository,
-        @inject(GoogleCalendarService)
+        @inject('GoogleCalendarService')
         private googleCalendarService: GoogleCalendarService
     ) { }
 
