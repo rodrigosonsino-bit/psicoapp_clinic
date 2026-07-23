@@ -73,10 +73,8 @@ export class EmailBankStatementPollUseCase {
         // Nubank — o from: aqui é só otimização de escopo da busca (o
         // filtro de segurança de verdade continua sendo o DMARC/DKIM
         // pós-fetch em processMessage, inalterado).
-        const senderDomain = process.env.GMAIL_NUBANK_SENDER_DOMAIN;
-        const query = senderDomain
-            ? `to:${alias} from:${senderDomain} -in:spam -in:trash`
-            : `to:${alias} -in:spam -in:trash`;
+        const senderEmail = (process.env.GMAIL_NUBANK_SENDER_EMAIL || 'todomundo@nubank.com.br').toLowerCase();
+        const query = `to:${alias} from:${senderEmail} -in:spam -in:trash`;
         const listRes = await gmail.users.messages.list({
             userId: 'me',
             q: query,
@@ -193,6 +191,15 @@ export class EmailBankStatementPollUseCase {
                     id: msg.id, claimToken: msg.claimToken, status: 'error',
                     errorDetail: 'GMAIL_NUBANK_SENDER_DOMAIN não configurado — filtro de segurança indisponível.',
                     senderNormalized
+                });
+                return;
+            }
+
+            const senderEmail = (process.env.GMAIL_NUBANK_SENDER_EMAIL || 'todomundo@nubank.com.br').toLowerCase();
+            if (senderNormalized !== senderEmail) {
+                await this.finalizeStatus({
+                    id: msg.id, claimToken: msg.claimToken, status: 'rejected_sender',
+                    errorDetail: `Remetente (From) não confere com o e-mail configurado (${senderEmail}).`, senderNormalized
                 });
                 return;
             }
