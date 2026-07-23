@@ -25,9 +25,7 @@ export class CreateBroadcastUseCase {
     ) {}
 
     async execute(input: CreateBroadcastInput): Promise<PsychotherapyBroadcast> {
-        if (process.env.ENABLE_BROADCAST_MESSAGES !== 'true') {
-            throw new AppError('Mensagens em massa estão desativadas neste ambiente.', 503);
-        }
+
 
         const content = input.content?.trim();
         if (!content || content.length > 1000) {
