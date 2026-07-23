@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Check, Edit2, Trash2, X, CheckCircle2, UserX, XCircle, Ban, MessageCircle, DollarSign, ExternalLink } from 'lucide-react';
+import { Check, Edit2, Trash2, X, CheckCircle2, UserX, XCircle, Ban, MessageCircle, DollarSign, ExternalLink, Video, MapPin } from 'lucide-react';
 import type { Appointment, AppointmentStatus } from '../../types/api';
 import type { PositionedAppointment } from './calendarUtils';
 import { topPx, heightPx } from './calendarUtils';
@@ -94,7 +94,10 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
         title={isPaid ? 'Sessão paga' : undefined}
       >
         <div className="chip-time">{timeStr}</div>
-        <div className="chip-name">{patientName}</div>
+        <div className="chip-name" style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {appointment.modality === 'presencial' ? <MapPin size={10} /> : <Video size={10} />}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{patientName}</span>
+        </div>
       </div>
 
       {showPopover && (
@@ -107,8 +110,15 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="popover-header">
-            {timeStr} — {patientName}
+          <div className="popover-header" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div>{timeStr} — {patientName}</div>
+            <div style={{ fontSize: '0.75rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+              {appointment.modality === 'presencial' ? (
+                <><MapPin size={12} /> Presencial</>
+              ) : (
+                <><Video size={12} /> Online</>
+              )}
+            </div>
           </div>
 
           {isPast ? (
