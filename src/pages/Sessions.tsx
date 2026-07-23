@@ -4,11 +4,12 @@ import { fetchApi } from '../services/api';
 import type { Patient, Session, PaginatedResponse } from '../types/api';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Trash2, Download, Plus, Edit2 } from 'lucide-react';
+import { Trash2, Download, Plus, Edit2, Video } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonTable } from '../components/Skeleton';
 import ErrorState from '../components/ErrorState';
+import SessionTranscriptionPanel from '../components/SessionTranscriptionPanel';
 import './Sessions.css';
 
 type SessionStatus = 'attended' | 'justified_absence' | 'unjustified_absence' | 'canceled';
@@ -212,6 +213,8 @@ export default function Sessions() {
 
 // ── SessionModal ──────────────────────────────────────────────────────────────
 
+type ModalTab = 'record' | 'online';
+
 interface SessionModalProps {
   session: Partial<Session> | null;
   patients: Patient[];
@@ -224,6 +227,8 @@ function SessionModal({ session, patients, onClose, onSave }: SessionModalProps)
     const d = isoString ? new Date(isoString) : new Date();
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().substring(0, 16);
   };
+
+  const [activeTab, setActiveTab] = useState<ModalTab>('record');
 
   const [formData, setFormData] = useState({
     id: session?.id,
@@ -261,74 +266,118 @@ function SessionModal({ session, patients, onClose, onSave }: SessionModalProps)
     }
   };
 
+  const isEditMode = Boolean(session?.id);
+
   return (
     <div className="modal-overlay">
-      <div className="modal-content animate-fade-in" style={{ maxWidth: '500px' }}>
-        <h2 className="text-h2 mb-4">{session?.id ? 'Editar Sessão' : 'Nova Sessão'}</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Paciente *</label>
-            <select 
-              required 
-              value={formData.patientId} 
-              onChange={e => setFormData({ ...formData, patientId: e.target.value })} 
-              className="form-control"
-              disabled={submitting}
+      <div className={`modal-content animate-fade-in ${isEditMode ? 'modal-wide' : ''}`}>
+        <h2 className="text-h2 mb-4">{isEditMode ? 'Detalhes da Sessão' : 'Nova Sessão'}</h2>
+
+        {/* Tab bar — only shown when editing an existing session */}
+        {isEditMode && (
+          <div className="stp-tabs">
+            <button
+              type="button"
+              id="tab-record"
+              className={`stp-tab ${activeTab === 'record' ? 'active' : ''}`}
+              onClick={() => setActiveTab('record')}
             >
-              <option value="">Selecione o paciente...</option>
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="form-group">
-            <label className="form-label">Data e Hora *</label>
-            <input 
-              type="datetime-local" 
-              required 
-              value={formData.date} 
-              onChange={e => setFormData({ ...formData, date: e.target.value })} 
-              className="form-control"
-              disabled={submitting}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Status *</label>
-            <select 
-              required 
-              value={formData.status} 
-              onChange={e => setFormData({ ...formData, status: e.target.value as SessionStatus })} 
-              className="form-control"
-              disabled={submitting}
+              <Edit2 size={14} /> Registro
+            </button>
+            <button
+              type="button"
+              id="tab-online"
+              className={`stp-tab ${activeTab === 'online' ? 'active' : ''}`}
+              onClick={() => setActiveTab('online')}
             >
-              <option value="attended">Presente</option>
-              <option value="justified_absence">Falta Justificada (Não cobra)</option>
-              <option value="unjustified_absence">Falta Injustificada (Cobra)</option>
-              <option value="canceled">Cancelado pelo Terapeuta</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Anotações (opcional)</label>
-            <input 
-              type="text" 
-              value={formData.notes} 
-              onChange={e => setFormData({ ...formData, notes: e.target.value })} 
-              className="form-control" 
-              placeholder="Ex: Trânsito, atestado..." 
-              disabled={submitting}
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 mt-6">
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={!formData.patientId || submitting}>
-              {submitting ? 'Salvando...' : 'Salvar'}
+              <Video size={14} /> Sessão Online & IA
+              {session?.googleMeetLink && (
+                <span style={{ marginLeft: 4, fontSize: 10, background: 'rgba(0,210,255,0.15)', color: '#00d2ff', padding: '1px 6px', borderRadius: 99, fontWeight: 600 }}>Meet</span>
+              )}
             </button>
           </div>
-        </form>
+        )}
+
+        {/* ── Tab: Registro (form) ── */}
+        {activeTab === 'record' && (
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Paciente *</label>
+              <select 
+                required 
+                value={formData.patientId} 
+                onChange={e => setFormData({ ...formData, patientId: e.target.value })} 
+                className="form-control"
+                disabled={submitting}
+              >
+                <option value="">Selecione o paciente...</option>
+                {patients.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">Data e Hora *</label>
+              <input 
+                type="datetime-local" 
+                required 
+                value={formData.date} 
+                onChange={e => setFormData({ ...formData, date: e.target.value })} 
+                className="form-control"
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Status *</label>
+              <select 
+                required 
+                value={formData.status} 
+                onChange={e => setFormData({ ...formData, status: e.target.value as SessionStatus })} 
+                className="form-control"
+                disabled={submitting}
+              >
+                <option value="attended">Presente</option>
+                <option value="justified_absence">Falta Justificada (Não cobra)</option>
+                <option value="unjustified_absence">Falta Injustificada (Cobra)</option>
+                <option value="canceled">Cancelado pelo Terapeuta</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Anotações (opcional)</label>
+              <input 
+                type="text" 
+                value={formData.notes} 
+                onChange={e => setFormData({ ...formData, notes: e.target.value })} 
+                className="form-control" 
+                placeholder="Ex: Trânsito, atestado..." 
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={!formData.patientId || submitting}>
+                {submitting ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ── Tab: Sessão Online + IA ── */}
+        {activeTab === 'online' && isEditMode && session?.id && (
+          <>
+            <SessionTranscriptionPanel
+              sessionId={session.id}
+              googleMeetLink={session.googleMeetLink}
+            />
+            <div className="flex justify-end mt-4">
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Fechar</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

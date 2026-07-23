@@ -107,8 +107,21 @@ export interface Session {
   date: string;
   status: 'attended' | 'justified_absence' | 'unjustified_absence' | 'canceled';
   notes?: string | null;
+  googleMeetLink?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type TranscriptionStatus = 'pending' | 'processing' | 'completed' | 'error';
+
+export interface SessionTranscription {
+  id: string;
+  appointmentId: string;
+  rawTranscript: string | null;
+  soapDraft: string | null;
+  status: TranscriptionStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Expense {
