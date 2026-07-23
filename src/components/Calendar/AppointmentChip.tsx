@@ -12,6 +12,7 @@ interface Props {
   patientPhone?: string | null;
   isPaid?: boolean;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
+  onModalityUpdate: (id: string, modality: 'online' | 'presencial') => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
   onOpenProfile: (patientId: string) => void;
@@ -26,7 +27,7 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   no_show: 'var(--status-warning)',
 };
 
-export default function AppointmentChip({ appointment, patientName, patientPhone, isPaid, onStatusUpdate, onEdit, onDelete, onOpenProfile, onMarkPaid }: Props) {
+export default function AppointmentChip({ appointment, patientName, patientPhone, isPaid, onStatusUpdate, onModalityUpdate, onEdit, onDelete, onOpenProfile, onMarkPaid }: Props) {
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -112,7 +113,14 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
         >
           <div className="popover-header" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div>{timeStr} — {patientName}</div>
-            <div style={{ fontSize: '0.75rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+            <div 
+              style={{ fontSize: '0.75rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'normal', cursor: 'pointer' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onModalityUpdate(appointment.id, appointment.modality === 'online' ? 'presencial' : 'online');
+              }}
+              title="Clique para alterar a modalidade"
+            >
               {appointment.modality === 'presencial' ? (
                 <><MapPin size={12} /> Presencial</>
               ) : (

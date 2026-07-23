@@ -13,13 +13,14 @@ interface Props {
   coveredAppointmentIds: Set<string>;
   onSlotClick: (date: Date) => void;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
+  onModalityUpdate: (id: string, modality: 'online' | 'presencial') => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
   onOpenProfile: (patientId: string) => void;
   onMarkPaid: (id: string) => void;
 }
 
-export default function WeekGrid({ days, appointments, patients, groups, coveredAppointmentIds, onSlotClick, onStatusUpdate, onEdit, onDelete, onOpenProfile, onMarkPaid }: Props) {
+export default function WeekGrid({ days, appointments, patients, groups, coveredAppointmentIds, onSlotClick, onStatusUpdate, onModalityUpdate, onEdit, onDelete, onOpenProfile, onMarkPaid }: Props) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [nowTop, setNowTop] = useState(() => topPx(new Date().toISOString()));
 
@@ -112,6 +113,7 @@ export default function WeekGrid({ days, appointments, patients, groups, covered
                   patientPhone={getPatientPhone(appt)}
                   isPaid={coveredAppointmentIds.has(appt.id)}
                   onStatusUpdate={onStatusUpdate}
+                  onModalityUpdate={onModalityUpdate}
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onOpenProfile={onOpenProfile}

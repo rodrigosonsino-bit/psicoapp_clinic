@@ -13,6 +13,7 @@ interface CalendarViewProps {
   coveredAppointmentIds: Set<string>;
   onSlotClick: (date: Date) => void;
   onStatusUpdate: (id: string, status: AppointmentStatus) => void;
+  onModalityUpdate: (id: string, modality: 'online' | 'presencial') => void;
   onEdit: (a: Appointment) => void;
   onDelete: (id: string) => void;
   onDayClick: (date: Date) => void;

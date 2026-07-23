@@ -76,6 +76,15 @@ export class AppointmentController {
         return res.status(200).json({ data: appointment });
     }
 
+    async updateModality(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const { modality } = req.body as { modality: 'online' | 'presencial' };
+        // resolve from container directly instead of injecting to avoid modifying constructor
+        const updateModalityUseCase = req.container?.resolve('UpdateAppointmentModalityUseCase') || require('tsyringe').container.resolve(require('../../application/useCases/UpdateAppointmentModalityUseCase').UpdateAppointmentModalityUseCase);
+        const appointment = await updateModalityUseCase.execute(tenantId, req.params.id, modality);
+        return res.status(200).json({ data: appointment });
+    }
+
     private getTenantId(req: Request): string {
         const tenantId = (req as AuthenticatedRequest).tenantId || (req as AuthenticatedRequest).userId;
         if (!tenantId) throw new AppError('Tenant não identificado', 401);

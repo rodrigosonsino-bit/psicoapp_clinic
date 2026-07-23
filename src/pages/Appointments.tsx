@@ -199,6 +199,22 @@ export default function Appointments() {
     }
   };
 
+  const handleModalityUpdate = async (id: string, modality: 'online' | 'presencial') => {
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, modality } : a));
+    
+    try {
+      await fetchApi(`/api/psychotherapy/appointments/${id}/modality`, {
+        method: 'PATCH',
+        body: JSON.stringify({ modality })
+      });
+      toast.success('Modalidade atualizada.');
+      loadAppointments(page, filterPatientId, viewType, currentDate);
+    } catch (err) {
+      toast.error('Erro ao atualizar modalidade');
+      loadAppointments(page, filterPatientId, viewType, currentDate);
+    }
+  };
+
   const openPatientProfile = (patientId: string) => navigate(`/patients/${patientId}`);
 
   // Atalho de "Agendamentos": marca +1 sessão paga no registro de Faturamento Mensal do
@@ -659,6 +675,7 @@ export default function Appointments() {
           coveredAppointmentIds={coveredAppointmentIds}
           onSlotClick={handleSlotClick}
           onStatusUpdate={handleStatusUpdate}
+          onModalityUpdate={handleModalityUpdate}
           onEdit={a => { setEditAppointment(a); setShowModal(true); }}
           onDelete={id => openDeleteDialog(id)}
           onDayClick={date => { setCurrentDate(date); setViewType('day'); }}
