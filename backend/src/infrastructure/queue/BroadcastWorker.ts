@@ -5,7 +5,7 @@ import { getBroadcastRedisConnection } from './redisConnection';
 import { BROADCAST_QUEUE_NAME } from './BroadcastQueue';
 import { logger } from '../logger';
 
-const BROADCAST_INTERVAL_MS = Number(process.env.BROADCAST_INTERVAL_MS || 12000);
+const BROADCAST_INTERVAL_MS = Number(process.env.BROADCAST_INTERVAL_MS || 720000);
 const BROADCAST_MAX_ATTEMPTS = Number(process.env.BROADCAST_MAX_ATTEMPTS || 5);
 const BROADCAST_SENDING_LEASE_MS = Number(process.env.BROADCAST_SENDING_LEASE_MS || 120000);
 
@@ -97,6 +97,11 @@ export class BroadcastWorker {
             }
         } finally {
             await this.repository.recomputeBroadcastStatus(recipient.broadcastId);
+            
+            // BullMQ v5 removeu suporte ao `limiter` no Worker open-source.
+            // Para mantermos o throttling com concurrency=1, realizamos um pause 
+            // artificial ao final de cada processamento de job.
+            await new Promise(resolve => setTimeout(resolve, BROADCAST_INTERVAL_MS));
         }
     }
 
