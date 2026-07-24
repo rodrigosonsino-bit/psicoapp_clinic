@@ -13,8 +13,6 @@ export default function ProfileSettings() {
     document: '',
     professionalId: '',
     address: '',
-    professionalId: '',
-    address: '',
     twoFactorEnabled: false
   });
   const [loading, setLoading] = useState(true);
@@ -32,7 +30,6 @@ export default function ProfileSettings() {
         fullName: data.fullName || '',
         document: data.document || '',
         professionalId: data.professionalId || '',
-        address: data.address || '',
         address: data.address || '',
         twoFactorEnabled: data.twoFactorEnabled || false
       });
@@ -186,9 +183,6 @@ export default function ProfileSettings() {
               />
             </div>
           </div>
-
-          </div>
-
           <div className="flex justify-end gap-2 mt-6">
             <button
               type="submit"
