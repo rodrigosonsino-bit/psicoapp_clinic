@@ -27,11 +27,7 @@ function sanitizeBookingPage(input: unknown): BookingPageSettings {
     };
 }
 
-/** Sanitiza o template de lembrete: trim + limite de tamanho. String vazia limpa o template (volta ao padrão). */
-function sanitizeReminderTemplate(value: unknown): string | null {
-    if (typeof value !== 'string') return null;
-    return value.trim().slice(0, 1000);
-}
+
 
 @injectable()
 export class UpdateTenantProfileUseCase {
@@ -51,9 +47,6 @@ export class UpdateTenantProfileUseCase {
             ...data,
             bookingPage: data.bookingPage !== undefined && data.bookingPage !== null
                 ? sanitizeBookingPage(data.bookingPage)
-                : undefined,
-            whatsappReminderTemplate: data.whatsappReminderTemplate !== undefined
-                ? sanitizeReminderTemplate(data.whatsappReminderTemplate)
                 : undefined,
             cardFeeRates: data.cardFeeRates
         };

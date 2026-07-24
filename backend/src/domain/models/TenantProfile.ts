@@ -23,7 +23,6 @@ export class TenantProfile {
         public readonly address: string | null,
         public readonly twoFactorEnabled: boolean = false,
         public readonly bookingPage: BookingPageSettings | null = null,
-        public readonly whatsappReminderTemplate: string | null = null,
         public readonly cardFeeRates: CardFeeRates | null = null
     ) {}
 
@@ -38,7 +37,6 @@ export class TenantProfile {
             address: this.address,
             twoFactorEnabled: this.twoFactorEnabled,
             bookingPage: this.bookingPage,
-            whatsappReminderTemplate: this.whatsappReminderTemplate,
             cardFeeRates: this.cardFeeRates
         };
     }

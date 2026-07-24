@@ -29,7 +29,7 @@ const DEFAULT_REMINDER_TEMPLATE =
 
 function buildWhatsAppMessage(appointment: UpcomingAppointment): string {
     const dateStr = formatDateTimeBR(appointment.scheduledAt);
-    const template = appointment.whatsappReminderTemplate?.trim() || DEFAULT_REMINDER_TEMPLATE;
+    const template = DEFAULT_REMINDER_TEMPLATE;
 
     return template
         .replace(/{nome}/g, appointment.patientName)

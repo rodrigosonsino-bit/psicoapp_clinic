@@ -49,7 +49,6 @@ export interface TenantProfileRow {
     address: string | null;
     totp_enabled?: boolean;
     booking_page?: import('../../domain/models/TenantProfile').BookingPageSettings | null;
-    whatsapp_reminder_template?: string | null;
     card_fee_rates?: import('../../domain/models/TenantProfile').CardFeeRates | null;
 }
 

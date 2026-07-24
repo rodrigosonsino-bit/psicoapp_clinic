@@ -219,7 +219,6 @@ const updateProfileSchema = z.object({
     document: z.string().nullable().optional(),
     professionalId: z.string().nullable().optional(),
     address: z.string().nullable().optional(),
-    whatsappReminderTemplate: z.string().max(1000).nullable().optional(),
     // BUG PRÉ-EXISTENTE corrigido aqui: bookingPage nunca esteve neste schema, então o Zod
     // descartava o campo silenciosamente antes de chegar no controller — a personalização da
     // página de agendamento nunca era persistida de fato via PUT /api/profile.

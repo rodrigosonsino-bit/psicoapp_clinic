@@ -576,8 +576,7 @@ export class PostgresAppointmentRepository {
                 p.email         AS patient_email,
                 p.reminder_channel,
                 a.scheduled_at,
-                a.duration_minutes,
-                t.whatsapp_reminder_template
+                a.duration_minutes
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
             JOIN tenants t ON t.id = a.tenant_id
@@ -598,8 +597,7 @@ export class PostgresAppointmentRepository {
             patientEmail:   row.patient_email,
             reminderChannel: row.reminder_channel ?? 'whatsapp',
             scheduledAt:    new Date(row.scheduled_at),
-            durationMinutes: row.duration_minutes,
-            whatsappReminderTemplate: row.whatsapp_reminder_template ?? null,
+            durationMinutes: row.duration_minutes
         }));
     }
 
@@ -615,8 +613,7 @@ export class PostgresAppointmentRepository {
                 p.email         AS patient_email,
                 p.reminder_channel,
                 a.scheduled_at,
-                a.duration_minutes,
-                t.whatsapp_reminder_template
+                a.duration_minutes
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
             JOIN tenants t ON t.id = a.tenant_id
@@ -658,8 +655,7 @@ export class PostgresAppointmentRepository {
             patientEmail:   row.patient_email,
             reminderChannel: row.reminder_channel ?? 'whatsapp',
             scheduledAt:    new Date(row.scheduled_at),
-            durationMinutes: row.duration_minutes,
-            whatsappReminderTemplate: row.whatsapp_reminder_template ?? null,
+            durationMinutes: row.duration_minutes
         }));
     }
 

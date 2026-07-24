@@ -18,7 +18,7 @@ export class PostgresTenantProfileRepository {
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template, card_fee_rates
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
@@ -45,11 +45,10 @@ export class PostgresTenantProfileRepository {
                 professional_id = COALESCE($4, professional_id),
                 address = COALESCE($5, address),
                 booking_page = COALESCE($6::jsonb, booking_page),
-                whatsapp_reminder_template = COALESCE($7, whatsapp_reminder_template),
-                card_fee_rates = CASE WHEN $8 THEN $9::jsonb ELSE card_fee_rates END,
+                card_fee_rates = CASE WHEN $7 THEN $8::jsonb ELSE card_fee_rates END,
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, whatsapp_reminder_template, card_fee_rates;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
@@ -57,7 +56,6 @@ export class PostgresTenantProfileRepository {
             data.professionalId !== undefined ? data.professionalId : null,
             data.address !== undefined ? data.address : null,
             data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null,
-            data.whatsappReminderTemplate !== undefined ? data.whatsappReminderTemplate : null,
             cardFeeRatesProvided,
             cardFeeRatesValue
         ]);
@@ -77,7 +75,6 @@ export class PostgresTenantProfileRepository {
             row.address,
             row.totp_enabled || false,
             row.booking_page ?? null,
-            row.whatsapp_reminder_template ?? null,
             row.card_fee_rates ?? null
         );
     }

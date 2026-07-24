@@ -75,7 +75,6 @@ export interface UpdateTenantProfileDTO {
     professionalId?: string | null;
     address?: string | null;
     bookingPage?: import('../models/TenantProfile').BookingPageSettings | null;
-    whatsappReminderTemplate?: string | null;
     /** ausente = não altera; null = limpa a configuração; objeto = substitui por inteiro. */
     cardFeeRates?: import('../models/TenantProfile').CardFeeRates | null;
 }
@@ -156,7 +155,6 @@ export interface UpcomingAppointment {
     reminderChannel: ReminderChannel;
     scheduledAt: Date;
     durationMinutes: number;
-    whatsappReminderTemplate: string | null;
 }
 
 export type ReminderLogStatus = 'success' | 'failed';
