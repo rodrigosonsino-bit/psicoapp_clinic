@@ -111,6 +111,14 @@ export class PostgresBroadcastRepository implements IBroadcastRepository {
         return rows.length > 0;
     }
 
+    async isTenantWhatsAppConnected(tenantId: string): Promise<boolean> {
+        const { rows } = await this.dbPool.query(
+            `SELECT whatsapp_connected FROM tenants WHERE id = $1::uuid AND status IN ('active', 'trial')`,
+            [tenantId]
+        );
+        return rows.length > 0 && rows[0].whatsapp_connected === true;
+    }
+
     async createBroadcastWithRecipients(
         tenantId: string,
         idempotencyKey: string,

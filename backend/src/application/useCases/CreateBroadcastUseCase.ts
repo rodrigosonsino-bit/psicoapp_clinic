@@ -3,7 +3,6 @@ import { IBroadcastRepository } from '../../domain/repositories/IBroadcastReposi
 import { PhoneNormalizer } from '../services/PhoneNormalizer';
 import { PsychotherapyBroadcast, BroadcastRecipientCandidate } from '../../domain/models/PsychotherapyBroadcast';
 import { AppError } from '../../domain/errors/AppError';
-import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
 import { BroadcastOutboxDispatcher } from '../../infrastructure/queue/BroadcastOutboxDispatcher';
 
 const MAX_RECIPIENTS = Number(process.env.BROADCAST_MAX_RECIPIENTS || 50);
@@ -20,7 +19,6 @@ export class CreateBroadcastUseCase {
 
     constructor(
         @inject('IBroadcastRepository') private readonly repository: IBroadcastRepository,
-        @inject('WhatsappSessionManager') private readonly sessionManager: WhatsappSessionManager,
         @inject(BroadcastOutboxDispatcher) private readonly dispatcher: BroadcastOutboxDispatcher
     ) {}
 
@@ -43,7 +41,7 @@ export class CreateBroadcastUseCase {
             throw new AppError('Já existe uma campanha de mensagem em massa em andamento para este tenant.', 409);
         }
 
-        const isConnected = await this.sessionManager.isTenantWhatsAppConnected(input.tenantId);
+        const isConnected = await this.repository.isTenantWhatsAppConnected(input.tenantId);
         if (!isConnected) {
             throw new AppError('WhatsApp não está conectado. Conecte o WhatsApp antes de enviar mensagens em massa.', 409);
         }

@@ -27,6 +27,8 @@ export interface IBroadcastRepository {
 
     hasActiveBroadcast(tenantId: string): Promise<boolean>;
 
+    isTenantWhatsAppConnected(tenantId: string): Promise<boolean>;
+
     /**
      * Cria a campanha + snapshot de destinatários já normalizados em uma única
      * transação. `candidates` já deve estar filtrado/normalizado pelo use case.
