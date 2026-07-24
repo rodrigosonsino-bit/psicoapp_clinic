@@ -43,8 +43,8 @@ export class CreateBroadcastUseCase {
             throw new AppError('Já existe uma campanha de mensagem em massa em andamento para este tenant.', 409);
         }
 
-        const client = await this.sessionManager.getSession(input.tenantId);
-        if (!client) {
+        const isConnected = await this.sessionManager.isTenantWhatsAppConnected(input.tenantId);
+        if (!isConnected) {
             throw new AppError('WhatsApp não está conectado. Conecte o WhatsApp antes de enviar mensagens em massa.', 409);
         }
 

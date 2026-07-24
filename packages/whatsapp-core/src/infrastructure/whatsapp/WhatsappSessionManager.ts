@@ -85,6 +85,20 @@ export class WhatsappSessionManager extends EventEmitter {
         }
     }
 
+    async isTenantWhatsAppConnected(tenantId: string): Promise<boolean> {
+        if (!this.dbPool) return false;
+        try {
+            const result = await this.dbPool.query(
+                `SELECT whatsapp_connected FROM tenants WHERE id = $1::uuid AND status IN ('active', 'trial')`,
+                [tenantId]
+            );
+            return result.rows.length > 0 && result.rows[0].whatsapp_connected === true;
+        } catch (err) {
+            logger.error({ err, tenantId }, 'Erro ao checar status do WhatsApp no banco.');
+            return false;
+        }
+    }
+
     /**
      * Cria a sessão WhatsApp do tenant, mas só se conseguir adquirir o lock distribuído
      * (advisory lock do Postgres) que garante que nenhuma outra instância do servidor
