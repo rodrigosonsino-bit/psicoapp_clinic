@@ -12,10 +12,12 @@ export class WhatsappSessionManager extends EventEmitter {
     private messageHandler?: IncomingMessageHandler;
     private statusHandler?: MessageStatusHandler;
     private readonly appName: string;
+    private readonly crypto?: { encrypt: (text: string) => string; decrypt: (text: string) => string };
 
-    constructor(appName: string = 'default') {
+    constructor(appName: string = 'default', crypto?: { encrypt: (text: string) => string; decrypt: (text: string) => string }) {
         super();
         this.appName = appName;
+        this.crypto = crypto;
     }
 
     async initializeAll(dbPool: Pool, messageHandler?: IncomingMessageHandler, statusHandler?: MessageStatusHandler): Promise<void> {
@@ -39,7 +41,7 @@ export class WhatsappSessionManager extends EventEmitter {
             for (const row of result.rows) {
                 const tenantId = row.id;
                 logger.info(`Auto-conectando WhatsApp para tenant: ${tenantId}`);
-                const { state, saveCreds } = await usePostgresAuthState(this.dbPool!, tenantId, this.appName);
+                const { state, saveCreds } = await usePostgresAuthState(this.dbPool!, tenantId, this.appName, this.crypto);
                 const client = await this.createSession(tenantId);
                 if (!client) {
                     logger.warn({ tenantId }, '⏭️ Sessão não iniciada nesta instância (outra instância já detém o socket deste tenant).');
@@ -122,7 +124,11 @@ export class WhatsappSessionManager extends EventEmitter {
 
         try {
             logger.info({ tenantId }, 'Criando nova sessão WhatsApp para tenant');
-            const client = new WhatsappClient(tenantId, this.appName, { onIncomingMessage: this.messageHandler, onMessageStatusUpdate: this.statusHandler });
+            const client = new WhatsappClient(tenantId, this.appName, { 
+                onIncomingMessage: this.messageHandler, 
+                onMessageStatusUpdate: this.statusHandler,
+                crypto: this.crypto 
+            });
 
             await client.initialize(this.dbPool);
             this.sessions.set(tenantId, client);

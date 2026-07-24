@@ -151,13 +151,54 @@ export class PostgresPatientRepository {
 
     async deletePatient(tenantId: string, id: string): Promise<void> {
         const validTenantId = validateTenantId(tenantId);
-        const result = await this.dbPool.query(`
-            UPDATE psychotherapy_patients
-            SET deleted_at = NOW(), updated_at = NOW()
-            WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL;
-        `, [validTenantId, id]);
+        const client = await this.dbPool.connect();
+        
+        try {
+            await client.query('BEGIN');
 
-        if (result.rowCount === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
+            // 1. Hard-delete: Exclusão real dos dados clínicos e sensíveis vinculados (LGPD art. 11)
+            await client.query('DELETE FROM psychotherapy_clinical_notes WHERE patient_id = $1 AND tenant_id = $2;', [id, validTenantId]);
+            await client.query('DELETE FROM psychotherapy_anamnesis WHERE patient_id = $1 AND tenant_id = $2;', [id, validTenantId]);
+            await client.query('DELETE FROM psychotherapy_treatment_plans WHERE patient_id = $1 AND tenant_id = $2;', [id, validTenantId]);
+            await client.query('DELETE FROM psychotherapy_whatsapp_messages WHERE patient_id = $1 AND tenant_id = $2;', [id, validTenantId]);
+            
+            // Delete sarah profiles linked to the patient's phone (safely avoiding NULLs)
+            await client.query(`
+                DELETE FROM sarah_patient_profiles 
+                WHERE tenant_id = $2 AND phone IS NOT NULL AND phone = (
+                    SELECT phone FROM psychotherapy_patients WHERE id = $1 AND tenant_id = $2
+                );
+            `, [id, validTenantId]);
+
+            // 2. Remoção de dados sensíveis em tabelas retidas por histórico financeiro
+            await client.query('UPDATE psychotherapy_sessions SET notes = NULL WHERE patient_id = $1 AND tenant_id = $2;', [id, validTenantId]);
+
+            // 3. Anonimização dos PIIs e soft-delete na tabela principal
+            const result = await client.query(`
+                UPDATE psychotherapy_patients
+                SET 
+                    name = 'Paciente Excluído',
+                    full_name = NULL,
+                    phone = NULL,
+                    email = NULL,
+                    document = NULL,
+                    notes = NULL,
+                    deleted_at = NOW(),
+                    updated_at = NOW()
+                WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL;
+            `, [validTenantId, id]);
+
+            if (result.rowCount === 0) {
+                throw new NotFoundError('Paciente não encontrado ou não autorizado');
+            }
+
+            await client.query('COMMIT');
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     async findPatientByPhone(tenantId: string, phone: string): Promise<PsychotherapyPatient | null> {

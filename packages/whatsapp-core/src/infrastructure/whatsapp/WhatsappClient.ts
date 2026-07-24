@@ -33,6 +33,7 @@ export type MessageStatusHandler = (update: MessageStatusUpdate) => Promise<void
 export interface WhatsappClientOptions {
     onIncomingMessage?: IncomingMessageHandler;
     onMessageStatusUpdate?: MessageStatusHandler;
+    crypto?: { encrypt: (text: string) => string; decrypt: (text: string) => string };
 }
 
 export class WhatsappClient {
@@ -64,12 +65,14 @@ export class WhatsappClient {
     private lastQrDataUrl: string | null = null;
     private readonly onIncomingMessage?: IncomingMessageHandler;
     private readonly onMessageStatusUpdate?: MessageStatusHandler;
+    private readonly crypto?: { encrypt: (text: string) => string; decrypt: (text: string) => string };
 
     constructor(tenantId: string, appName: string = 'default', options?: WhatsappClientOptions) {
         this.tenantId = tenantId;
         this.appName = appName;
         this.onIncomingMessage = options?.onIncomingMessage;
         this.onMessageStatusUpdate = options?.onMessageStatusUpdate;
+        this.crypto = options?.crypto;
     }
 
     public getLastQrDataUrl(): string | null {
@@ -119,7 +122,7 @@ export class WhatsappClient {
             const { version, isLatest } = await fetchLatestBaileysVersion();
             logger.info(`Usando versão do WhatsApp: ${version.join('.')} (Latest: ${isLatest})`);
 
-            const { state, saveCreds } = await usePostgresAuthState(dbPool, this.tenantId, this.appName);
+            const { state, saveCreds } = await usePostgresAuthState(dbPool, this.tenantId, this.appName, this.crypto);
 
             const logLevel = (process.env.WHATSAPP_LOG_LEVEL || 'silent') as pino.Level;
             

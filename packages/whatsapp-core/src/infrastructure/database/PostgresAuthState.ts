@@ -22,7 +22,8 @@ import { logger as appLogger } from '../logger';
 export async function usePostgresAuthState(
     dbPool: Pool,
     tenantId: string,
-    appName: string = 'default'
+    appName: string = 'default',
+    crypto?: { encrypt: (text: string) => string; decrypt: (text: string) => string }
 ): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> {
 
     const logger = pino({ level: 'silent' });
@@ -38,7 +39,13 @@ export async function usePostgresAuthState(
                 [tenantId, prefixedKey]
             );
             if (res.rows.length > 0) {
-                return JSON.parse(JSON.stringify(res.rows[0].value), BufferJSON.reviver);
+                const rawValue = res.rows[0].value;
+                if (rawValue && typeof rawValue === 'object' && rawValue._encrypted) {
+                    if (!crypto) throw new Error("Chave cifrada encontrada, mas 'crypto' não foi injetado.");
+                    const decryptedStr = crypto.decrypt(rawValue._encrypted);
+                    return JSON.parse(decryptedStr, BufferJSON.reviver);
+                }
+                return JSON.parse(JSON.stringify(rawValue), BufferJSON.reviver);
             }
             // Chave não existe — estado legítimo (Baileys interpreta como "sem valor").
             return null;
@@ -54,11 +61,12 @@ export async function usePostgresAuthState(
         const prefixedKey = `${appName}:${key}`;
         try {
             const dataStr = JSON.stringify(value, BufferJSON.replacer);
+            const payloadToSave = crypto ? { _encrypted: crypto.encrypt(dataStr) } : JSON.parse(dataStr);
             await executor.query(
                 `INSERT INTO whatsapp_auth (tenant_id, key, value)
                  VALUES ($1::uuid, $2, $3::jsonb)
                  ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value`,
-                [tenantId, prefixedKey, dataStr]
+                [tenantId, prefixedKey, JSON.stringify(payloadToSave)]
             );
         } catch (error) {
             // Propagar SEMPRE (antes só 'creds' propagava). Engolir a falha fazia o cache do

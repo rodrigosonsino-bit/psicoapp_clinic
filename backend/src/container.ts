@@ -37,8 +37,10 @@ container.registerSingleton('GoogleCalendarService', GoogleCalendarService);
 // Gmail (extrato bancário via e-mail) — conexão OAuth dedicada, separada do Calendar
 container.registerSingleton(GmailAuthService);
 
+import * as cryptoHelper from './infrastructure/auth/cryptoHelper';
+
 // WhatsApp Session Manager (singleton — inicializado em server.ts via initializeAll)
-container.registerInstance('WhatsappSessionManager', new WhatsappSessionManager('psicoapp'));
+container.registerInstance('WhatsappSessionManager', new WhatsappSessionManager('psicoapp', cryptoHelper));
 
 // Broadcast: fila e dispatcher precisam ser singletons (mantêm conexão Redis/Queue viva)
 container.registerSingleton(BroadcastQueue);
