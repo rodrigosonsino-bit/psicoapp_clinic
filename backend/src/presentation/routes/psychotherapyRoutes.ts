@@ -481,7 +481,8 @@ export function createPsychotherapyRoutes(): Router {
     });
 
     const updateAppointmentModalitySchema = z.object({
-        modality: z.enum(['online', 'presencial'])
+        modality: z.enum(['online', 'presencial']),
+        applyTo: z.enum(['single', 'series']).optional().default('single')
     });
 
     const listAppointmentsQuerySchema = z.object({

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw, MessageCircle, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Check, X, Clock, Link2, CalendarCheck, CheckCircle2, UserX, XCircle, Ban, RefreshCw, MessageCircle, FileText, Video, User } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { Appointment, AppointmentStatus, Patient, PaginatedResponse, MonthResponse } from '../types/api';
 import { useToast } from '../context/ToastContext';
@@ -56,6 +56,7 @@ export default function Appointments() {
   const [editAppointment, setEditAppointment] = useState<Appointment | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [deleteSeriesDialog, setDeleteSeriesDialog] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  const [modalitySeriesDialog, setModalitySeriesDialog] = useState<{ open: boolean; id: string | null; modality: 'online' | 'presencial' | null }>({ open: false, id: null, modality: null });
   const [confirmRecurrence, setConfirmRecurrence] = useState<{ open: boolean; appointment: Appointment | null; newRecurrence: Appointment['recurrence'] | null }>({ open: false, appointment: null, newRecurrence: null });
   const [viewType, setViewType] = useState<'all' | 'day' | 'week' | 'month'>('week');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -199,19 +200,41 @@ export default function Appointments() {
     }
   };
 
-  const handleModalityUpdate = async (id: string, modality: 'online' | 'presencial') => {
-    setAppointments(prev => prev.map(a => a.id === id ? { ...a, modality } : a));
+  const handleModalityUpdate = async (id: string, modality: 'online' | 'presencial', applyTo: 'single' | 'series' = 'single') => {
+    // Optimistic UI update
+    setAppointments(prev => prev.map(a => {
+      if (applyTo === 'single' && a.id === id) return { ...a, modality };
+      if (applyTo === 'series') {
+        const target = prev.find(p => p.id === id);
+        if (target && a.parentId === target.parentId && new Date(a.scheduledAt) >= new Date(target.scheduledAt)) {
+          return { ...a, modality };
+        }
+      }
+      return a;
+    }));
     
     try {
       await fetchApi(`/api/psychotherapy/appointments/${id}/modality`, {
         method: 'PATCH',
-        body: JSON.stringify({ modality })
+        body: JSON.stringify({ modality, applyTo })
       });
       toast.success('Modalidade atualizada.');
       loadAppointments(page, filterPatientId, viewType, currentDate);
     } catch (err) {
       toast.error('Erro ao atualizar modalidade');
       loadAppointments(page, filterPatientId, viewType, currentDate);
+    } finally {
+      setModalitySeriesDialog({ open: false, id: null, modality: null });
+    }
+  };
+
+  const openModalityDialog = (id: string, modality: 'online' | 'presencial') => {
+    const appt = appointments.find(a => a.id === id);
+    const isSeries = appt ? (appt.parentId !== null || appt.recurrence !== 'none') : false;
+    if (isSeries) {
+      setModalitySeriesDialog({ open: true, id, modality });
+    } else {
+      handleModalityUpdate(id, modality, 'single');
     }
   };
 
@@ -675,7 +698,7 @@ export default function Appointments() {
           coveredAppointmentIds={coveredAppointmentIds}
           onSlotClick={handleSlotClick}
           onStatusUpdate={handleStatusUpdate}
-          onModalityUpdate={handleModalityUpdate}
+          onModalityUpdate={openModalityDialog}
           onEdit={a => { setEditAppointment(a); setShowModal(true); }}
           onDelete={id => openDeleteDialog(id)}
           onDayClick={date => { setCurrentDate(date); setViewType('day'); }}
@@ -729,36 +752,83 @@ export default function Appointments() {
               <X size={18} />
             </button>
             <div className="confirm-header">
-              <div className="confirm-icon-wrapper wrapper-danger">
-                <Trash2 className="confirm-icon icon-danger" size={28} />
+              <div className="confirm-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-danger)' }}>
+                <Trash2 size={24} />
               </div>
-              <div className="confirm-title-wrapper">
-                <h3>Excluir agendamento</h3>
-                <p>Este agendamento faz parte de uma série recorrente. O que deseja excluir?</p>
-              </div>
+              <h3>Excluir Agendamento Recorrente</h3>
+              <p>Este agendamento faz parte de uma série. Você deseja excluir apenas esta sessão ou todas as sessões futuras?</p>
             </div>
-            <div className="confirm-actions" style={{ flexDirection: 'column', gap: '0.5rem' }}>
-              <button
+            
+            <div className="series-action-buttons">
+              <button 
                 type="button"
-                className="btn btn-danger confirm-submit-btn"
-                style={{ width: '100%' }}
-                onClick={() => handleDelete('all')}
-              >
-                Excluir toda a série
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ width: '100%', borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                className="btn btn-danger"
+                style={{ width: '100%', marginBottom: '0.75rem' }}
                 onClick={() => handleDelete('single')}
               >
-                Excluir somente este
+                Excluir apenas esta sessão
               </button>
-              <button
+              
+              <button 
+                type="button"
+                className="btn btn-danger"
+                style={{ width: '100%', marginBottom: '1rem' }}
+                onClick={() => handleDelete('all')}
+              >
+                Excluir esta e as seguintes
+              </button>
+              
+              <button 
                 type="button"
                 className="btn btn-secondary"
                 style={{ width: '100%' }}
                 onClick={() => setDeleteSeriesDialog({ open: false, id: null })}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalitySeriesDialog.open && (
+        <div className="confirm-overlay" onClick={() => setModalitySeriesDialog({ open: false, id: null, modality: null })}>
+          <div className="confirm-content animate-fade-in" onClick={e => e.stopPropagation()}>
+            <button type="button" className="confirm-close-btn" onClick={() => setModalitySeriesDialog({ open: false, id: null, modality: null })}>
+              <X size={18} />
+            </button>
+            <div className="confirm-header">
+              <div className="confirm-icon" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary-color)' }}>
+                {modalitySeriesDialog.modality === 'online' ? <Video size={24} /> : <User size={24} />}
+              </div>
+              <h3>Alterar Modalidade Recorrente</h3>
+              <p>Este agendamento faz parte de uma série. Você deseja alterar a modalidade apenas desta sessão ou de todas as sessões futuras?</p>
+            </div>
+            
+            <div className="series-action-buttons">
+              <button 
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', marginBottom: '0.75rem' }}
+                onClick={() => handleModalityUpdate(modalitySeriesDialog.id!, modalitySeriesDialog.modality!, 'single')}
+              >
+                Alterar apenas esta sessão
+              </button>
+              
+              <button 
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', marginBottom: '1rem' }}
+                onClick={() => handleModalityUpdate(modalitySeriesDialog.id!, modalitySeriesDialog.modality!, 'series')}
+              >
+                Alterar esta e as seguintes
+              </button>
+              
+              <button 
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%' }}
+                onClick={() => setModalitySeriesDialog({ open: false, id: null, modality: null })}
               >
                 Cancelar
               </button>

@@ -80,8 +80,8 @@ export class AppointmentController {
 
     async updateModality(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);
-        const { modality } = req.body as { modality: 'online' | 'presencial' };
-        const appointment = await this.updateModalityUseCase.execute(tenantId, req.params.id, modality);
+        const { modality, applyTo } = req.body as { modality: 'online' | 'presencial', applyTo?: 'single' | 'series' };
+        const appointment = await this.updateModalityUseCase.execute(tenantId, req.params.id, modality, applyTo);
         return res.status(200).json({ data: appointment });
     }
 

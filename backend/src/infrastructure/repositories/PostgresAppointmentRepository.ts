@@ -40,9 +40,12 @@ export class PostgresAppointmentRepository {
             // (achado na revisão de 04/07/2026).
             let oldMonth: string | null = null;
             let oldPatientId: string | null = null;
+            let existingCalendarEventId: string | null = null;
+            let existingParentId: string | null = null;
+            let existingGroupId: string | null = null;
             if (data.id) {
                 const prev = await client.query(
-                    `SELECT scheduled_at, patient_id FROM psychotherapy_appointments
+                    `SELECT scheduled_at, patient_id, calendar_event_id, parent_id, group_id FROM psychotherapy_appointments
                      WHERE id = $1 AND tenant_id = $2
                      FOR UPDATE`,
                     [data.id, tenantId]
@@ -50,6 +53,9 @@ export class PostgresAppointmentRepository {
                 if (prev.rows[0]) {
                     oldMonth = toMonthStr(new Date(prev.rows[0].scheduled_at));
                     oldPatientId = prev.rows[0].patient_id;
+                    existingCalendarEventId = prev.rows[0].calendar_event_id;
+                    existingParentId = prev.rows[0].parent_id;
+                    existingGroupId = prev.rows[0].group_id;
                 }
             }
 
@@ -98,9 +104,10 @@ export class PostgresAppointmentRepository {
             const endedAt = new Date(scheduledAt.getTime() + duration * 60 * 1000);
 
             // Determinar se é grupo ou individual
-            const isGroup = !!data.groupId;
+            const finalGroupId = data.groupId !== undefined ? data.groupId : existingGroupId;
+            const isGroup = !!finalGroupId;
             const eventType = isGroup ? 'group' : 'individual';
-            let calendarEventId = data.calendarEventId;
+            let calendarEventId = data.calendarEventId !== undefined ? data.calendarEventId : existingCalendarEventId;
             const eventStatus = (data.status === 'attended' || data.status === 'no_show') ? 'completed' : (data.status ?? 'scheduled');
 
             if (!calendarEventId) {
@@ -117,7 +124,7 @@ export class PostgresAppointmentRepository {
                         await client.query(`
                             INSERT INTO calendar_events (id, tenant_id, scheduled_at, ended_at, duration_minutes, event_type, status, group_id)
                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
-                        `, [calendarEventId, tenantId, scheduledAt, endedAt, duration, eventType, eventStatus, data.groupId]);
+                        `, [calendarEventId, tenantId, scheduledAt, endedAt, duration, eventType, eventStatus, finalGroupId]);
                     }
                 } else {
                     // Individual usa 1-para-1 correspondência
@@ -186,9 +193,9 @@ export class PostgresAppointmentRepository {
                 data.recurrence ?? 'none',
                 data.recurrenceEndDate ?? null,
                 data.notes ?? null,
-                data.parentId ?? null,
+                data.parentId !== undefined ? data.parentId : existingParentId,
                 calendarEventId,
-                data.groupId ?? null,
+                finalGroupId,
                 data.status === 'canceled' ? 'deleted' : 'pending',
                 data.modality ?? 'online'
             ]);
