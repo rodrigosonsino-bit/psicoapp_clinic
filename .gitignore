@@ -39,3 +39,6 @@ coverage
 # Dado real de paciente — nunca versionar
 planilha_real*.csv
 import_report_*.json
+
+# Build Cache
+*.tsbuildinfo
