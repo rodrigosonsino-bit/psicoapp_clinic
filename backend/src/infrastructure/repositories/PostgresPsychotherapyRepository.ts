@@ -131,6 +131,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return this.tenantProfileRepository.updateTenantProfile(data);
     }
 
+    async upsertTranscriptionIntegration(tenantId: string, provider: 'google_meet_native' | 'deepgram_web', status: 'pending_consent' | 'active' | 'revoked' | 'error', googleAccountId?: string, scopes?: string[]): Promise<void> {
+        await this.tenantProfileRepository.upsertTranscriptionIntegration(tenantId, provider, status, googleAccountId, scopes);
+    }
+
     async saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt> {
         return this.billingRepository.saveReceipt(data);
     }
@@ -283,8 +287,8 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return this.appointmentRepository.findAppointmentByGoogleEventId(tenantId, googleEventId);
     }
 
-    async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null, googleMeetLink?: string | null): Promise<void> {
-        return this.appointmentRepository.updateAppointmentGoogleEvent(id, tenantId, googleEventId, googleEventUrl, googleMeetLink);
+    async updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null, googleMeetLink?: string | null, meetSpaceName?: string | null): Promise<void> {
+        return this.appointmentRepository.updateAppointmentGoogleEvent(id, tenantId, googleEventId, googleEventUrl, googleMeetLink, meetSpaceName);
     }
 
     async markAppointmentGoogleSyncProcessing(id: string, tenantId: string): Promise<void> {

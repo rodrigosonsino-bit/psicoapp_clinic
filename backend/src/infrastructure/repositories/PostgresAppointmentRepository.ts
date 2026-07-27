@@ -154,13 +154,15 @@ export class PostgresAppointmentRepository {
                 INSERT INTO psychotherapy_appointments (
                     id, tenant_id, patient_id, scheduled_at, duration_minutes,
                     status, recurrence, recurrence_end_date, notes, parent_id,
-                    calendar_event_id, group_id, google_sync_state, google_sync_updated_at, modality
+                    calendar_event_id, group_id, google_sync_state, google_sync_updated_at, modality,
+                    meet_space_name
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
                     $13,
                     NOW(),
-                    $14
+                    $14,
+                    $15
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     patient_id = EXCLUDED.patient_id,
@@ -174,6 +176,7 @@ export class PostgresAppointmentRepository {
                     calendar_event_id = EXCLUDED.calendar_event_id,
                     group_id = EXCLUDED.group_id,
                     modality = EXCLUDED.modality,
+                    meet_space_name = COALESCE(EXCLUDED.meet_space_name, psychotherapy_appointments.meet_space_name),
                     google_sync_state = CASE
                         WHEN EXCLUDED.status = 'canceled' THEN 'deleted'
                         ELSE 'pending'
@@ -197,7 +200,8 @@ export class PostgresAppointmentRepository {
                 calendarEventId,
                 finalGroupId,
                 data.status === 'canceled' ? 'deleted' : 'pending',
-                data.modality ?? 'online'
+                data.modality ?? 'online',
+                data.meetSpaceName ?? null
             ]);
 
             if (result.rows.length === 0) {
@@ -576,7 +580,9 @@ export class PostgresAppointmentRepository {
                 p.email         AS patient_email,
                 p.reminder_channel,
                 a.scheduled_at,
-                a.duration_minutes
+                a.duration_minutes,
+                a.google_meet_link,
+                a.modality
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
             JOIN tenants t ON t.id = a.tenant_id
@@ -597,7 +603,9 @@ export class PostgresAppointmentRepository {
             patientEmail:   row.patient_email,
             reminderChannel: row.reminder_channel ?? 'whatsapp',
             scheduledAt:    new Date(row.scheduled_at),
-            durationMinutes: row.duration_minutes
+            durationMinutes: row.duration_minutes,
+            googleMeetLink: row.google_meet_link,
+            modality:       row.modality
         }));
     }
 
@@ -613,7 +621,9 @@ export class PostgresAppointmentRepository {
                 p.email         AS patient_email,
                 p.reminder_channel,
                 a.scheduled_at,
-                a.duration_minutes
+                a.duration_minutes,
+                a.google_meet_link,
+                a.modality
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
             JOIN tenants t ON t.id = a.tenant_id
@@ -655,7 +665,9 @@ export class PostgresAppointmentRepository {
             patientEmail:   row.patient_email,
             reminderChannel: row.reminder_channel ?? 'whatsapp',
             scheduledAt:    new Date(row.scheduled_at),
-            durationMinutes: row.duration_minutes
+            durationMinutes: row.duration_minutes,
+            googleMeetLink: row.google_meet_link,
+            modality:       row.modality
         }));
     }
 
@@ -703,7 +715,8 @@ export class PostgresAppointmentRepository {
         tenantId: string,
         googleEventId: string,
         googleEventUrl: string | null,
-        googleMeetLink?: string | null
+        googleMeetLink?: string | null,
+        meetSpaceName?: string | null
     ): Promise<void> {
         const validTenantId = validateTenantId(tenantId);
         if (!googleEventId.trim()) {
@@ -714,6 +727,7 @@ export class PostgresAppointmentRepository {
             SET google_event_id = $3,
                 google_event_url = $4,
                 google_meet_link = COALESCE($5, google_meet_link),
+                meet_space_name = COALESCE($6, meet_space_name),
                 google_sync_state = 'synced',
                 google_sync_attempts = 0,
                 google_sync_last_error = NULL,
@@ -721,7 +735,7 @@ export class PostgresAppointmentRepository {
                 updated_at = NOW()
             WHERE id = $1 AND tenant_id = $2
             RETURNING id;
-        `, [id, validTenantId, googleEventId, googleEventUrl, googleMeetLink ?? null]);
+        `, [id, validTenantId, googleEventId, googleEventUrl, googleMeetLink ?? null, meetSpaceName ?? null]);
         if (result.rowCount !== 1) {
             throw new NotFoundError('Agendamento não encontrado ao persistir vínculo com Google Calendar');
         }

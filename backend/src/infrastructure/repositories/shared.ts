@@ -96,7 +96,10 @@ export function mapClinicalNote(row: ClinicalNoteRow): ClinicalNote {
         row.content,
         row.tags ?? [],
         new Date(row.created_at),
-        new Date(row.updated_at)
+        new Date(row.updated_at),
+        row.status,
+        row.source,
+        row.version
     );
 }
 
@@ -130,7 +133,8 @@ export function mapAppointment(row: AppointmentRow): PsychotherapyAppointment {
         row.google_sync_last_error ?? null,
         row.google_sync_updated_at ? new Date(row.google_sync_updated_at) : null,
         row.google_meet_link ?? null,
-        row.modality ?? 'online'
+        row.modality ?? 'online',
+        row.meet_space_name ?? null
     );
 }
 

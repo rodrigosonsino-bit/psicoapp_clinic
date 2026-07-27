@@ -26,6 +26,8 @@ import { SyncGoogleCalendarEventsUseCase } from './application/useCases/SyncGoog
 import { GoogleCalendarSyncJob } from './infrastructure/scheduler/GoogleCalendarSyncJob';
 import { IPsychotherapyRepository } from './domain/repositories/IPsychotherapyRepository';
 import { PixController } from './presentation/controllers/PixController';
+import { ClinicalAIService } from './infrastructure/services/ClinicalAIService';
+import { TranscriptionJobScheduler } from './infrastructure/scheduler/TranscriptionJobScheduler';
 import { WhatsappSessionManager } from '@antigravity/whatsapp-core';
 import { createPaymentReceiptHandler } from './infrastructure/whatsapp/PaymentReceiptHandler';
 import nodeCron from 'node-cron';
@@ -288,6 +290,21 @@ if (require.main === module) {
                     const syncUseCase = container.resolve(SyncGoogleCalendarEventsUseCase);
                     const syncJob = new GoogleCalendarSyncJob(syncUseCase);
                     syncJob.start();
+                }
+
+                // Transcription Scheduler
+                if (process.env.ENABLE_TRANSCRIPTION_SCHEDULER !== 'false') {
+                    // Requires ClinicalAIService to generate summaries
+                    const clinicalAIService = container.resolve(ClinicalAIService);
+                    
+                    const transcriptionScheduler = new TranscriptionJobScheduler(
+                        dbPool,
+                        async (transcript: string, appointmentId: string) => {
+                            return clinicalAIService.generateSummaryDraft(transcript);
+                        }
+                    );
+                    transcriptionScheduler.start();
+                    logger.info('🎙️ TranscriptionJobScheduler iniciado.');
                 }
 
                 // Broadcast (mensagem em massa): desligado por padrão via feature flags.

@@ -10,7 +10,7 @@ interface Props {
   googleMeetLink: string | null | undefined;
 }
 
-type PanelState = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
+type PanelState = 'idle' | 'uploading' | 'processing' | 'done' | 'error' | 'draft';
 
 // Helper: no-op abort controller for environments without native support
 const makeAbortController = () =>
@@ -26,17 +26,18 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
   // AbortController for cancelling in-flight fetch requests on unmount
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const [transcription, setTranscription] = useState<SessionTranscription | null>(null);
+  const [transcription, setTranscription] = useState<any | null>(null);
   const [panelState, setPanelState] = useState<PanelState>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [editedSoap, setEditedSoap] = useState('');
   const [loadingExisting, setLoadingExisting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  // 'audio' = upload de áudio | 'text' = colar texto manualmente
   const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio');
   const [manualText, setManualText] = useState('');
+  const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
+  const [noteVersion, setNoteVersion] = useState<number>(1);
+  const [isApproving, setIsApproving] = useState(false);
 
-  // Cleanup on unmount: stop any running intervals and abort pending fetches
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -50,19 +51,38 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
   }, []);
 
   const loadExistingTranscription = useCallback(async () => {
+    // If a request is already in flight, abort it
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
     const controller = makeAbortController();
     abortControllerRef.current = controller;
+    
     try {
       setLoadingExisting(true);
-      const data = await fetchApi<SessionTranscription>(
+      const data = await fetchApi<any>(
         `/api/psychotherapy/sessions/${sessionId}/transcription`
       );
       if (!isMountedRef.current) return;
-      setTranscription(data);
-      setEditedSoap(data.soapDraft || '');
-      setPanelState('done');
+      
+      if (data.status === 'pending' || data.status === 'waiting_artifact' || data.status === 'processing') {
+          // Keep polling
+          setPanelState('processing');
+      } else if (data.status === 'failed' || data.status === 'abandoned') {
+          setPanelState('error');
+          toast.error('Falha na transcrição ou limite de tentativas excedido.');
+      } else if (data.status === 'draft') {
+          setTranscription(data);
+          setEditedSoap(data.soapDraft || '');
+          setClinicalNoteId(data.id);
+          setNoteVersion(data.version || 1);
+          setPanelState('draft');
+      } else if (data.status === 'completed') {
+          setTranscription(data);
+          setEditedSoap(data.soapDraft || '');
+          setPanelState('done');
+      }
     } catch {
-      // 404 means no transcription yet — that's fine
       if (!isMountedRef.current) return;
       setPanelState('idle');
     } finally {
@@ -72,7 +92,51 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
 
   useEffect(() => {
     loadExistingTranscription();
+    // Only poll if we are in processing or queued state (managed inside useEffect if needed)
+    // Actually, setting up an interval for polling:
+    let intervalId: ReturnType<typeof setInterval>;
+    
+    const startPolling = () => {
+      intervalId = setInterval(async () => {
+         await loadExistingTranscription();
+      }, 5000);
+    };
+    
+    // In React, it's better to just do it via setTimeout based on state
   }, [loadExistingTranscription]);
+
+  useEffect(() => {
+      let intervalId: ReturnType<typeof setInterval>;
+      if (panelState === 'processing') {
+          intervalId = setInterval(() => {
+              loadExistingTranscription();
+          }, 5000);
+      }
+      return () => {
+          if (intervalId) clearInterval(intervalId);
+      };
+  }, [panelState, loadExistingTranscription]);
+
+  const handleApproveDraft = async () => {
+      if (!clinicalNoteId) return;
+      try {
+          setIsApproving(true);
+          await fetchApi(`/api/psychotherapy/clinical-notes/${clinicalNoteId}/actions/approve`, {
+              method: 'POST',
+              body: JSON.stringify({ version: noteVersion, content: editedSoap }),
+          });
+          toast.success('Rascunho aprovado e convertido em nota final!');
+          setPanelState('done');
+      } catch (err: any) {
+          if (err.status === 409) {
+              toast.error('A nota já foi modificada ou aprovada por outra janela.');
+          } else {
+              toast.error('Erro ao aprovar rascunho.');
+          }
+      } finally {
+          setIsApproving(false);
+      }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -375,12 +439,12 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
           </div>
         )}
 
-        {/* State: done — show transcript + SOAP editor */}
-        {panelState === 'done' && transcription && (
+        {/* State: done or draft — show transcript + SOAP editor */}
+        {(panelState === 'done' || panelState === 'draft') && transcription && (
           <div className="stp-result">
             <div className="stp-result-header">
               <CheckCircle2 size={16} className="stp-icon-success" />
-              <span>Processamento concluído</span>
+              <span>{panelState === 'draft' ? 'Rascunho gerado (Aprovação pendente)' : 'Processamento concluído'}</span>
               <button
                 type="button"
                 className="btn btn-secondary stp-redo-btn"
@@ -410,28 +474,45 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
                   <Sparkles size={14} className="stp-icon-ai" />
                   <span className="stp-soap-label">Rascunho de Prontuário (SOAP)</span>
                 </div>
-                <button
-                  type="button"
-                  className="btn-icon"
-                  onClick={handleCopySoap}
-                  title="Copiar rascunho"
-                  id="copy-soap-btn"
-                >
-                  <Copy size={14} />
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    onClick={handleCopySoap}
+                    title="Copiar rascunho"
+                    id="copy-soap-btn"
+                  >
+                    <Copy size={16} />
+                  </button>
+                  {panelState === 'draft' && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleApproveDraft}
+                      disabled={isApproving}
+                      id="approve-draft-btn"
+                    >
+                      {isApproving ? <Loader2 size={16} className="stp-spin" /> : <CheckCircle2 size={16} />}
+                      Aprovar Rascunho
+                    </button>
+                  )}
+                </div>
               </div>
 
               <textarea
                 className="stp-soap-textarea"
                 value={editedSoap}
-                onChange={e => setEditedSoap(e.target.value)}
-                placeholder="O rascunho SOAP gerado pela IA aparecerá aqui..."
+                onChange={e => {
+                  setEditedSoap(e.target.value);
+                  // stop polling if editing
+                  if (panelState === 'processing') setPanelState('draft'); 
+                }}
+                id="edit-soap-textarea"
                 rows={16}
-                id="soap-draft-textarea"
               />
 
               <p className="stp-soap-hint">
-                Revise, edite e copie o conteúdo acima para colar no prontuário oficial do paciente.
+                O conteúdo acima é gerado por IA. Revise antes de oficializar na ficha do paciente.
               </p>
             </div>
           </div>

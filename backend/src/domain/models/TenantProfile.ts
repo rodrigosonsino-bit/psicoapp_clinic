@@ -23,7 +23,8 @@ export class TenantProfile {
         public readonly address: string | null,
         public readonly twoFactorEnabled: boolean = false,
         public readonly bookingPage: BookingPageSettings | null = null,
-        public readonly cardFeeRates: CardFeeRates | null = null
+        public readonly cardFeeRates: CardFeeRates | null = null,
+        public readonly transcriptionPreference: 'deepgram_web' | 'google_meet_native' = 'deepgram_web'
     ) {}
 
     toJSON() {
@@ -37,7 +38,8 @@ export class TenantProfile {
             address: this.address,
             twoFactorEnabled: this.twoFactorEnabled,
             bookingPage: this.bookingPage,
-            cardFeeRates: this.cardFeeRates
+            cardFeeRates: this.cardFeeRates,
+            transcriptionPreference: this.transcriptionPreference
         };
     }
 }

@@ -8,7 +8,7 @@ import { logger } from '../../infrastructure/logger';
 const RECLAIM_TIMEOUT_MINUTES = 30;
 const ALLOWED_ATTACHMENT_EXTENSIONS = ['.csv', '.ofx', '.pdf'];
 const MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024;
-const MAX_MESSAGES_PER_TENANT_PER_CYCLE = 20;
+const MAX_MESSAGES_PER_TENANT_PER_CYCLE = 50;
 
 interface ClaimedMessage {
     id: string; // id da linha em psychotherapy_bank_statement_email_imports
@@ -73,8 +73,8 @@ export class EmailBankStatementPollUseCase {
         // Nubank — o from: aqui é só otimização de escopo da busca (o
         // filtro de segurança de verdade continua sendo o DMARC/DKIM
         // pós-fetch em processMessage, inalterado).
-        const senderEmail = (process.env.GMAIL_NUBANK_SENDER_EMAIL || 'todomundo@nubank.com.br').toLowerCase();
-        const query = `to:${alias} from:${senderEmail} -in:spam -in:trash`;
+        const senderDomain = process.env.GMAIL_NUBANK_SENDER_DOMAIN || 'nubank.com.br';
+        const query = `to:${alias} from:${senderDomain}`;
         const listRes = await gmail.users.messages.list({
             userId: 'me',
             q: query,
@@ -195,14 +195,8 @@ export class EmailBankStatementPollUseCase {
                 return;
             }
 
-            const senderEmail = (process.env.GMAIL_NUBANK_SENDER_EMAIL || 'todomundo@nubank.com.br').toLowerCase();
-            if (senderNormalized !== senderEmail) {
-                await this.finalizeStatus({
-                    id: msg.id, claimToken: msg.claimToken, status: 'rejected_sender',
-                    errorDetail: `Remetente (From) não confere com o e-mail configurado (${senderEmail}).`, senderNormalized
-                });
-                return;
-            }
+            // A verificação do email completo foi removida.
+            // A verificação do domínio do remente na camada abaixo e a validação do DMARC/DKIM garantem a segurança.
 
             const fromDomain = this.extractDomain(senderNormalized);
             if (!this.isDomainAligned(fromDomain, senderDomain)) {

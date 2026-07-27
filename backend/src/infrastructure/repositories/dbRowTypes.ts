@@ -50,6 +50,7 @@ export interface TenantProfileRow {
     totp_enabled?: boolean;
     booking_page?: import('../../domain/models/TenantProfile').BookingPageSettings | null;
     card_fee_rates?: import('../../domain/models/TenantProfile').CardFeeRates | null;
+    transcription_preference?: 'deepgram_web' | 'google_meet_native';
 }
 
 // Linha da tabela: psychotherapy_receipts
@@ -163,6 +164,9 @@ export interface ClinicalNoteRow {
     tags: string[];
     created_at: Date;
     updated_at: Date;
+    status: 'draft' | 'final';
+    source: 'manual' | 'meet_transcript';
+    version: number;
 }
 
 // Linha da tabela: psychotherapy_appointments
@@ -191,4 +195,5 @@ export interface AppointmentRow {
     google_sync_updated_at: Date | null;
     google_meet_link?: string | null;
     modality: 'online' | 'presencial';
+    meet_space_name?: string | null;
 }

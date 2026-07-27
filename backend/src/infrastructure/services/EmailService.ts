@@ -6,6 +6,8 @@ export interface AppointmentReminderParams {
     therapistName: string;
     scheduledAt: Date;
     durationMinutes: number;
+    googleMeetLink?: string | null;
+    modality?: 'online' | 'presencial';
 }
 
 function formatDateTimeBR(date: Date): string {
@@ -22,6 +24,10 @@ function formatDateTimeBR(date: Date): string {
 
 function buildEmailHtml(p: AppointmentReminderParams): string {
     const dateStr = formatDateTimeBR(p.scheduledAt);
+    const meetLinkHtml = (p.modality === 'online' && p.googleMeetLink)
+        ? `<tr><td style="padding:16px 0 0;"><a href="${p.googleMeetLink}" style="background:#10b981;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;font-weight:600;display:inline-block;">🎥 Acessar Sessão Online (Meet)</a></td></tr>`
+        : '';
+
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -42,6 +48,7 @@ function buildEmailHtml(p: AppointmentReminderParams): string {
               <tr><td style="padding:6px 0;font-size:15px;">📅 <strong>Data e Hora:</strong> ${dateStr}</td></tr>
               <tr><td style="padding:6px 0;font-size:15px;">⏱️ <strong>Duração:</strong> ${p.durationMinutes} minutos</td></tr>
               <tr><td style="padding:6px 0;font-size:15px;">👩‍⚕️ <strong>Terapeuta:</strong> ${p.therapistName}</td></tr>
+              ${meetLinkHtml}
             </table>
           </div>
           <p style="margin:0 0 8px;color:#4b5563;">Em caso de imprevistos, entre em contato com antecedência para que possamos reorganizar a agenda.</p>
@@ -56,18 +63,26 @@ function buildEmailHtml(p: AppointmentReminderParams): string {
 
 function buildEmailText(p: AppointmentReminderParams): string {
     const dateStr = formatDateTimeBR(p.scheduledAt);
-    return [
+    const parts = [
         `Olá, ${p.patientName}!`,
         '',
         'Lembramos que você tem uma sessão de psicoterapia marcada:',
         `  Data e Hora : ${dateStr}`,
         `  Duração     : ${p.durationMinutes} minutos`,
-        `  Terapeuta   : ${p.therapistName}`,
+        `  Terapeuta   : ${p.therapistName}`
+    ];
+    
+    if (p.modality === 'online' && p.googleMeetLink) {
+        parts.push(`  Vídeo       : ${p.googleMeetLink}`);
+    }
+    
+    parts.push(
         '',
         'Em caso de imprevistos, entre em contato com antecedência.',
         '',
-        'Este é um lembrete automático. Por favor, não responda este e-mail.',
-    ].join('\n');
+        'Este é um lembrete automático. Por favor, não responda este e-mail.'
+    );
+    return parts.join('\n');
 }
 
 export class EmailService {

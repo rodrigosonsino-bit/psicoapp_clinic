@@ -29,7 +29,11 @@ const DEFAULT_REMINDER_TEMPLATE =
 
 function buildWhatsAppMessage(appointment: UpcomingAppointment): string {
     const dateStr = formatDateTimeBR(appointment.scheduledAt);
-    const template = DEFAULT_REMINDER_TEMPLATE;
+    let template = DEFAULT_REMINDER_TEMPLATE;
+
+    if (appointment.modality === 'online' && appointment.googleMeetLink) {
+        template += `\n\n🎥 Link da videochamada: ${appointment.googleMeetLink}`;
+    }
 
     return template
         .replace(/{nome}/g, appointment.patientName)
@@ -298,6 +302,8 @@ export class ReminderScheduler {
                 therapistName: appt.tenantName,
                 scheduledAt: appt.scheduledAt,
                 durationMinutes: appt.durationMinutes,
+                googleMeetLink: appt.googleMeetLink,
+                modality: appt.modality,
             });
 
             await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'email', 'success');

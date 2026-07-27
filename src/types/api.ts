@@ -191,6 +191,7 @@ export interface TenantProfile {
   twoFactorEnabled?: boolean;
   bookingPage?: BookingPageSettings | null;
   cardFeeRates?: CardFeeRates | null;
+  transcriptionPreference?: 'deepgram_web' | 'google_meet_native';
 }
 
 export interface DashboardAnalytics {
@@ -350,6 +351,8 @@ export interface ClinicalNote {
   noteDate: string;
   content: string;
   tags: string[];
+  status?: 'draft' | 'final';
+  source?: 'manual' | 'meet_transcript' | 'deepgram';
   createdAt: string;
   updatedAt: string;
 }

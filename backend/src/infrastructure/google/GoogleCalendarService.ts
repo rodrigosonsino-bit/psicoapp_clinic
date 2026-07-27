@@ -51,20 +51,30 @@ export class GoogleCalendarService {
      * atacante podia forjar seu próprio `code` e vinculá-lo ao tenant de
      * outra pessoa. Mesmo padrão já usado em GmailAuthService.
      */
-    async getAuthorizationUrl(tenantId: string): Promise<string> {
+    /**
+     * @param tenantId - ID do tenant
+     * @param requestMeetScope - Se true, adiciona o escopo meetings.space.readonly para transcrições
+     */
+    async getAuthorizationUrl(tenantId: string, requestMeetScope = false): Promise<string> {
         const token = crypto.randomBytes(32).toString('hex');
         const stateHash = crypto.createHash('sha256').update(token).digest('hex');
 
         await this.dbPool.query(
-            `INSERT INTO google_oauth_states (state_hash, tenant_id, expires_at)
-             VALUES ($1, $2, NOW() + INTERVAL '${STATE_TTL_MINUTES} minutes')`,
-            [stateHash, tenantId]
+            `INSERT INTO google_oauth_states (state_hash, tenant_id, expires_at, intent)
+             VALUES ($1, $2, NOW() + INTERVAL '${STATE_TTL_MINUTES} minutes', $3)
+             ON CONFLICT DO NOTHING`,
+            [stateHash, tenantId, requestMeetScope ? 'meet_transcription' : 'calendar']
         );
+
+        const scopes = ['https://www.googleapis.com/auth/calendar'];
+        if (requestMeetScope) {
+            scopes.push('https://www.googleapis.com/auth/meetings.space.readonly');
+        }
 
         const oauth2Client = this.createOAuth2Client();
         return oauth2Client.generateAuthUrl({
             access_type: 'offline',
-            scope: ['https://www.googleapis.com/auth/calendar'],
+            scope: scopes,
             state: token,
             prompt: 'consent',
         });
@@ -77,27 +87,27 @@ export class GoogleCalendarService {
      * — nunca ler depois escrever em passos separados, contra replay).
      * Lança erro explícito se inválido/expirado/já consumido.
      */
-    private async consumeState(state: string): Promise<string> {
+    private async consumeState(state: string): Promise<{ tenantId: string, intent: string }> {
         const stateHash = crypto.createHash('sha256').update(state).digest('hex');
 
-        const result = await this.dbPool.query<{ tenant_id: string }>(
+        const result = await this.dbPool.query<{ tenant_id: string, intent: string }>(
             `UPDATE google_oauth_states
              SET consumed_at = NOW()
              WHERE state_hash = $1 AND expires_at > NOW() AND consumed_at IS NULL
-             RETURNING tenant_id`,
+             RETURNING tenant_id, intent`,
             [stateHash]
         );
 
-        const tenantId = result.rows[0]?.tenant_id;
-        if (!tenantId) {
+        const row = result.rows[0];
+        if (!row?.tenant_id) {
             throw new Error('State OAuth do Google Calendar inválido, expirado ou já utilizado.');
         }
-        return tenantId;
+        return { tenantId: row.tenant_id, intent: row.intent };
     }
 
     /** `state` é validado/consumido aqui — o `tenantId` usado no restante do fluxo vem só disso, nunca de um valor cru recebido do cliente. */
-    async exchangeCodeForTokens(code: string, state: string): Promise<void> {
-        const tenantId = await this.consumeState(state);
+    async exchangeCodeForTokens(code: string, state: string): Promise<{ tenantId: string, intent: string, tokens: any }> {
+        const { tenantId, intent } = await this.consumeState(state);
         const oauth2Client = this.createOAuth2Client();
         const { tokens } = await oauth2Client.getToken(code);
 
@@ -118,7 +128,8 @@ export class GoogleCalendarService {
             calendarId
         );
 
-        logger.info({ tenantId, calendarId }, '✅ Google Calendar conectado com sucesso');
+        logger.info({ tenantId, calendarId, intent }, '✅ Google Calendar conectado com sucesso');
+        return { tenantId, intent, tokens };
     }
 
     async getAuthenticatedClient(tenantId: string): Promise<OAuth2Client | null> {
@@ -317,12 +328,14 @@ export class GoogleCalendarService {
                     requestBody: updateRequestBody,
                     conferenceDataVersion: 1,
                 });
+                const confId = updated.data.conferenceData?.conferenceId;
                 await this.repository.updateAppointmentGoogleEvent(
                     appointment.id,
                     tenantId,
                     appointment.googleEventId,
                     updated.data.htmlLink ?? appointment.googleEventUrl,
-                    updated.data.hangoutLink ?? appointment.googleMeetLink
+                    updated.data.hangoutLink ?? appointment.googleMeetLink,
+                    confId ? `spaces/${confId}` : null
                 );
                 logger.info({ appointmentId: appointment.id, eventId: appointment.googleEventId }, '🔄 Evento Google Calendar atualizado');
             } else {
@@ -343,6 +356,7 @@ export class GoogleCalendarService {
                 let eventId = deterministicId;
                 let eventUrl: string | null = null;
                 let meetLink: string | null = null;
+                let meetSpaceName: string | null = null;
 
                 try {
                     const created = await calendar.events.insert({
@@ -353,6 +367,8 @@ export class GoogleCalendarService {
                     eventId = created.data.id ?? deterministicId;
                     eventUrl = created.data.htmlLink ?? null;
                     meetLink = created.data.hangoutLink ?? null;
+                    const confId = created.data.conferenceData?.conferenceId;
+                    meetSpaceName = confId ? `spaces/${confId}` : null;
                 } catch (insertErr: any) {
                     if (this.errorCode(insertErr) !== 409) throw insertErr;
 
@@ -406,6 +422,8 @@ export class GoogleCalendarService {
                     eventId = updated.data.id ?? deterministicId;
                     eventUrl = updated.data.htmlLink ?? existing.data.htmlLink ?? null;
                     meetLink = updated.data.hangoutLink ?? existing.data.hangoutLink ?? null;
+                    const confId = updated.data.conferenceData?.conferenceId ?? existing.data.conferenceData?.conferenceId;
+                    meetSpaceName = confId ? `spaces/${confId}` : null;
                     logger.warn(
                         { appointmentId: appointment.id, eventId: deterministicId },
                         '♻️ Conflito idempotente do Google Calendar reconciliado sem duplicar evento'
@@ -417,7 +435,8 @@ export class GoogleCalendarService {
                     tenantId,
                     eventId,
                     eventUrl,
-                    meetLink
+                    meetLink,
+                    meetSpaceName
                 );
                 logger.info({ appointmentId: appointment.id, eventId }, '✅ Evento criado/vinculado no Google Calendar');
             }

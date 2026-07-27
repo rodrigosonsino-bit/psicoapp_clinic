@@ -27,6 +27,7 @@ export class PsychotherapyAppointment {
         public readonly googleSyncLastError: string | null = null,
         public readonly googleSyncUpdatedAt: Date | null = null,
         public readonly googleMeetLink: string | null = null,
-        public readonly modality: 'online' | 'presencial' = 'online'
+        public readonly modality: 'online' | 'presencial' = 'online',
+        public readonly meetSpaceName: string | null = null
     ) {}
 }

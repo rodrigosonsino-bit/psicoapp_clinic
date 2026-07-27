@@ -18,7 +18,7 @@ export class PostgresTenantProfileRepository {
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
@@ -46,9 +46,10 @@ export class PostgresTenantProfileRepository {
                 address = COALESCE($5, address),
                 booking_page = COALESCE($6::jsonb, booking_page),
                 card_fee_rates = CASE WHEN $7 THEN $8::jsonb ELSE card_fee_rates END,
+                transcription_preference = COALESCE($9, transcription_preference),
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
@@ -57,14 +58,15 @@ export class PostgresTenantProfileRepository {
             data.address !== undefined ? data.address : null,
             data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null,
             cardFeeRatesProvided,
-            cardFeeRatesValue
+            cardFeeRatesValue,
+            data.transcriptionPreference !== undefined ? data.transcriptionPreference : null
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Tenant não encontrado');
         return this.mapTenantProfile(result.rows[0]);
     }
 
-    private mapTenantProfile(row: TenantProfileRow): TenantProfile {
+    private mapTenantProfile(row: any): TenantProfile {
         return new TenantProfile(
             row.id,
             row.name,
@@ -75,7 +77,23 @@ export class PostgresTenantProfileRepository {
             row.address,
             row.totp_enabled || false,
             row.booking_page ?? null,
-            row.card_fee_rates ?? null
+            row.card_fee_rates ?? null,
+            row.transcription_preference ?? 'deepgram_web'
         );
+    }
+
+    async upsertTranscriptionIntegration(tenantId: string, provider: 'google_meet_native' | 'deepgram_web', status: 'pending_consent' | 'active' | 'revoked' | 'error', googleAccountId?: string, scopes?: string[]): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        await this.dbPool.query(`
+            INSERT INTO transcription_integrations (tenant_id, provider, status, google_account_id, scopes_granted, enabled_at)
+            VALUES ($1, $2, $3, $4, $5, CASE WHEN $3 = 'active' THEN NOW() ELSE NULL END)
+            ON CONFLICT (tenant_id, provider) DO UPDATE SET
+                status = EXCLUDED.status,
+                google_account_id = COALESCE(EXCLUDED.google_account_id, transcription_integrations.google_account_id),
+                scopes_granted = COALESCE(EXCLUDED.scopes_granted, transcription_integrations.scopes_granted),
+                enabled_at = CASE WHEN EXCLUDED.status = 'active' AND transcription_integrations.status != 'active' THEN NOW() ELSE transcription_integrations.enabled_at END,
+                revoked_at = CASE WHEN EXCLUDED.status = 'revoked' THEN NOW() ELSE NULL END,
+                updated_at = NOW();
+        `, [validTenantId, provider, status, googleAccountId || null, scopes ? scopes : null]);
     }
 }

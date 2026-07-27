@@ -8,6 +8,9 @@ export class ClinicalNote {
         public readonly content: string,
         public readonly tags: string[],
         public readonly createdAt: Date,
-        public readonly updatedAt: Date
+        public readonly updatedAt: Date,
+        public readonly status: 'draft' | 'final' = 'final',
+        public readonly source: 'manual' | 'meet_transcript' = 'manual',
+        public readonly version: number = 1
     ) {}
 }

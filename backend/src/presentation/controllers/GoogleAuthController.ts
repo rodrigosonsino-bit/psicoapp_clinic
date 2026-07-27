@@ -29,7 +29,8 @@ export class GoogleAuthController {
         const tenantId = (req as AuthenticatedRequest).tenantId || (req as AuthenticatedRequest).userId;
         if (!tenantId) throw new AppError('Tenant não identificado', 401);
 
-        const url = await this.googleCalendar.getAuthorizationUrl(tenantId);
+        const requestMeetScope = req.query.enableMeetTranscript === 'true';
+        const url = await this.googleCalendar.getAuthorizationUrl(tenantId, requestMeetScope);
         return res.json({ url });
     }
 
@@ -64,8 +65,12 @@ export class GoogleAuthController {
         }
 
         try {
-            await this.googleCalendar.exchangeCodeForTokens(code, state);
-            res.redirect(`${APP_FRONTEND_URL}/profile?google=connected`);
+            const { tenantId: authTenantId, intent } = await this.googleCalendar.exchangeCodeForTokens(code, state);
+            if (intent === 'meet_transcription') {
+                await this.repository.updateTenantProfile({ tenantId: authTenantId, transcriptionPreference: 'google_meet_native' });
+                await this.repository.upsertTranscriptionIntegration(authTenantId, 'google_meet_native', 'active');
+            }
+            res.redirect(`${APP_FRONTEND_URL}/profile?google=connected&intent=${intent}`);
         } catch (err) {
             logger.error({ err }, 'Erro ao trocar code Google por tokens');
             res.redirect(`${APP_FRONTEND_URL}/profile?google=error`);

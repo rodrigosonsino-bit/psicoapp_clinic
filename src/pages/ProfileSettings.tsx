@@ -13,7 +13,8 @@ export default function ProfileSettings() {
     document: '',
     professionalId: '',
     address: '',
-    twoFactorEnabled: false
+    twoFactorEnabled: false,
+    transcriptionPreference: 'deepgram_web' as 'deepgram_web' | 'google_meet_native'
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,7 +32,8 @@ export default function ProfileSettings() {
         document: data.document || '',
         professionalId: data.professionalId || '',
         address: data.address || '',
-        twoFactorEnabled: data.twoFactorEnabled || false
+        twoFactorEnabled: data.twoFactorEnabled || false,
+        transcriptionPreference: data.transcriptionPreference || 'deepgram_web'
       });
     } catch (err) {
       console.error(err);
@@ -45,6 +47,30 @@ export default function ProfileSettings() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleStatus = params.get('google');
+    const intent = params.get('intent');
+
+    if (googleStatus === 'connected') {
+      if (intent === 'meet_transcription') {
+        toast.success('Google Workspace conectado com sucesso para transcrição via Google Meet!');
+      } else {
+        toast.success('Google Workspace conectado com sucesso!');
+      }
+      
+      // Clean up URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('google');
+      url.searchParams.delete('intent');
+      window.history.replaceState({}, '', url);
+    } else if (googleStatus === 'denied') {
+      toast.error('Permissão negada pelo usuário no Google.');
+    } else if (googleStatus === 'error') {
+      toast.error('Erro ao conectar com o Google Workspace.');
+    }
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +133,10 @@ export default function ProfileSettings() {
 
       <WhatsappSection />
       <GoogleCalendarSection />
+      <GoogleMeetTranscriptionSection 
+        preference={formData.transcriptionPreference}
+        onPreferenceChange={(pref) => setFormData(prev => ({ ...prev, transcriptionPreference: pref }))}
+      />
       <GmailBankStatementSection />
       <TwoFactorSection
         enabled={formData.twoFactorEnabled}
@@ -513,6 +543,93 @@ function GoogleCalendarSection() {
               </span>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Google Meet Transcription Section ─────────────────────────────────────────
+
+function GoogleMeetTranscriptionSection({ preference, onPreferenceChange }: { preference: 'deepgram_web' | 'google_meet_native', onPreferenceChange: (pref: 'deepgram_web' | 'google_meet_native') => void }) {
+  const [connecting, setConnecting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  const handleConnect = async () => {
+    try {
+      setConnecting(true);
+      const res = await fetchApi<{ url: string }>('/auth/google/auth-url?enableMeetTranscript=true');
+      window.location.href = res.url;
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao iniciar conexão com Google Workspace.');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleRevert = async () => {
+    try {
+      setSaving(true);
+      // Calls a dedicated endpoint or updates the profile
+      await fetchApi<TenantProfile>('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ transcriptionPreference: 'deepgram_web' })
+      });
+      onPreferenceChange('deepgram_web');
+      toast.success('Padrão revertido para gravação por áudio (Deepgram).');
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao reverter preferência.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card profile-card mt-4" style={{ maxWidth: 700 }}>
+      <div className="flex items-center gap-2 mb-4">
+        <CheckCircle size={20} style={{ color: '#00832d' }} />
+        <h3 className="text-h3" style={{ margin: 0 }}>Motor de Transcrição: {preference === 'google_meet_native' ? 'Google Meet API' : 'Upload (Deepgram)'}</h3>
+      </div>
+
+      {preference === 'google_meet_native' ? (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle size={18} style={{ color: 'var(--status-success)' }} />
+            <div>
+              <p style={{ color: 'var(--text-primary)', fontWeight: 500, margin: 0 }}>
+                Ativo: <strong>Integração Nativa Google Meet</strong>
+              </p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.2rem 0 0' }}>
+                Requer permissão de organizador na reunião. O paciente deve ser admitido antes da gravação parar.
+              </p>
+            </div>
+          </div>
+          <button className="btn btn-secondary" onClick={handleRevert} disabled={saving}>
+            <RefreshCw size={16} /> {saving ? 'Revertendo...' : 'Reverter para Deepgram'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+                Utilize a integração direta com o Google Workspace para extrair transcrições automaticamente ao fim das sessões (não requer upload de áudio).
+              </p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.3rem 0 0' }}>
+                É necessário que sua conta Google seja <strong>Workspace (Business/Enterprise)</strong>.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={handleConnect}
+              disabled={connecting}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}
+            >
+              <Smartphone size={16} />
+              {connecting ? 'Redirecionando...' : 'Ativar Transcrição via Meet'}
+            </button>
+          </div>
         </div>
       )}
     </div>

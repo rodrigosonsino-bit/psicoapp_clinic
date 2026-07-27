@@ -109,13 +109,53 @@ export class TranscriptionController {
      */
     async getTranscription(req: AuthenticatedRequest, res: Response): Promise<void> {
         const tenantId = req.tenantId!;
-        const { id: sessionId } = req.params;
+        const { id: appointmentId } = req.params;
 
+        // 1. Check if there's a clinical note (draft or final)
+        const noteResult = await this.dbPool.query(`
+            SELECT id, appointment_id, content, status, version, created_at, updated_at
+            FROM psychotherapy_clinical_notes
+            WHERE tenant_id = $1 AND appointment_id = $2;
+        `, [tenantId, appointmentId]);
+
+        if (noteResult.rows.length > 0) {
+            const row = noteResult.rows[0];
+            res.status(200).json({
+                id:            row.id,
+                appointmentId: row.appointment_id,
+                rawTranscript: null, // no longer stored locally in note
+                soapDraft:     row.content,
+                status:        row.status === 'draft' ? 'draft' : 'completed',
+                version:       row.version,
+                createdAt:     row.created_at,
+                updatedAt:     row.updated_at,
+            });
+            return;
+        }
+
+        // 2. Check if there's a background transcription job
+        const jobResult = await this.dbPool.query(`
+            SELECT status, updated_at
+            FROM transcription_jobs
+            WHERE tenant_id = $1 AND appointment_id = $2
+            ORDER BY created_at DESC LIMIT 1;
+        `, [tenantId, appointmentId]);
+
+        if (jobResult.rows.length > 0) {
+            const jobRow = jobResult.rows[0];
+            res.status(200).json({
+                status: jobRow.status, // 'pending', 'waiting_artifact', 'processing', 'completed', 'failed'
+                updatedAt: jobRow.updated_at
+            });
+            return;
+        }
+
+        // 3. Fallback to legacy session_transcripts (for deepgram_web audio uploads)
         const result = await this.dbPool.query(`
             SELECT id, tenant_id, session_id, raw_transcript, summary_draft, created_at, updated_at
             FROM session_transcripts
             WHERE tenant_id = $1 AND session_id = $2;
-        `, [tenantId, sessionId]);
+        `, [tenantId, appointmentId]);
 
         if (result.rows.length === 0) {
             res.status(404).json({ message: 'Nenhuma transcrição encontrada para esta sessão.' });

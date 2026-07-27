@@ -578,6 +578,7 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/patients/:patientId/notes', validateParams(patientUuidParamSchema), validateBody(clinicalNoteSchema), asyncHandler((req, res) => clinicalNoteController.saveNote(req, res)));
     router.get('/psychotherapy/patients/:patientId/notes', validateParams(patientUuidParamSchema), validateQuery(listNotesQuerySchema), asyncHandler((req, res) => clinicalNoteController.listNotes(req, res)));
     router.delete('/psychotherapy/notes/:id', validateParams(uuidParamSchema), asyncHandler((req, res) => clinicalNoteController.deleteNote(req, res)));
+    router.post('/psychotherapy/clinical-notes/:id/actions/approve', validateParams(uuidParamSchema), asyncHandler((req, res) => clinicalNoteController.approveNote(req, res)));
 
     // Prontuário estruturado (anamnese + planos terapêuticos)
     const prontuarioController = container.resolve(ProntuarioController);

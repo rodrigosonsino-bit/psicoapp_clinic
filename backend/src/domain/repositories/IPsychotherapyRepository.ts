@@ -77,6 +77,7 @@ export interface UpdateTenantProfileDTO {
     bookingPage?: import('../models/TenantProfile').BookingPageSettings | null;
     /** ausente = não altera; null = limpa a configuração; objeto = substitui por inteiro. */
     cardFeeRates?: import('../models/TenantProfile').CardFeeRates | null;
+    transcriptionPreference?: 'deepgram_web' | 'google_meet_native';
 }
 
 export interface SaveReceiptDTO {
@@ -134,6 +135,7 @@ export interface SaveAppointmentDTO {
     calendarEventId?: string | null;
     groupId?: string | null;
     modality?: 'online' | 'presencial';
+    meetSpaceName?: string | null;
 }
 
 export interface ListAppointmentsOptions {
@@ -155,6 +157,8 @@ export interface UpcomingAppointment {
     reminderChannel: ReminderChannel;
     scheduledAt: Date;
     durationMinutes: number;
+    googleMeetLink?: string | null;
+    modality?: 'online' | 'presencial';
 }
 
 export type ReminderLogStatus = 'success' | 'failed';
@@ -268,6 +272,7 @@ export interface IPsychotherapyRepository {
     getMonthSummary(tenantId: string, month: string): Promise<PsychotherapyMonthSummary>;
     getTenantProfile(tenantId: string): Promise<TenantProfile | null>;
     updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile>;
+    upsertTranscriptionIntegration(tenantId: string, provider: 'google_meet_native' | 'deepgram_web', status: 'pending_consent' | 'active' | 'revoked' | 'error', googleAccountId?: string, scopes?: string[]): Promise<void>;
     saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt>;
     listReceipts(tenantId: string, patientId?: string): Promise<PsychotherapyReceipt[]>;
     deleteReceipt(tenantId: string, id: string, voidedBy: string, reason: string): Promise<void>;
@@ -304,7 +309,7 @@ export interface IPsychotherapyRepository {
     listClinicalNotes(tenantId: string, patientId: string, page?: number, limit?: number): Promise<PaginatedResult<ClinicalNote>>;
     findClinicalNoteById(tenantId: string, id: string): Promise<ClinicalNote | null>;
     deleteClinicalNote(tenantId: string, id: string): Promise<void>;
-    updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null, googleMeetLink?: string | null): Promise<void>;
+    updateAppointmentGoogleEvent(id: string, tenantId: string, googleEventId: string, googleEventUrl: string | null, googleMeetLink?: string | null, meetSpaceName?: string | null): Promise<void>;
     markAppointmentGoogleSyncProcessing(id: string, tenantId: string): Promise<void>;
     markAppointmentGoogleSyncError(id: string, tenantId: string, errorMessage: string): Promise<void>;
     advanceAppointmentGoogleEventGeneration(id: string, tenantId: string, expectedGeneration: number): Promise<number | null>;
