@@ -106,8 +106,19 @@ export class MeetLinkScheduler {
                 await session.sendMessage(appt.patientPhone!, message);
                 await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'meet_link_whatsapp' as any, 'success', undefined, { provider: 'baileys', retryEligible: false });
             }
-            
             logger.info({ appointmentId: appt.appointmentId, patientName: appt.patientName }, '✅ Link do Meet enviado por WhatsApp');
+
+            // Encaminhar para o terapeuta
+            const therapistPhone = '5518996994225';
+            const forwardMessage = `🔔 Lembrete do Meet JIT enviado para a paciente ${appt.patientName}.\n🎥 Sala: ${appt.googleMeetLink}`;
+            if (provider === 'meta_cloud' && this.whatsappCloudClient) {
+                await this.whatsappCloudClient.sendFreeformText(therapistPhone, forwardMessage).catch(err => logger.warn({ err }, '⚠️ Falha ao encaminhar link para o terapeuta (Cloud)'));
+            } else if (provider === 'baileys' && this.whatsappSessionManager) {
+                const session = await this.whatsappSessionManager.getSession(appt.tenantId);
+                if (session && session.isConnected()) {
+                    await session.sendMessage(therapistPhone, forwardMessage).catch(err => logger.warn({ err }, '⚠️ Falha ao encaminhar link para o terapeuta (Baileys)'));
+                }
+            }
         } catch (err) {
             logger.error({ err, appointmentId: appt.appointmentId }, '❌ Erro ao enviar Link do Meet por WhatsApp');
             // Log as failed
