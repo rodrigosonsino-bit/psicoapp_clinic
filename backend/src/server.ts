@@ -22,6 +22,7 @@ import { logger } from './infrastructure/logger';
 import { container } from './container';
 import { Pool } from 'pg';
 import { ReminderScheduler } from './infrastructure/scheduler/ReminderScheduler';
+import { MeetLinkScheduler } from './infrastructure/scheduler/MeetLinkScheduler';
 import { SyncGoogleCalendarEventsUseCase } from './application/useCases/SyncGoogleCalendarEventsUseCase';
 import { GoogleCalendarSyncJob } from './infrastructure/scheduler/GoogleCalendarSyncJob';
 import { IPsychotherapyRepository } from './domain/repositories/IPsychotherapyRepository';
@@ -230,9 +231,10 @@ if (require.main === module) {
                 // config, o sender fica undefined e o ReminderScheduler falha de forma visível
                 // (fail-closed) em vez de cair silenciosamente para o Baileys.
                 let whatsappCloudSender: IReminderMessageSender | undefined;
+                let cloudClient: WhatsappCloudClient | undefined;
                 const cloudClientConfig = loadWhatsappCloudClientConfig();
                 if (cloudClientConfig) {
-                    const cloudClient = new WhatsappCloudClient(cloudClientConfig);
+                    cloudClient = new WhatsappCloudClient(cloudClientConfig);
                     whatsappCloudSender = new WhatsappCloudSender(cloudClient, whatsappCloudRepository);
                     logger.info('☁️ WhatsappCloudSender inicializado (WhatsApp Cloud API configurada).');
                 } else if (resolveWhatsAppProvider() === 'meta_cloud') {
@@ -284,6 +286,13 @@ if (require.main === module) {
                         whatsappCloudSender
                     );
                     scheduler.start();
+
+                    const meetLinkScheduler = new MeetLinkScheduler(
+                        repository,
+                        isWhatsappEnabled ? sessionManager : undefined,
+                        cloudClient
+                    );
+                    meetLinkScheduler.start();
                 }
 
                 if (process.env.ENABLE_GCAL_SYNC === 'true') {

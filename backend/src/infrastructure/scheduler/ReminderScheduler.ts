@@ -31,9 +31,8 @@ function buildWhatsAppMessage(appointment: UpcomingAppointment): string {
     const dateStr = formatDateTimeBR(appointment.scheduledAt);
     let template = DEFAULT_REMINDER_TEMPLATE;
 
-    if (appointment.modality === 'online' && appointment.googleMeetLink) {
-        template += `\n\n🎥 Link da videochamada: ${appointment.googleMeetLink}`;
-    }
+    // O link da videochamada não é mais enviado com 24h de antecedência.
+    // Isso foi migrado para o MeetLinkScheduler (Just-in-Time).
 
     return template
         .replace(/{nome}/g, appointment.patientName)
