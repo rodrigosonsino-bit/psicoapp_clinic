@@ -103,9 +103,15 @@ export class MeetLinkScheduler {
 
         try {
             if (provider === 'meta_cloud' && this.whatsappCloudClient) {
-                const outcome = await this.whatsappCloudClient.sendFreeformText(appt.patientPhone!, message);
+                const outcome = await this.whatsappCloudClient.sendTemplateMessage(
+                    appt.patientPhone!,
+                    'meet_link_jit',
+                    'pt_BR',
+                    [{ type: 'body', values: [appt.patientName, appt.googleMeetLink!] }]
+                );
+                
                 if (outcome.kind !== 'accepted') {
-                    throw new WhatsAppDeliveryError(`Meta API rejeitou a mensagem (possivelmente fora da janela de 24h)`, 'meta_cloud', outcome);
+                    throw new WhatsAppDeliveryError(`Meta API rejeitou o Template (Status: ${outcome.kind})`, 'meta_cloud', outcome);
                 }
                 await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'meet_link_whatsapp' as any, 'success', undefined, { provider: 'meta_cloud', retryEligible: false });
             } else if (provider === 'baileys' && this.whatsappSessionManager) {
@@ -122,7 +128,12 @@ export class MeetLinkScheduler {
             const therapistPhone = '5518996994225';
             const forwardMessage = `🔔 Lembrete do Meet JIT enviado para a paciente ${appt.patientName}.\n🎥 Sala: ${appt.googleMeetLink}`;
             if (provider === 'meta_cloud' && this.whatsappCloudClient) {
-                await this.whatsappCloudClient.sendFreeformText(therapistPhone, forwardMessage).catch(err => logger.warn({ err }, '⚠️ Falha ao encaminhar link para o terapeuta (Cloud)'));
+                await this.whatsappCloudClient.sendTemplateMessage(
+                    therapistPhone,
+                    'meet_link_jit',
+                    'pt_BR',
+                    [{ type: 'body', values: [`(Cópia) ${appt.patientName}`, appt.googleMeetLink!] }]
+                ).catch(err => logger.warn({ err }, '⚠️ Falha ao encaminhar link para o terapeuta (Cloud)'));
             } else if (provider === 'baileys' && this.whatsappSessionManager) {
                 const session = await this.whatsappSessionManager.getSession(appt.tenantId);
                 if (session && session.isConnected()) {
