@@ -103,11 +103,12 @@ export class MeetLinkScheduler {
 
         try {
             if (provider === 'meta_cloud' && this.whatsappCloudClient) {
+                const timeStr = appt.scheduledAt.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
                 const outcome = await this.whatsappCloudClient.sendTemplateMessage(
                     appt.patientPhone!,
                     'meet_link_jit',
                     'pt_BR',
-                    [{ type: 'body', values: [appt.patientName, appt.googleMeetLink!] }]
+                    [{ type: 'body', values: [appt.patientName, appt.googleMeetLink!, timeStr] }]
                 );
                 
                 if (outcome.kind !== 'accepted') {
@@ -128,11 +129,12 @@ export class MeetLinkScheduler {
             const therapistPhone = '5518996994225';
             const forwardMessage = `🔔 Lembrete do Meet JIT enviado para a paciente ${appt.patientName}.\n🎥 Sala: ${appt.googleMeetLink}`;
             if (provider === 'meta_cloud' && this.whatsappCloudClient) {
+                const timeStr = appt.scheduledAt.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
                 await this.whatsappCloudClient.sendTemplateMessage(
                     therapistPhone,
                     'meet_link_jit',
                     'pt_BR',
-                    [{ type: 'body', values: [`(Cópia) ${appt.patientName}`, appt.googleMeetLink!] }]
+                    [{ type: 'body', values: [`(Cópia) ${appt.patientName}`, appt.googleMeetLink!, timeStr] }]
                 ).catch(err => logger.warn({ err }, '⚠️ Falha ao encaminhar link para o terapeuta (Cloud)'));
             } else if (provider === 'baileys' && this.whatsappSessionManager) {
                 const session = await this.whatsappSessionManager.getSession(appt.tenantId);
