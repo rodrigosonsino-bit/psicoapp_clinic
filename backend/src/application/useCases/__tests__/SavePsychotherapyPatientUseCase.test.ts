@@ -45,6 +45,7 @@ describe('SavePsychotherapyPatientUseCase', () => {
             fullName: null,
             whatsappBulkOptIn: false,
             individualTherapyEnabled: true,
+            automaticBillingOptOut: false,
             createdAt: expect.any(Date),
             updatedAt: expect.any(Date)
         };

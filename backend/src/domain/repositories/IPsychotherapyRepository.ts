@@ -24,6 +24,7 @@ export interface SavePatientDTO {
     reminderChannel?: ReminderChannel;
     fullName?: string | null;
     individualTherapyEnabled?: boolean;
+    automaticBillingOptOut?: boolean;
 }
 
 export interface SaveMonthlyRecordDTO {
@@ -78,6 +79,7 @@ export interface UpdateTenantProfileDTO {
     /** ausente = não altera; null = limpa a configuração; objeto = substitui por inteiro. */
     cardFeeRates?: import('../models/TenantProfile').CardFeeRates | null;
     transcriptionPreference?: 'deepgram_web' | 'google_meet_native';
+    automaticBillingReminders?: boolean;
 }
 
 export interface SaveReceiptDTO {
@@ -262,6 +264,7 @@ export interface IPsychotherapyRepository {
     findActivePatientById(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;
     findPatientByIdIncludingDeleted(tenantId: string, id: string): Promise<PsychotherapyPatient | null>;
     deletePatient(tenantId: string, id: string): Promise<void>;
+    updatePatientBillingOptOut(tenantId: string, patientId: string, optOut: boolean): Promise<void>;
     saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord>;
     bulkSaveMonthlyRecords(records: SaveMonthlyRecordDTO[]): Promise<PsychotherapyMonthlyRecord[]>;
     /** Credita (soma, não substitui) um valor adiantado no registro mensal de um mês futuro,
@@ -344,6 +347,11 @@ export interface IPsychotherapyRepository {
     voidPayment(tenantId: string, paymentId: string, voidedBy: string, reason: string): Promise<FinancialPayment>;
     findPaymentByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<FinancialPayment | null>;
     findPaymentById(tenantId: string, id: string): Promise<FinancialPayment | null>;
+
+    // Billing Reminders
+    listTenantsWithAutomaticBilling(): Promise<TenantProfile[]>;
+    logBillingReminder(tenantId: string, patientId: string, month: string): Promise<void>;
+    hasSentBillingReminder(tenantId: string, patientId: string, month: string): Promise<boolean>;
 }
 
 export interface FinancialPayment {

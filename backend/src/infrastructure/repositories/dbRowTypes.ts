@@ -16,6 +16,7 @@ export interface PatientRow {
     full_name: string | null;
     whatsapp_bulk_opt_in?: boolean;
     individual_therapy_enabled: boolean;
+    automatic_billing_opt_out?: boolean;
 }
 
 // Linha da tabela: psychotherapy_monthly_records
@@ -51,6 +52,7 @@ export interface TenantProfileRow {
     booking_page?: import('../../domain/models/TenantProfile').BookingPageSettings | null;
     card_fee_rates?: import('../../domain/models/TenantProfile').CardFeeRates | null;
     transcription_preference?: 'deepgram_web' | 'google_meet_native';
+    automatic_billing_reminders?: boolean;
 }
 
 // Linha da tabela: psychotherapy_receipts

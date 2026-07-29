@@ -99,6 +99,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return this.patientRepository.deletePatient(tenantId, id);
     }
 
+    async updatePatientBillingOptOut(tenantId: string, patientId: string, optOut: boolean): Promise<void> {
+        return this.patientRepository.updatePatientBillingOptOut(tenantId, patientId, optOut);
+    }
+
     async saveMonthlyRecord(data: SaveMonthlyRecordDTO): Promise<PsychotherapyMonthlyRecord> {
         return this.billingRepository.saveMonthlyRecord(data);
     }
@@ -395,6 +399,18 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async findPaymentById(tenantId: string, id: string): Promise<FinancialPayment | null> {
         return this.billingRepository.findPaymentById(tenantId, id);
+    }
+
+    async listTenantsWithAutomaticBilling(): Promise<TenantProfile[]> {
+        return this.tenantProfileRepository.listTenantsWithAutomaticBilling();
+    }
+
+    async logBillingReminder(tenantId: string, patientId: string, month: string): Promise<void> {
+        return this.billingRepository.logBillingReminder(tenantId, patientId, month);
+    }
+
+    async hasSentBillingReminder(tenantId: string, patientId: string, month: string): Promise<boolean> {
+        return this.billingRepository.hasSentBillingReminder(tenantId, patientId, month);
     }
 
     async listSessionLinksForMonth(tenantId: string, month: string): Promise<Record<string, string>> {

@@ -351,6 +351,11 @@ export function createPsychotherapyRoutes(): Router {
     router.post('/psychotherapy/months/:month/records', validateParams(monthParamSchema), validateBody(monthlyRecordSchema), asyncHandler((req, res) => controller.saveMonthlyRecord(req, res)));
     router.post('/psychotherapy/patients/:patientId/advance-credit', validateParams(advanceCreditPatientIdParamSchema), validateBody(advanceCreditSchema), asyncHandler((req, res) => controller.addAdvanceCredit(req, res)));
 
+    const billingOptOutSchema = z.object({
+        optOut: z.boolean()
+    });
+    router.patch('/psychotherapy/patients/:id/billing-opt-out', validateParams(uuidParamSchema), validateBody(billingOptOutSchema), asyncHandler((req, res) => controller.setBillingOptOut(req, res)));
+
     // Conciliação de extrato bancário (ver docs/bank-statement-reconciliation-plan.md)
     router.post(
         '/psychotherapy/bank-statements/import',

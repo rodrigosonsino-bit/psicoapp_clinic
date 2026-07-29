@@ -24,7 +24,8 @@ export class TenantProfile {
         public readonly twoFactorEnabled: boolean = false,
         public readonly bookingPage: BookingPageSettings | null = null,
         public readonly cardFeeRates: CardFeeRates | null = null,
-        public readonly transcriptionPreference: 'deepgram_web' | 'google_meet_native' = 'deepgram_web'
+        public readonly transcriptionPreference: 'deepgram_web' | 'google_meet_native' = 'deepgram_web',
+        public readonly automaticBillingReminders: boolean = false
     ) {}
 
     toJSON() {
@@ -39,7 +40,8 @@ export class TenantProfile {
             twoFactorEnabled: this.twoFactorEnabled,
             bookingPage: this.bookingPage,
             cardFeeRates: this.cardFeeRates,
-            transcriptionPreference: this.transcriptionPreference
+            transcriptionPreference: this.transcriptionPreference,
+            automaticBillingReminders: this.automaticBillingReminders
         };
     }
 }

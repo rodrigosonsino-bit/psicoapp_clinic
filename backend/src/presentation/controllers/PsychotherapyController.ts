@@ -58,6 +58,18 @@ export class PsychotherapyController {
         const patient = await this.savePatientUseCase.execute({ tenantId, ...req.body });
         return res.status(req.body.id ? 200 : 201).json({ data: patient });
     }
+    async setBillingOptOut(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const { id } = req.params;
+        const { optOut } = req.body;
+
+        const repo = (this.savePatientUseCase as any).repository || (this as any).listPatientsUseCase?.repository;
+        if (repo && repo.updatePatientBillingOptOut) {
+            await repo.updatePatientBillingOptOut(tenantId, id, optOut);
+            return res.status(200).json({ success: true });
+        }
+        throw new Error('Repository not injected properly to PsychotherapyController');
+    }
 
     async deletePatient(req: Request, res: Response): Promise<Response> {
         const tenantId = this.getTenantId(req);

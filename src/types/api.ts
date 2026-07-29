@@ -35,6 +35,7 @@ export interface Patient {
   reminderChannel: ReminderChannel;
   fullName: string | null;
   whatsappBulkOptIn?: boolean;
+  automaticBillingOptOut?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -192,6 +193,7 @@ export interface TenantProfile {
   bookingPage?: BookingPageSettings | null;
   cardFeeRates?: CardFeeRates | null;
   transcriptionPreference?: 'deepgram_web' | 'google_meet_native';
+  automaticBillingReminders?: boolean;
 }
 
 export interface DashboardAnalytics {

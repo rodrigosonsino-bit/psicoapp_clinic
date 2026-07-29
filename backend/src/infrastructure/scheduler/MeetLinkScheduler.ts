@@ -14,6 +14,14 @@ const MEET_LINK_TEMPLATE =
     `🎥 {link}\n\n` +
     `Bom atendimento!`;
 
+export class WhatsAppDeliveryError extends Error {
+    constructor(message: string, public readonly provider: string, public readonly details?: any) {
+        super(message);
+        this.name = 'WhatsAppDeliveryError';
+    }
+}
+
+
 export class MeetLinkScheduler {
     private task: ReturnType<typeof cron.schedule> | null = null;
     private readonly emailService = new EmailService();
@@ -95,13 +103,15 @@ export class MeetLinkScheduler {
 
         try {
             if (provider === 'meta_cloud' && this.whatsappCloudClient) {
-                await this.whatsappCloudClient.sendFreeformText(appt.patientPhone!, message);
+                const outcome = await this.whatsappCloudClient.sendFreeformText(appt.patientPhone!, message);
+                if (outcome.kind !== 'accepted') {
+                    throw new WhatsAppDeliveryError(`Meta API rejeitou a mensagem (possivelmente fora da janela de 24h)`, 'meta_cloud', outcome);
+                }
                 await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'meet_link_whatsapp' as any, 'success', undefined, { provider: 'meta_cloud', retryEligible: false });
             } else if (provider === 'baileys' && this.whatsappSessionManager) {
                 const session = await this.whatsappSessionManager.getSession(appt.tenantId);
                 if (!session || !session.isConnected()) {
-                    logger.warn({ appointmentId: appt.appointmentId, tenantId: appt.tenantId }, '⚠️ Sessão Baileys desconectada - não foi possível enviar Meet Link');
-                    return; // Fail gracefully so it can be picked up if reconnected in the 10 min window
+                    throw new WhatsAppDeliveryError(`Sessão Baileys desconectada`, 'baileys');
                 }
                 await session.sendMessage(appt.patientPhone!, message);
                 await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'meet_link_whatsapp' as any, 'success', undefined, { provider: 'baileys', retryEligible: false });
@@ -124,10 +134,16 @@ export class MeetLinkScheduler {
             // Log as failed
             const errorMsg = err instanceof Error ? err.message : String(err);
             await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'meet_link_whatsapp' as any, 'failed', errorMsg, { retryEligible: false });
+
+            // Fallback para E-mail se a paciente tiver e-mail
+            if (appt.patientEmail) {
+                logger.info({ appointmentId: appt.appointmentId }, '🔄 Iniciando fallback de envio de Meet Link por E-mail');
+                await this.sendViaEmail(appt, true);
+            }
         }
     }
 
-    private async sendViaEmail(appt: UpcomingAppointment): Promise<void> {
+    private async sendViaEmail(appt: UpcomingAppointment, isFallback: boolean = false): Promise<void> {
         try {
             await this.emailService.sendAppointmentReminder({
                 to: appt.patientEmail!,
@@ -139,12 +155,14 @@ export class MeetLinkScheduler {
                 googleMeetLink: appt.googleMeetLink
             });
 
-            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'meet_link_email' as any, 'success');
-            logger.info({ appointmentId: appt.appointmentId, patientName: appt.patientName }, '📧 Link do Meet enviado por e-mail');
+            const channelKey = isFallback ? 'email_fallback' : 'meet_link_email';
+            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, channelKey as any, 'success');
+            logger.info({ appointmentId: appt.appointmentId, patientName: appt.patientName, isFallback }, '📧 Link do Meet enviado por e-mail');
         } catch (err) {
-            logger.error({ err, appointmentId: appt.appointmentId }, '❌ Erro ao enviar Link do Meet por e-mail');
+            logger.error({ err, appointmentId: appt.appointmentId, isFallback }, '❌ Erro ao enviar Link do Meet por e-mail');
             const errorMsg = err instanceof Error ? err.message : String(err);
-            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, 'meet_link_email' as any, 'failed', errorMsg);
+            const channelKey = isFallback ? 'email_fallback' : 'meet_link_email';
+            await this.repository.markReminderSent(appt.appointmentId, appt.tenantId, channelKey as any, 'failed', errorMsg);
         }
     }
 }

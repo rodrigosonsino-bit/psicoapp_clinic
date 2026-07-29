@@ -14,7 +14,8 @@ export default function ProfileSettings() {
     professionalId: '',
     address: '',
     twoFactorEnabled: false,
-    transcriptionPreference: 'deepgram_web' as 'deepgram_web' | 'google_meet_native'
+    transcriptionPreference: 'deepgram_web' as 'deepgram_web' | 'google_meet_native',
+    automaticBillingReminders: false
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,7 +34,8 @@ export default function ProfileSettings() {
         professionalId: data.professionalId || '',
         address: data.address || '',
         twoFactorEnabled: data.twoFactorEnabled || false,
-        transcriptionPreference: data.transcriptionPreference || 'deepgram_web'
+        transcriptionPreference: data.transcriptionPreference || 'deepgram_web',
+        automaticBillingReminders: data.automaticBillingReminders || false
       });
     } catch (err) {
       console.error(err);
@@ -138,6 +140,10 @@ export default function ProfileSettings() {
         onPreferenceChange={(pref) => setFormData(prev => ({ ...prev, transcriptionPreference: pref }))}
       />
       <GmailBankStatementSection />
+      <BillingReminderSection 
+        enabled={formData.automaticBillingReminders}
+        onPreferenceChange={(enabled) => setFormData(prev => ({ ...prev, automaticBillingReminders: enabled }))}
+      />
       <TwoFactorSection
         enabled={formData.twoFactorEnabled}
         onStatusChange={(status) => setFormData(prev => ({ ...prev, twoFactorEnabled: status }))}
@@ -781,6 +787,77 @@ function GmailBankStatementSection() {
 }
 
 // ── 2FA Section ───────────────────────────────────────────────────────────────
+
+function BillingReminderSection({ enabled, onPreferenceChange }: { enabled: boolean, onPreferenceChange: (val: boolean) => void }) {
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+
+  async function handleToggle() {
+    setSaving(true);
+    const newValue = !enabled;
+    try {
+      await fetchApi<TenantProfile>('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ automaticBillingReminders: newValue })
+      });
+      onPreferenceChange(newValue);
+      toast.success(`Cobrança automática ${newValue ? 'ativada' : 'desativada'} com sucesso.`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar preferência de cobrança automática.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+      <div className="p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-1">
+          Cobrança Automática por WhatsApp
+        </h3>
+        <p className="text-sm text-gray-500 mb-6 max-w-2xl">
+          Quando ativado, o sistema enviará automaticamente uma mensagem no dia 1º de cada mês cobrando os pacientes pelos registros pendentes do mês anterior.
+        </p>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-gray-900">
+              {enabled ? 'Ativado' : 'Desativado'}
+            </div>
+            <div className="text-sm text-gray-500 mt-1">
+              {enabled
+                ? 'Os lembretes serão enviados no dia 1º.'
+                : 'Os lembretes de cobrança automáticos estão desligados.'}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggle}
+            disabled={saving}
+            className={`
+              relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+              transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
+              ${enabled ? 'bg-primary-600' : 'bg-gray-200'}
+              ${saving ? 'opacity-50 cursor-not-allowed' : ''}
+            `}
+            role="switch"
+            aria-checked={enabled}
+          >
+            <span
+              aria-hidden="true"
+              className={`
+                pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 
+                transition duration-200 ease-in-out
+                ${enabled ? 'translate-x-5' : 'translate-x-0'}
+              `}
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TwoFactorSection({ enabled, onStatusChange }: { enabled: boolean, onStatusChange: (status: boolean) => void }) {
   const [setup, setSetup] = useState<TotpSetupResult | null>(null);

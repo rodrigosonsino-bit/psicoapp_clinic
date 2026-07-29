@@ -59,7 +59,8 @@ export function mapPatient(row: PatientRow): PsychotherapyPatient {
         row.reminder_channel ?? 'whatsapp',
         row.full_name ?? null,
         row.whatsapp_bulk_opt_in ?? false,
-        row.individual_therapy_enabled
+        row.individual_therapy_enabled,
+        row.automatic_billing_opt_out ?? false
     );
 }
 

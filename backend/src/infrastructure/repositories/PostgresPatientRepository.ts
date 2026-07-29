@@ -20,9 +20,9 @@ export class PostgresPatientRepository {
         const result = await this.dbPool.query(`
             INSERT INTO psychotherapy_patients (
                 id, tenant_id, name, status, payment_type, default_session_price_cents,
-                notes, document, phone, email, reminder_channel, full_name, individual_therapy_enabled
+                notes, document, phone, email, reminder_channel, full_name, individual_therapy_enabled, automatic_billing_opt_out
             )
-            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 status = EXCLUDED.status,
@@ -35,6 +35,7 @@ export class PostgresPatientRepository {
                 reminder_channel = EXCLUDED.reminder_channel,
                 full_name = EXCLUDED.full_name,
                 individual_therapy_enabled = EXCLUDED.individual_therapy_enabled,
+                automatic_billing_opt_out = EXCLUDED.automatic_billing_opt_out,
                 updated_at = NOW()
             WHERE psychotherapy_patients.tenant_id = EXCLUDED.tenant_id
             RETURNING *;
@@ -51,7 +52,8 @@ export class PostgresPatientRepository {
             data.email || null,
             data.reminderChannel ?? 'whatsapp',
             data.fullName ?? null,
-            data.individualTherapyEnabled ?? true
+            data.individualTherapyEnabled ?? true,
+            data.automaticBillingOptOut ?? false
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Paciente não encontrado ou não autorizado');
@@ -147,6 +149,15 @@ export class PostgresPatientRepository {
         `, [validTenantId, id]);
 
         return result.rows[0] ? mapPatient(result.rows[0]) : null;
+    }
+
+    async updatePatientBillingOptOut(tenantId: string, id: string, optOut: boolean): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        await this.dbPool.query(`
+            UPDATE psychotherapy_patients
+            SET automatic_billing_opt_out = $1, updated_at = NOW()
+            WHERE id = $2 AND tenant_id = $3
+        `, [optOut, id, validTenantId]);
     }
 
     async deletePatient(tenantId: string, id: string): Promise<void> {

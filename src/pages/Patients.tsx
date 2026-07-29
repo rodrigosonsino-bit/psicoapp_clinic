@@ -350,10 +350,13 @@ function PatientModal({ patientToEdit, onClose, onSave }: PatientModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [optIn, setOptIn] = useState(patientToEdit?.whatsappBulkOptIn ?? false);
   const [savingOptIn, setSavingOptIn] = useState(false);
+  const [billingOptOut, setBillingOptOut] = useState(patientToEdit?.automaticBillingOptOut ?? false);
+  const [savingBillingOptOut, setSavingBillingOptOut] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
     setOptIn(patientToEdit?.whatsappBulkOptIn ?? false);
+    setBillingOptOut(patientToEdit?.automaticBillingOptOut ?? false);
   }, [patientToEdit]);
 
   const handleOptInChange = async (checked: boolean) => {
@@ -372,6 +375,25 @@ function PatientModal({ patientToEdit, onClose, onSave }: PatientModalProps) {
       toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao salvar consentimento.');
     } finally {
       setSavingOptIn(false);
+    }
+  };
+
+  const handleBillingOptOutChange = async (checked: boolean) => {
+    if (!patientToEdit) {
+      setBillingOptOut(checked);
+      return;
+    }
+    setSavingBillingOptOut(true);
+    try {
+      await fetchApi(`/api/psychotherapy/patients/${patientToEdit.id}/billing-opt-out`, {
+        method: 'PATCH',
+        body: JSON.stringify({ optOut: checked })
+      });
+      setBillingOptOut(checked);
+    } catch (err) {
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Falha ao salvar preferência.');
+    } finally {
+      setSavingBillingOptOut(false);
     }
   };
 
@@ -478,6 +500,21 @@ function PatientModal({ patientToEdit, onClose, onSave }: PatientModalProps) {
                 style={{ width: '1rem', height: '1rem' }}
               />
               Aceita receber mensagens em massa (broadcast) via WhatsApp
+            </label>
+            {!patientToEdit && (
+              <p className="text-small text-muted mt-1">Disponível após criar o paciente.</p>
+            )}
+          </div>
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: patientToEdit ? 'pointer' : 'default' }}>
+              <input
+                type="checkbox"
+                checked={billingOptOut}
+                onChange={e => handleBillingOptOutChange(e.target.checked)}
+                disabled={submitting || savingBillingOptOut || !patientToEdit}
+                style={{ width: '1rem', height: '1rem' }}
+              />
+              Isentar de cobrança automática por WhatsApp (se a clínica estiver com a opção ativada)
             </label>
             {!patientToEdit && (
               <p className="text-small text-muted mt-1">Disponível após criar o paciente.</p>

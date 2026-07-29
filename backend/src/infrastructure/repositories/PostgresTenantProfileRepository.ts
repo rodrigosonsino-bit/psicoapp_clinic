@@ -18,12 +18,21 @@ export class PostgresTenantProfileRepository {
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
 
         return result.rows[0] ? this.mapTenantProfile(result.rows[0]) : null;
+    }
+
+    async listTenantsWithAutomaticBilling(): Promise<TenantProfile[]> {
+        const result = await this.dbPool.query(`
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders
+            FROM tenants
+            WHERE automatic_billing_reminders = TRUE;
+        `);
+        return result.rows.map(row => this.mapTenantProfile(row));
     }
 
     async updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile> {
@@ -47,9 +56,10 @@ export class PostgresTenantProfileRepository {
                 booking_page = COALESCE($6::jsonb, booking_page),
                 card_fee_rates = CASE WHEN $7 THEN $8::jsonb ELSE card_fee_rates END,
                 transcription_preference = COALESCE($9, transcription_preference),
+                automatic_billing_reminders = COALESCE($10, automatic_billing_reminders),
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
@@ -59,7 +69,8 @@ export class PostgresTenantProfileRepository {
             data.bookingPage !== undefined && data.bookingPage !== null ? JSON.stringify(data.bookingPage) : null,
             cardFeeRatesProvided,
             cardFeeRatesValue,
-            data.transcriptionPreference !== undefined ? data.transcriptionPreference : null
+            data.transcriptionPreference !== undefined ? data.transcriptionPreference : null,
+            data.automaticBillingReminders !== undefined ? data.automaticBillingReminders : null
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Tenant não encontrado');
@@ -78,7 +89,8 @@ export class PostgresTenantProfileRepository {
             row.totp_enabled || false,
             row.booking_page ?? null,
             row.card_fee_rates ?? null,
-            row.transcription_preference ?? 'deepgram_web'
+            row.transcription_preference ?? 'deepgram_web',
+            row.automatic_billing_reminders ?? false
         );
     }
 

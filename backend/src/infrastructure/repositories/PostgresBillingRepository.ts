@@ -30,6 +30,24 @@ export class PostgresBillingRepository {
         private readonly expenseRepository: PostgresExpenseRepository
     ) {}
 
+    async logBillingReminder(tenantId: string, patientId: string, month: string): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        await this.dbPool.query(`
+            INSERT INTO billing_reminders_log (tenant_id, patient_id, month, sent_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT DO NOTHING
+        `, [validTenantId, patientId, month]);
+    }
+
+    async hasSentBillingReminder(tenantId: string, patientId: string, month: string): Promise<boolean> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT 1 FROM billing_reminders_log
+            WHERE tenant_id = $1 AND patient_id = $2 AND month = $3
+        `, [validTenantId, patientId, month]);
+        return result.rows.length > 0;
+    }
+
     async getDashboardAnalytics(tenantId: string, currentMonthStr: string): Promise<DashboardAnalytics> {
         const validTenantId = validateTenantId(tenantId);
 
