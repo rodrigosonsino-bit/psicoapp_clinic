@@ -1,0 +1,6 @@
+-- Migration: 107_email_fallback_reminders.sql
+
+ALTER TABLE psychotherapy_reminders_log DROP CONSTRAINT IF EXISTS psychotherapy_reminders_log_channel_used_check;
+
+ALTER TABLE psychotherapy_reminders_log ADD CONSTRAINT psychotherapy_reminders_log_channel_used_check 
+  CHECK (channel_used IN ('whatsapp', 'email', 'meet_link_whatsapp', 'meet_link_email', 'email_fallback'));
