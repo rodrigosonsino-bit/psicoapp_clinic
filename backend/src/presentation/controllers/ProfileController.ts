@@ -37,9 +37,10 @@ export class ProfileController {
             address: data.address,
             bookingPage: data.bookingPage,
             automaticBillingReminders: data.automaticBillingReminders,
-            // 'cardFeeRates' in data (não data.cardFeeRates !== undefined) preserva a
+            // 'cardFeeRates'/'adminMirrorPhone' in data (não !== undefined) preserva a
             // distinção entre "campo ausente" e "campo enviado como null" até o repositório.
-            ...('cardFeeRates' in data ? { cardFeeRates: data.cardFeeRates } : {})
+            ...('cardFeeRates' in data ? { cardFeeRates: data.cardFeeRates } : {}),
+            ...('adminMirrorPhone' in data ? { adminMirrorPhone: data.adminMirrorPhone } : {})
         });
 
         res.status(200).json(updatedProfile.toJSON());

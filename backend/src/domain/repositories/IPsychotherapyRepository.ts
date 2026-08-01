@@ -80,6 +80,8 @@ export interface UpdateTenantProfileDTO {
     cardFeeRates?: import('../models/TenantProfile').CardFeeRates | null;
     transcriptionPreference?: 'deepgram_web' | 'google_meet_native';
     automaticBillingReminders?: boolean;
+    /** ausente = não altera; null = limpa (desativa o espelhamento); string = novo valor. */
+    adminMirrorPhone?: string | null;
 }
 
 export interface SaveReceiptDTO {

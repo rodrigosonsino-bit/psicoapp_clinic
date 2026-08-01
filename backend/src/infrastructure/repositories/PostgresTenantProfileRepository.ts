@@ -18,7 +18,7 @@ export class PostgresTenantProfileRepository {
     async getTenantProfile(tenantId: string): Promise<TenantProfile | null> {
         const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders, admin_mirror_phone
             FROM tenants
             WHERE id = $1;
         `, [validTenantId]);
@@ -28,7 +28,7 @@ export class PostgresTenantProfileRepository {
 
     async listTenantsWithAutomaticBilling(): Promise<TenantProfile[]> {
         const result = await this.dbPool.query(`
-            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders, admin_mirror_phone
             FROM tenants
             WHERE automatic_billing_reminders = TRUE;
         `);
@@ -46,6 +46,14 @@ export class PostgresTenantProfileRepository {
             ? null
             : JSON.stringify(data.cardFeeRates);
 
+        // admin_mirror_phone precisa da mesma distinção que card_fee_rates: "ausente" (não
+        // mexe) vs "veio null/vazio" (limpa — desativa o espelhamento) vs "veio string" (novo
+        // valor). COALESCE simples não serve aqui porque nunca permitiria limpar o campo.
+        const adminMirrorPhoneProvided = data.adminMirrorPhone !== undefined;
+        const adminMirrorPhoneNormalized = typeof data.adminMirrorPhone === 'string'
+            ? (data.adminMirrorPhone.trim() || null)
+            : null;
+
         const result = await this.dbPool.query(`
             UPDATE tenants
             SET
@@ -57,9 +65,10 @@ export class PostgresTenantProfileRepository {
                 card_fee_rates = CASE WHEN $7 THEN $8::jsonb ELSE card_fee_rates END,
                 transcription_preference = COALESCE($9, transcription_preference),
                 automatic_billing_reminders = COALESCE($10, automatic_billing_reminders),
+                admin_mirror_phone = CASE WHEN $11 THEN $12 ELSE admin_mirror_phone END,
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders;
+            RETURNING id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders, admin_mirror_phone;
         `, [
             tenantId,
             data.fullName !== undefined ? data.fullName : null,
@@ -70,7 +79,9 @@ export class PostgresTenantProfileRepository {
             cardFeeRatesProvided,
             cardFeeRatesValue,
             data.transcriptionPreference !== undefined ? data.transcriptionPreference : null,
-            data.automaticBillingReminders !== undefined ? data.automaticBillingReminders : null
+            data.automaticBillingReminders !== undefined ? data.automaticBillingReminders : null,
+            adminMirrorPhoneProvided,
+            adminMirrorPhoneNormalized
         ]);
 
         if (result.rows.length === 0) throw new NotFoundError('Tenant não encontrado');
@@ -90,7 +101,8 @@ export class PostgresTenantProfileRepository {
             row.booking_page ?? null,
             row.card_fee_rates ?? null,
             row.transcription_preference ?? 'deepgram_web',
-            row.automatic_billing_reminders ?? false
+            row.automatic_billing_reminders ?? false,
+            row.admin_mirror_phone ?? null
         );
     }
 

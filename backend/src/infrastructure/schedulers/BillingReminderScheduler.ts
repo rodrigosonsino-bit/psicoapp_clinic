@@ -54,13 +54,26 @@ export class BillingReminderScheduler {
         const results: BillingReminderCandidate[] = [];
         for (const tenant of tenants) {
             try {
-                const tenantResults = await this.processTenant(tenant.id, month, opts.dryRun);
+                const tenantResults = await this.processTenant(tenant.id, month, opts.dryRun, this.resolveAdminMirrorPhone(tenant));
                 results.push(...tenantResults);
             } catch (tenantError: any) {
                 logger.error(`[runOnce] Erro ao processar tenant ${tenant.id}: ${tenantError.message}`);
             }
         }
         return results;
+    }
+
+    /**
+     * Telefone de espelho: prioriza o campo por-tenant (admin_mirror_phone). Fallback
+     * temporário para as env vars antigas (ADMIN_WHATSAPP_MIRROR_NUMBER/_TENANT_ID),
+     * enquanto o rollout do campo por-tenant não estiver completo em todos os ambientes —
+     * remover esse fallback e as env vars assim que confirmado que o campo está populado.
+     */
+    private resolveAdminMirrorPhone(tenant: { id: string; adminMirrorPhone: string | null }): string | null {
+        if (tenant.adminMirrorPhone) return tenant.adminMirrorPhone;
+        const legacyNumber = process.env.ADMIN_WHATSAPP_MIRROR_NUMBER;
+        const legacyTenantId = process.env.ADMIN_WHATSAPP_MIRROR_TENANT_ID;
+        return legacyNumber && legacyTenantId === tenant.id ? legacyNumber : null;
     }
 
     private getPreviousMonthStr(): string {
@@ -117,7 +130,7 @@ export class BillingReminderScheduler {
 
             for (const tenant of tenants) {
                 try {
-                    await this.processTenant(tenant.id, previousMonthStr, false);
+                    await this.processTenant(tenant.id, previousMonthStr, false, this.resolveAdminMirrorPhone(tenant));
                 } catch (tenantError: any) {
                     logger.error(`Erro ao processar cobranças do tenant ${tenant.id}: ${tenantError.message}`);
                 }
@@ -128,7 +141,7 @@ export class BillingReminderScheduler {
         }
     }
 
-    private async processTenant(tenantId: string, month: string, dryRun: boolean): Promise<BillingReminderCandidate[]> {
+    private async processTenant(tenantId: string, month: string, dryRun: boolean, adminMirrorPhone: string | null): Promise<BillingReminderCandidate[]> {
         // Pega registros mensais
         const records = await this.repository.listMonthlyRecords(tenantId, month);
 
@@ -220,17 +233,15 @@ export class BillingReminderScheduler {
                 sentCount++;
                 logger.info(`Cobrança de ${month} enviada para o paciente ${patient.id} do tenant ${tenantId}`);
 
-                // Espelha a cobrança para o WhatsApp do dono da clínica, para visibilidade
-                // de que o envio realmente aconteceu (hoje não há tela no app pra isso).
-                // Escopado a um tenant específico via env var — evita que, se este app vier
-                // a ter múltiplos tenants reais no futuro, dados de um paciente de uma
-                // clínica sejam encaminhados para o admin de outra.
-                const adminNumber = process.env.ADMIN_WHATSAPP_MIRROR_NUMBER;
-                const adminMirrorTenantId = process.env.ADMIN_WHATSAPP_MIRROR_TENANT_ID;
-                if (adminNumber && adminMirrorTenantId === tenantId && provider === 'meta_cloud' && this.whatsappCloudClient) {
+                // Espelha a cobrança para o WhatsApp do dono da clínica (configurável por
+                // tenant em admin_mirror_phone), para visibilidade de que o envio realmente
+                // aconteceu (hoje não há tela no app pra isso). O valor já vem resolvido por
+                // tenant específico (ver resolveAdminMirrorPhone) — não há risco de vazar
+                // dados de um tenant para o admin de outro.
+                if (adminMirrorPhone && provider === 'meta_cloud' && this.whatsappCloudClient) {
                     try {
                         await this.whatsappCloudClient.sendTemplateMessage(
-                            adminNumber,
+                            adminMirrorPhone,
                             'billing_reminder',
                             'en',
                             [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorReais] }]

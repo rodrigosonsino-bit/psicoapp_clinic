@@ -25,7 +25,11 @@ export class TenantProfile {
         public readonly bookingPage: BookingPageSettings | null = null,
         public readonly cardFeeRates: CardFeeRates | null = null,
         public readonly transcriptionPreference: 'deepgram_web' | 'google_meet_native' = 'deepgram_web',
-        public readonly automaticBillingReminders: boolean = false
+        public readonly automaticBillingReminders: boolean = false,
+        // Número de WhatsApp que recebe uma cópia de cada cobrança enviada aos pacientes
+        // deste tenant, para o dono da clínica confirmar visualmente que o envio aconteceu.
+        // null = espelhamento desativado (padrão).
+        public readonly adminMirrorPhone: string | null = null
     ) {}
 
     toJSON() {
@@ -41,7 +45,8 @@ export class TenantProfile {
             bookingPage: this.bookingPage,
             cardFeeRates: this.cardFeeRates,
             transcriptionPreference: this.transcriptionPreference,
-            automaticBillingReminders: this.automaticBillingReminders
+            automaticBillingReminders: this.automaticBillingReminders,
+            adminMirrorPhone: this.adminMirrorPhone
         };
     }
 }

@@ -227,7 +227,8 @@ const updateProfileSchema = z.object({
     // BUG PRÉ-EXISTENTE corrigido aqui: automaticBillingReminders nunca esteve neste schema
     // (mesma classe de bug do bookingPage acima) — o toggle "Cobrança Automática por
     // WhatsApp" na UI mandava o PUT, mas o Zod descartava o campo antes do controller.
-    automaticBillingReminders: z.boolean().optional()
+    automaticBillingReminders: z.boolean().optional(),
+    adminMirrorPhone: z.string().nullable().optional()
 });
 
 const issueReceiptSchema = z.object({
