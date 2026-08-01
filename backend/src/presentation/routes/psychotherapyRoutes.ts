@@ -223,7 +223,11 @@ const updateProfileSchema = z.object({
     // descartava o campo silenciosamente antes de chegar no controller — a personalização da
     // página de agendamento nunca era persistida de fato via PUT /api/profile.
     bookingPage: bookingPageSchema.nullable().optional(),
-    cardFeeRates: cardFeeRatesSchema.nullable().optional()
+    cardFeeRates: cardFeeRatesSchema.nullable().optional(),
+    // BUG PRÉ-EXISTENTE corrigido aqui: automaticBillingReminders nunca esteve neste schema
+    // (mesma classe de bug do bookingPage acima) — o toggle "Cobrança Automática por
+    // WhatsApp" na UI mandava o PUT, mas o Zod descartava o campo antes do controller.
+    automaticBillingReminders: z.boolean().optional()
 });
 
 const issueReceiptSchema = z.object({
