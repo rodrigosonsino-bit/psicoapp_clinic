@@ -216,7 +216,7 @@ if (require.main === module) {
                 if (isWhatsappEnabled) {
                     const dbPool = container.resolve(Pool);
                     const receiptHandler = createPaymentReceiptHandler(dbPool);
-                    sessionManager.initializeAll(dbPool, receiptHandler).catch(err => {
+                    sessionManager.initializeAll(dbPool as any, receiptHandler).catch(err => {
                         logger.error({ err }, '⚠️ Falha ao inicializar sessões WhatsApp (não crítico — app continua)');
                     });
                     logger.info('📱 WhatsApp Session Manager inicializado');
