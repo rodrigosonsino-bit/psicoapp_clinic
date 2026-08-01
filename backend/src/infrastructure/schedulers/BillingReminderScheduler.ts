@@ -191,12 +191,15 @@ export class BillingReminderScheduler {
                     const outcome = await this.whatsappCloudClient.sendTemplateMessage(
                         patient.phone,
                         'billing_reminder',
-                        'en_US', // Template foi aprovado como English na Meta
+                        'en', // Template está aprovado na Meta como idioma "en" (não "en_US") — confirmado via Graph API /message_templates
                         [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorReais] }]
                     );
 
                     if (outcome.kind !== 'accepted') {
-                        throw new Error(`Meta API rejeitou o Template (Status: ${outcome.kind})`);
+                        const detail = (outcome as any).errorCode || (outcome as any).errorMessage
+                            ? ` — código=${(outcome as any).errorCode} msg=${(outcome as any).errorMessage}`
+                            : '';
+                        throw new Error(`Meta API rejeitou o Template (Status: ${outcome.kind}${detail})`);
                     }
                 } else if (provider === 'baileys' && this.whatsappSessionManager) {
                     const session = await this.whatsappSessionManager.getSession(tenantId);
