@@ -212,26 +212,30 @@
   justify-content: center;
 }
 
-.btn-success {
+/* Especificidade elevada (.btn-icon.btn-success) de propósito: existe um outro
+   ".btn-icon" global (BookAppointment.css) com a mesma especificidade que, por
+   ordem de carregamento no bundle, sobrescrevia o fundo/cor pretendidos aqui,
+   deixando os botões visualmente "invisíveis" (ícone cinza sobre fundo escuro). */
+.btn-icon.btn-success {
   background: var(--status-success);
   color: white;
   border: none;
 }
 
-.btn-success:hover:not(:disabled) {
+.btn-icon.btn-success:hover:not(:disabled) {
   opacity: 0.85;
 }
 
 /* "Ignorar" precisa ficar claramente visível (não confundir com "sem ação") sem
    competir visualmente com o verde de "Confirmar" — usa o tom de perigo com fundo
    sutil, mesmo padrão de contraste já usado nos badges de confiança desta tela. */
-.btn-ghost {
+.btn-icon.btn-ghost {
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.4);
   color: var(--status-danger, #ef4444);
 }
 
-.btn-ghost:hover:not(:disabled) {
+.btn-icon.btn-ghost:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.22);
   border-color: var(--status-danger, #ef4444);
 }
