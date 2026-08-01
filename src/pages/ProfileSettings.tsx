@@ -15,7 +15,8 @@ export default function ProfileSettings() {
     address: '',
     twoFactorEnabled: false,
     transcriptionPreference: 'deepgram_web' as 'deepgram_web' | 'google_meet_native',
-    automaticBillingReminders: false
+    automaticBillingReminders: false,
+    adminMirrorPhone: null as string | null
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,7 +36,8 @@ export default function ProfileSettings() {
         address: data.address || '',
         twoFactorEnabled: data.twoFactorEnabled || false,
         transcriptionPreference: data.transcriptionPreference || 'deepgram_web',
-        automaticBillingReminders: data.automaticBillingReminders || false
+        automaticBillingReminders: data.automaticBillingReminders || false,
+        adminMirrorPhone: data.adminMirrorPhone ?? null
       });
     } catch (err) {
       console.error(err);
@@ -140,9 +142,11 @@ export default function ProfileSettings() {
         onPreferenceChange={(pref) => setFormData(prev => ({ ...prev, transcriptionPreference: pref }))}
       />
       <GmailBankStatementSection />
-      <BillingReminderSection 
+      <BillingReminderSection
         enabled={formData.automaticBillingReminders}
         onPreferenceChange={(enabled) => setFormData(prev => ({ ...prev, automaticBillingReminders: enabled }))}
+        mirrorPhone={formData.adminMirrorPhone}
+        onMirrorPhoneChange={(phone) => setFormData(prev => ({ ...prev, adminMirrorPhone: phone }))}
       />
       <TwoFactorSection
         enabled={formData.twoFactorEnabled}
@@ -788,9 +792,25 @@ function GmailBankStatementSection() {
 
 // ── 2FA Section ───────────────────────────────────────────────────────────────
 
-function BillingReminderSection({ enabled, onPreferenceChange }: { enabled: boolean, onPreferenceChange: (val: boolean) => void }) {
+function BillingReminderSection({
+  enabled,
+  onPreferenceChange,
+  mirrorPhone,
+  onMirrorPhoneChange
+}: {
+  enabled: boolean,
+  onPreferenceChange: (val: boolean) => void,
+  mirrorPhone: string | null,
+  onMirrorPhoneChange: (val: string | null) => void
+}) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  const [mirrorPhoneInput, setMirrorPhoneInput] = useState(mirrorPhone || '');
+  const [savingMirrorPhone, setSavingMirrorPhone] = useState(false);
+
+  useEffect(() => {
+    setMirrorPhoneInput(mirrorPhone || '');
+  }, [mirrorPhone]);
 
   async function handleToggle() {
     setSaving(true);
@@ -807,6 +827,25 @@ function BillingReminderSection({ enabled, onPreferenceChange }: { enabled: bool
       toast.error('Erro ao salvar preferência de cobrança automática.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveMirrorPhone() {
+    setSavingMirrorPhone(true);
+    // Vazio salva como null (desativa o espelhamento) — mesma normalização do backend.
+    const normalized = mirrorPhoneInput.trim() || null;
+    try {
+      await fetchApi<TenantProfile>('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ adminMirrorPhone: normalized })
+      });
+      onMirrorPhoneChange(normalized);
+      toast.success(normalized ? 'Telefone de confirmação salvo.' : 'Espelhamento desativado.');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar telefone de confirmação.');
+    } finally {
+      setSavingMirrorPhone(false);
     }
   }
 
@@ -854,6 +893,35 @@ function BillingReminderSection({ enabled, onPreferenceChange }: { enabled: bool
             />
           </button>
         </div>
+
+        {enabled && (
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            <label className="text-sm font-medium text-gray-900 block mb-1">
+              Receber confirmação no WhatsApp
+            </label>
+            <p className="text-sm text-gray-500 mb-3 max-w-2xl">
+              Receba uma cópia de cada cobrança enviada, pra confirmar que chegou ao paciente.
+              Deixe em branco para desativar.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={mirrorPhoneInput}
+                onChange={(e) => setMirrorPhoneInput(e.target.value)}
+                placeholder="11999998888"
+                className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <button
+                type="button"
+                onClick={handleSaveMirrorPhone}
+                disabled={savingMirrorPhone}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 disabled:opacity-50"
+              >
+                {savingMirrorPhone ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

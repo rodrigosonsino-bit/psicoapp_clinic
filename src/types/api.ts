@@ -194,6 +194,7 @@ export interface TenantProfile {
   cardFeeRates?: CardFeeRates | null;
   transcriptionPreference?: 'deepgram_web' | 'google_meet_native';
   automaticBillingReminders?: boolean;
+  adminMirrorPhone?: string | null;
 }
 
 export interface DashboardAnalytics {
