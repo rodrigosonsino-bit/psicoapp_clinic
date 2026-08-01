@@ -92,17 +92,7 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
 
   useEffect(() => {
     loadExistingTranscription();
-    // Only poll if we are in processing or queued state (managed inside useEffect if needed)
-    // Actually, setting up an interval for polling:
-    let intervalId: ReturnType<typeof setInterval>;
-    
-    const startPolling = () => {
-      intervalId = setInterval(async () => {
-         await loadExistingTranscription();
-      }, 5000);
-    };
-    
-    // In React, it's better to just do it via setTimeout based on state
+    // O polling em si é feito pelo useEffect abaixo, que reage a panelState === 'processing'.
   }, [loadExistingTranscription]);
 
   useEffect(() => {
@@ -504,8 +494,6 @@ export default function SessionTranscriptionPanel({ sessionId, googleMeetLink }:
                 value={editedSoap}
                 onChange={e => {
                   setEditedSoap(e.target.value);
-                  // stop polling if editing
-                  if (panelState === 'processing') setPanelState('draft'); 
                 }}
                 id="edit-soap-textarea"
                 rows={16}
