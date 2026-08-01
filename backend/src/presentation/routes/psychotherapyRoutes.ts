@@ -58,6 +58,10 @@ const confirmBankStatementBatchSchema = z.object({
     ids: z.array(z.string().uuid()).min(1).max(200)
 });
 
+const clearBankStatementHistorySchema = z.object({
+    status: z.enum(['confirmed', 'ignored'], { errorMap: () => ({ message: "Status deve ser 'confirmed' ou 'ignored'" }) })
+});
+
 // multer memory storage — nunca persiste o arquivo em disco (contém nome/CPF
 // mascarado de terceiros). Limite de 5MB cobre anos de extrato de uma conta
 // pequena com folga.
@@ -397,6 +401,11 @@ export function createPsychotherapyRoutes(): Router {
         '/psychotherapy/bank-statements/transactions/confirm-batch',
         validateBody(confirmBankStatementBatchSchema),
         asyncHandler((req, res) => bankStatementController.confirmBatch(req, res))
+    );
+    router.delete(
+        '/psychotherapy/bank-statements/transactions',
+        validateBody(clearBankStatementHistorySchema),
+        asyncHandler((req, res) => bankStatementController.clearHistory(req, res))
     );
 
     // Profile

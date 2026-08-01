@@ -49,6 +49,8 @@ export default function BankReconciliation() {
     const [emailImports, setEmailImports] = useState<BankStatementEmailImport[]>([]);
     const [showEmailImports, setShowEmailImports] = useState(false);
     const [syncingEmails, setSyncingEmails] = useState(false);
+    const [confirmingClear, setConfirmingClear] = useState<'confirmed' | 'ignored' | null>(null);
+    const [clearingHistory, setClearingHistory] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const toast = useToast();
@@ -120,6 +122,7 @@ export default function BankReconciliation() {
 
     useEffect(() => {
         loadTransactions(selectedImportId, statusFilter);
+        setConfirmingClear(null);
     }, [selectedImportId, statusFilter, loadTransactions]);
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,6 +235,23 @@ export default function BankReconciliation() {
             setRowErrors(prev => ({ ...prev, [tx.id]: err instanceof Error ? err.message : 'Erro ao ignorar.' }));
         } finally {
             setBusyRowId(null);
+        }
+    };
+
+    const handleClearHistory = async (status: 'confirmed' | 'ignored') => {
+        setClearingHistory(true);
+        try {
+            const res = await fetchApi<{ data: { deletedCount: number } }>(
+                '/api/psychotherapy/bank-statements/transactions',
+                { method: 'DELETE', body: JSON.stringify({ status }) }
+            );
+            toast.success(`${res.data.deletedCount} transação(ões) removida(s) do histórico.`);
+            setConfirmingClear(null);
+            refreshCurrent();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Erro ao limpar histórico.');
+        } finally {
+            setClearingHistory(false);
         }
     };
 
@@ -356,7 +376,35 @@ export default function BankReconciliation() {
                                 Confirmar {highConfidencePending.length} de alta confiança
                             </button>
                         )}
+
+                        {(statusFilter === 'confirmed' || statusFilter === 'ignored') && transactions.length > 0 && (
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setConfirmingClear(statusFilter)}
+                            >
+                                Limpar {statusFilter === 'confirmed' ? 'confirmadas' : 'ignoradas'}
+                            </button>
+                        )}
                     </div>
+
+                    {confirmingClear && (
+                        <div className="bank-reconciliation-batch-summary">
+                            <p>
+                                Remover permanentemente <strong>{transactions.length}</strong> transação(ões) {confirmingClear === 'confirmed' ? 'confirmadas' : 'ignoradas'} do histórico desta tela?
+                                {confirmingClear === 'confirmed' && (
+                                    <> As sessões já dadas como pagas no Faturamento Mensal <strong>não</strong> serão desfeitas — isso só limpa a lista de auditoria.</>
+                                )}
+                            </p>
+                            <div className="bank-reconciliation-batch-actions">
+                                <button className="btn btn-secondary" onClick={() => setConfirmingClear(null)} disabled={clearingHistory}>
+                                    Cancelar
+                                </button>
+                                <button className="btn btn-primary" onClick={() => handleClearHistory(confirmingClear)} disabled={clearingHistory}>
+                                    {clearingHistory ? 'Removendo...' : 'Confirmar remoção'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {showBatchConfirmSummary && (
                         <div className="bank-reconciliation-batch-summary">

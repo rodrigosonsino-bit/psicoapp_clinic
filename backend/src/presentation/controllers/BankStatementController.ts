@@ -213,6 +213,27 @@ export class BankStatementController {
         });
     }
 
+    /**
+     * Remove do histórico da tela apenas as linhas já resolvidas (confirmed/
+     * ignored) — nunca 'pending', que ainda exige revisão. Apagar uma linha
+     * 'confirmed' NÃO desfaz a baixa de sessão paga já aplicada em
+     * psychotherapy_monthly_records (ver ConfirmBankStatementTransactionUseCase);
+     * é só a remoção do registro de auditoria desta tela.
+     */
+    async clearHistory(req: Request, res: Response): Promise<Response> {
+        const tenantId = this.getTenantId(req);
+        const { status } = req.body as { status: 'confirmed' | 'ignored' };
+
+        const result = await this.dbPool.query(
+            `DELETE FROM psychotherapy_bank_statement_transactions
+             WHERE tenant_id = $1 AND status = $2`,
+            [tenantId, status]
+        );
+
+        logger.info({ tenantId, status, deletedCount: result.rowCount }, '[BankStatement] Histórico limpo');
+        return res.status(200).json({ data: { deletedCount: result.rowCount ?? 0 } });
+    }
+
     async pollEmailImportsNow(_req: Request, res: Response): Promise<Response> {
         await this.emailPollUseCase.execute();
         logger.info('[BankStatement] Manual email poll triggered');
