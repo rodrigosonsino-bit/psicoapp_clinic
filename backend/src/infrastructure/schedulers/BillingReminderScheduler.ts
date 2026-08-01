@@ -219,6 +219,29 @@ export class BillingReminderScheduler {
                 await this.repository.logBillingReminder(tenantId, patient.id, month);
                 sentCount++;
                 logger.info(`Cobrança de ${month} enviada para o paciente ${patient.id} do tenant ${tenantId}`);
+
+                // Espelha a cobrança para o WhatsApp do dono da clínica, para visibilidade
+                // de que o envio realmente aconteceu (hoje não há tela no app pra isso).
+                // Escopado a um tenant específico via env var — evita que, se este app vier
+                // a ter múltiplos tenants reais no futuro, dados de um paciente de uma
+                // clínica sejam encaminhados para o admin de outra.
+                const adminNumber = process.env.ADMIN_WHATSAPP_MIRROR_NUMBER;
+                const adminMirrorTenantId = process.env.ADMIN_WHATSAPP_MIRROR_TENANT_ID;
+                if (adminNumber && adminMirrorTenantId === tenantId && provider === 'meta_cloud' && this.whatsappCloudClient) {
+                    try {
+                        await this.whatsappCloudClient.sendTemplateMessage(
+                            adminNumber,
+                            'billing_reminder',
+                            'en',
+                            [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorReais] }]
+                        );
+                    } catch (mirrorError: any) {
+                        // Best-effort: falha no espelho não deve afetar o envio original,
+                        // que já aconteceu e já foi registrado acima.
+                        logger.warn(`Falha ao espelhar cobrança de ${patient.id} para o admin: ${mirrorError.message}`);
+                    }
+                }
+
                 results.push({
                     tenantId,
                     patientId: patient.id,
