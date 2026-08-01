@@ -218,18 +218,27 @@
   border: none;
 }
 
-.btn-success:hover {
-  opacity: 0.9;
+.btn-success:hover:not(:disabled) {
+  opacity: 0.85;
 }
 
+/* "Ignorar" precisa ficar claramente visível (não confundir com "sem ação") sem
+   competir visualmente com o verde de "Confirmar" — usa o tom de perigo com fundo
+   sutil, mesmo padrão de contraste já usado nos badges de confiança desta tela. */
 .btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: var(--status-danger, #ef4444);
 }
 
-.btn-ghost:hover {
-  background: var(--bg-surface-hover);
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: var(--status-danger, #ef4444);
+}
+
+.btn-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .badge-confidence-high { background-color: rgba(16, 185, 129, 0.1); color: var(--status-success); }
