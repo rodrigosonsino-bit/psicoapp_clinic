@@ -411,7 +411,7 @@ export default function BankReconciliation() {
                                             </div>
 
                                             {tx.status === 'pending' && (
-                                                <>
+                                                <div className="bank-reconciliation-actions">
                                                     <select
                                                         value={override.patientId}
                                                         onChange={e => setOverride(tx.id, { patientId: e.target.value })}
@@ -428,23 +428,25 @@ export default function BankReconciliation() {
                                                         onChange={e => setOverride(tx.id, { month: e.target.value })}
                                                         className="bank-reconciliation-month-input"
                                                     />
-                                                    <button
-                                                        className="btn btn-icon btn-success"
-                                                        onClick={() => handleConfirm(tx)}
-                                                        disabled={isBusy}
-                                                        title="Confirmar"
-                                                    >
-                                                        <Check size={16} />
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-icon btn-ghost"
-                                                        onClick={() => handleIgnore(tx)}
-                                                        disabled={isBusy}
-                                                        title="Ignorar"
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
-                                                </>
+                                                    <div className="bank-reconciliation-action-buttons">
+                                                        <button
+                                                            className="btn btn-icon btn-success"
+                                                            onClick={() => handleConfirm(tx)}
+                                                            disabled={isBusy}
+                                                            title="Confirmar"
+                                                        >
+                                                            <Check size={16} />
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-icon btn-ghost"
+                                                            onClick={() => handleIgnore(tx)}
+                                                            disabled={isBusy}
+                                                            title="Ignorar"
+                                                        >
+                                                            <X size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             )}
 
                                             {tx.status === 'confirmed' && (

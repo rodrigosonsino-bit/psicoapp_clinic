@@ -124,11 +124,30 @@
 }
 
 .bank-reconciliation-row-payer {
-  flex: 1;
-  min-width: 12rem;
+  flex: 1 1 auto;
+  min-width: 8rem;
+  max-width: 16rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+/* Agrupa select + mês + botões para que sempre quebrem juntos numa nova linha
+   (em vez de os botões ficarem espremidos/invisíveis fora da área visível
+   quando a linha não tem espaço horizontal suficiente). */
+.bank-reconciliation-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.bank-reconciliation-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .bank-reconciliation-expand-btn {
@@ -160,7 +179,8 @@
 }
 
 .bank-reconciliation-select {
-  min-width: 12rem;
+  min-width: 10rem;
+  max-width: 14rem;
 }
 
 .bank-reconciliation-confirmed-info {
