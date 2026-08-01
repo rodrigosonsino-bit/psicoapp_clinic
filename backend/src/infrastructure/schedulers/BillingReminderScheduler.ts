@@ -161,9 +161,8 @@ export class BillingReminderScheduler {
             const patient = await this.repository.findActivePatientById(tenantId, record.patientId);
             if (!patient) continue;
 
-            // Filtra se o paciente deu opt-out ou paga por sessão
+            // Filtra se o paciente deu opt-out
             if (patient.automaticBillingOptOut) continue;
-            if (patient.paymentType === 'per_session') continue;
             // Só envia por whatsapp (se não tiver fone, pula)
             if (!patient.phone) continue;
 
