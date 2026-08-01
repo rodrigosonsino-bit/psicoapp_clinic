@@ -5,6 +5,17 @@ import { WhatsappCloudClient } from '../whatsappCloud/WhatsappCloudClient';
 import { resolveWhatsAppProvider } from '../whatsappCloud/WhatsappCloudConfig';
 import { logger } from '../logger';
 
+export interface BillingReminderCandidate {
+    tenantId: string;
+    patientId: string;
+    patientName: string;
+    phoneMasked: string;
+    month: string;
+    amountCents: number;
+    sent: boolean;
+    error?: string;
+}
+
 export class BillingReminderScheduler {
     // private readonly logger = new Logger('BillingReminderScheduler');
 
@@ -22,6 +33,58 @@ export class BillingReminderScheduler {
         }, {
             timezone: "America/Sao_Paulo"
         });
+    }
+
+    /**
+     * Dispara a rotina de cobrança manualmente, fora do agendamento normal do cron
+     * (que só age no dia 01). Reaproveita exatamente a mesma lógica de seleção e envio
+     * de processTenant. Com dryRun=true, não envia WhatsApp nem grava
+     * logBillingReminder — só retorna os candidatos que seriam processados.
+     */
+    public async runOnce(opts: { dryRun: boolean }): Promise<BillingReminderCandidate[]> {
+        const month = this.getPreviousMonthStr();
+        logger.info(`[runOnce] Mês alvo: ${month} (dryRun=${opts.dryRun})`);
+
+        const tenants = await this.repository.listTenantsWithAutomaticBilling();
+        if (tenants.length === 0) {
+            logger.info('[runOnce] Nenhuma clínica com cobrança automática habilitada.');
+            return [];
+        }
+
+        const results: BillingReminderCandidate[] = [];
+        for (const tenant of tenants) {
+            try {
+                const tenantResults = await this.processTenant(tenant.id, month, opts.dryRun);
+                results.push(...tenantResults);
+            } catch (tenantError: any) {
+                logger.error(`[runOnce] Erro ao processar tenant ${tenant.id}: ${tenantError.message}`);
+            }
+        }
+        return results;
+    }
+
+    private getPreviousMonthStr(): string {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Sao_Paulo',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+        const parts = formatter.formatToParts(now);
+        const yearStr = parts.find(p => p.type === 'year')!.value;
+        const monthStr = parts.find(p => p.type === 'month')!.value;
+
+        let yearNum = parseInt(yearStr, 10);
+        let monthNum = parseInt(monthStr, 10);
+
+        monthNum -= 1;
+        if (monthNum === 0) {
+            monthNum = 12;
+            yearNum -= 1;
+        }
+
+        return `${yearNum}-${monthNum.toString().padStart(2, '0')}`;
     }
 
     private async processReminders(): Promise<void> {
@@ -42,25 +105,7 @@ export class BillingReminderScheduler {
                 return;
             }
 
-            // Calcula o mês anterior (YYYY-MM)
-            const yearStr = parts.find(p => p.type === 'year')?.value;
-            const monthStr = parts.find(p => p.type === 'month')?.value;
-            
-            if (!yearStr || !monthStr) {
-                logger.error('Falha ao extrair ano/mês da data atual.');
-                return;
-            }
-
-            let yearNum = parseInt(yearStr, 10);
-            let monthNum = parseInt(monthStr, 10);
-
-            monthNum -= 1;
-            if (monthNum === 0) {
-                monthNum = 12;
-                yearNum -= 1;
-            }
-
-            const previousMonthStr = `${yearNum}-${monthNum.toString().padStart(2, '0')}`;
+            const previousMonthStr = this.getPreviousMonthStr();
             logger.info(`Mês alvo para cobrança: ${previousMonthStr}`);
 
             // 1. Pega todas as clínicas que habilitaram cobrança automática
@@ -72,7 +117,7 @@ export class BillingReminderScheduler {
 
             for (const tenant of tenants) {
                 try {
-                    await this.processTenant(tenant.id, previousMonthStr);
+                    await this.processTenant(tenant.id, previousMonthStr, false);
                 } catch (tenantError: any) {
                     logger.error(`Erro ao processar cobranças do tenant ${tenant.id}: ${tenantError.message}`);
                 }
@@ -83,17 +128,18 @@ export class BillingReminderScheduler {
         }
     }
 
-    private async processTenant(tenantId: string, month: string): Promise<void> {
+    private async processTenant(tenantId: string, month: string, dryRun: boolean): Promise<BillingReminderCandidate[]> {
         // Pega registros mensais
         const records = await this.repository.listMonthlyRecords(tenantId, month);
-        
+
         let sentCount = 0;
         const provider = resolveWhatsAppProvider();
+        const results: BillingReminderCandidate[] = [];
 
         for (const record of records) {
             // Apenas registros que não estão pagos
             if (record.paymentStatus === 'paid') continue;
-            
+
             // Apenas se tiver valor pendente > 0
             if (record.pendingAmountCents <= 0) continue;
 
@@ -112,15 +158,33 @@ export class BillingReminderScheduler {
             const alreadySent = await this.repository.hasSentBillingReminder(tenantId, patient.id, month);
             if (alreadySent) continue;
 
+            const patientName = patient.name || patient.fullName || 'Paciente';
+            const phoneMasked = patient.phone.length > 4
+                ? `${'*'.repeat(patient.phone.length - 4)}${patient.phone.slice(-4)}`
+                : patient.phone;
+
+            if (dryRun) {
+                results.push({
+                    tenantId,
+                    patientId: patient.id,
+                    patientName,
+                    phoneMasked,
+                    month,
+                    amountCents: record.pendingAmountCents,
+                    sent: false
+                });
+                continue;
+            }
+
             // Envia WhatsApp
             const valorReais = (record.pendingAmountCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-            
+
             // Mês por extenso
             const [yearStr, monthStr] = month.split('-');
             const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
             const mesExtenso = monthNames[parseInt(monthStr, 10) - 1];
 
-            const message = `Olá ${patient.name || patient.fullName || 'Paciente'},\n\nA sua fatura de sessões referente a ${mesExtenso}/${yearStr} fechou em ${valorReais}.\n\nVocê pode realizar o pagamento via Pix. Qualquer dúvida, estou à disposição!`;
+            const message = `Olá ${patientName},\n\nA sua fatura de sessões referente a ${mesExtenso}/${yearStr} fechou em ${valorReais}.\n\nVocê pode realizar o pagamento via Pix. Qualquer dúvida, estou à disposição!`;
 
             try {
                 if (provider === 'meta_cloud' && this.whatsappCloudClient) {
@@ -128,9 +192,9 @@ export class BillingReminderScheduler {
                         patient.phone,
                         'billing_reminder',
                         'en_US', // Template foi aprovado como English na Meta
-                        [{ type: 'body', values: [patient.name || patient.fullName || 'Paciente', `${mesExtenso}/${yearStr}`, valorReais] }]
+                        [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorReais] }]
                     );
-                    
+
                     if (outcome.kind !== 'accepted') {
                         throw new Error(`Meta API rejeitou o Template (Status: ${outcome.kind})`);
                     }
@@ -144,15 +208,39 @@ export class BillingReminderScheduler {
                 } else {
                     throw new Error(`Provedor WhatsApp '${provider}' não suportado ou instâncias não fornecidas.`);
                 }
-                
+
+                // Registra ANTES de contar como sucesso, para minimizar a janela entre
+                // "mensagem aceita pela Meta" e "marcado como enviado" — se o registro
+                // falhar aqui, preferimos arriscar reprocessar (idempotente via
+                // hasSentBillingReminder na próxima tentativa) a nunca marcar como enviado.
                 await this.repository.logBillingReminder(tenantId, patient.id, month);
                 sentCount++;
                 logger.info(`Cobrança de ${month} enviada para o paciente ${patient.id} do tenant ${tenantId}`);
+                results.push({
+                    tenantId,
+                    patientId: patient.id,
+                    patientName,
+                    phoneMasked,
+                    month,
+                    amountCents: record.pendingAmountCents,
+                    sent: true
+                });
             } catch (sendError: any) {
                 logger.error(`Falha ao enviar whatsapp de cobrança para ${patient.id}: ${sendError.message}`);
+                results.push({
+                    tenantId,
+                    patientId: patient.id,
+                    patientName,
+                    phoneMasked,
+                    month,
+                    amountCents: record.pendingAmountCents,
+                    sent: false,
+                    error: sendError.message
+                });
             }
         }
 
         logger.info(`Tenant ${tenantId}: enviadas ${sentCount} mensagens de cobrança para ${month}.`);
+        return results;
     }
 }
