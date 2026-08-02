@@ -28,7 +28,7 @@ export class BroadcastWorker {
             BROADCAST_QUEUE_NAME,
             async (job: Job) => this.processJob(job),
             {
-                connection: getBroadcastRedisConnection() as any,
+                connection: getBroadcastRedisConnection(),
                 concurrency: 1,
                 limiter: { max: 1, duration: BROADCAST_INTERVAL_MS }
             }

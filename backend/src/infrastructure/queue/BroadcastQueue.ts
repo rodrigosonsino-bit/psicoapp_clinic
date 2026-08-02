@@ -15,7 +15,7 @@ export class BroadcastQueue {
 
     constructor() {
         this.queue = new Queue(BROADCAST_QUEUE_NAME, {
-            connection: getBroadcastRedisConnection() as any,
+            connection: getBroadcastRedisConnection(),
             // O construtor do Queue faz waitUntilReady() + um hset() de metadados
             // incondicionais, o que força a conexão mesmo com lazyConnect no ioredis
             // e mesmo com a feature desligada (BroadcastQueue é resolvido sempre que
