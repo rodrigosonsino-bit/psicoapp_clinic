@@ -241,21 +241,31 @@ export class GoogleCalendarService {
         // → 'cancelled') enquanto a série ainda tem filhos ativos, um PUT normal
         // cancelaria a SÉRIE INTEIRA no Google Calendar real do terapeuta — os
         // filhos semanais seguintes continuariam 'scheduled' no app, mas
-        // sumiriam do calendário do Google. Cancelar só a 1ª ocorrência sem
-        // afetar o master exige uma operação dedicada sobre a instância
-        // específica (events.instances + update por originalStartTime), ainda
-        // não implementada — até lá, bloqueamos o push de status=cancelled
-        // para o master nesse cenário, preservando a série no Google Calendar.
+        // sumiriam do calendário do Google. Em vez disso, cancelamos só a
+        // ocorrência específica do root (cancelRecurringInstance), preservando
+        // o master e as ocorrências futuras.
         if (!appointment.parentId && appointment.recurrence !== 'none' && this.mapStatus(appointment.status) === 'cancelled') {
             const seriesMembers = await this.repository.listSeriesAppointments(tenantId, appointment.id);
             const hasActiveChild = seriesMembers.some(
                 m => m.id !== appointment.id && (m.status === 'scheduled' || m.status === 'confirmed')
             );
             if (hasActiveChild) {
-                logger.warn(
-                    { tenantId, appointmentId: appointment.id },
-                    '⛔ Root de série recorrente cancelado, mas a série tem filhos ativos — push de cancelamento para o evento mestre bloqueado para não cancelar a série inteira no Google Calendar'
-                );
+                if (appointment.googleEventId) {
+                    const cancelled = await this.cancelRecurringInstance(
+                        tenantId, appointment.googleEventId, appointment.scheduledAt
+                    );
+                    logger.warn(
+                        { tenantId, appointmentId: appointment.id, cancelled },
+                        cancelled
+                            ? '✂️ Root de série recorrente cancelado — só a 1ª ocorrência foi cancelada no Google Calendar, série preservada'
+                            : '⛔ Root de série recorrente cancelado, mas não foi possível localizar a instância no Google — push de cancelamento para o evento mestre bloqueado para não cancelar a série inteira'
+                    );
+                } else {
+                    logger.warn(
+                        { tenantId, appointmentId: appointment.id },
+                        '⛔ Root de série recorrente cancelado, mas a série tem filhos ativos — push de cancelamento para o evento mestre bloqueado para não cancelar a série inteira no Google Calendar'
+                    );
+                }
                 return;
             }
         }
@@ -509,6 +519,70 @@ export class GoogleCalendarService {
             tenantId, fresh, patientName, patientPhone, confirmUrl,
             isPastoral, forceCreate, recoveryDepth + 1
         );
+    }
+
+    /**
+     * Cancela SÓ uma ocorrência específica de uma série recorrente, sem afetar
+     * o evento mestre (RRULE) nem as demais ocorrências. Usa
+     * events.instances(masterEventId) pra listar as ocorrências expandidas
+     * numa janela pequena em torno de `scheduledAt` e identifica a instância
+     * certa por `originalStartTime` — nunca por índice/posição, que pode
+     * divergir se alguma ocorrência já foi movida/excluída. Depois faz um
+     * PATCH cirúrgico só de `status: cancelled` na instância encontrada
+     * (nunca no master), preservando o RRULE e o resto da série intacto.
+     */
+    async cancelRecurringInstance(
+        tenantId: string,
+        masterEventId: string,
+        scheduledAt: Date
+    ): Promise<boolean> {
+        const auth = await this.getAuthenticatedClient(tenantId);
+        if (!auth) return false;
+
+        const stored = await this.repository.getGoogleOAuthTokens(tenantId);
+        const calendarId = stored?.calendarId ?? 'primary';
+        const calendar = google.calendar({ version: 'v3', auth });
+
+        const timeMin = new Date(scheduledAt.getTime() - 5 * 60_000);
+        const timeMax = new Date(scheduledAt.getTime() + 5 * 60_000);
+
+        try {
+            const instances = await calendar.events.instances({
+                calendarId,
+                eventId: masterEventId,
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString(),
+            });
+
+            const items = instances.data.items ?? [];
+            const match = items.find(item => {
+                const originalStart = item.originalStartTime?.dateTime ?? item.originalStartTime?.date;
+                if (!originalStart) return false;
+                return Math.abs(new Date(originalStart).getTime() - scheduledAt.getTime()) < 60_000;
+            });
+
+            if (!match?.id) {
+                logger.warn(
+                    { tenantId, masterEventId, scheduledAt },
+                    'cancelRecurringInstance: nenhuma instância encontrada na janela esperada — nada cancelado'
+                );
+                return false;
+            }
+
+            await calendar.events.patch({
+                calendarId,
+                eventId: match.id,
+                requestBody: { status: 'cancelled' },
+            });
+            logger.info(
+                { tenantId, masterEventId, instanceId: match.id, scheduledAt },
+                '✂️ Instância específica de série recorrente cancelada no Google Calendar (master preservado)'
+            );
+            return true;
+        } catch (err) {
+            logger.error({ err, tenantId, masterEventId, scheduledAt }, 'Erro ao cancelar instância específica de série recorrente');
+            return false;
+        }
     }
 
     private errorCode(error: any): number {

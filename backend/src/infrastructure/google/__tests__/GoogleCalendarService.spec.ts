@@ -16,6 +16,8 @@ describe('GoogleCalendarService idempotency', () => {
     let insert: jest.Mock;
     let update: jest.Mock;
     let get: jest.Mock;
+    let patch: jest.Mock;
+    let instances: jest.Mock;
 
     const appointment = (googleEventId: string | null = null) => new PsychotherapyAppointment(
         appointmentId,
@@ -37,8 +39,10 @@ describe('GoogleCalendarService idempotency', () => {
         insert = jest.fn();
         update = jest.fn();
         get = jest.fn();
+        patch = jest.fn();
+        instances = jest.fn();
         jest.spyOn(google, 'calendar').mockReturnValue({
-            events: { insert, update, get, delete: jest.fn() }
+            events: { insert, update, get, patch, instances, delete: jest.fn() }
         } as any);
 
         repository = {
@@ -53,7 +57,8 @@ describe('GoogleCalendarService idempotency', () => {
             markAppointmentGoogleSyncError: jest.fn().mockResolvedValue(undefined),
             updateAppointmentGoogleEvent: jest.fn().mockResolvedValue(undefined),
             advanceAppointmentGoogleEventGeneration: jest.fn().mockResolvedValue(1),
-            findAppointmentById: jest.fn()
+            findAppointmentById: jest.fn(),
+            listSeriesAppointments: jest.fn().mockResolvedValue([])
         } as unknown as jest.Mocked<IPsychotherapyRepository>;
 
         service = new GoogleCalendarService(repository, {} as any);
@@ -75,7 +80,7 @@ describe('GoogleCalendarService idempotency', () => {
             }
         });
         expect(repository.updateAppointmentGoogleEvent)
-            .toHaveBeenCalledWith(appointmentId, tenantId, expectedId, 'https://calendar/new');
+            .toHaveBeenCalledWith(appointmentId, tenantId, expectedId, 'https://calendar/new', null, null);
     });
 
     it('reconcilia 409 usando o evento existente em vez de criar outro ID', async () => {
@@ -101,7 +106,7 @@ describe('GoogleCalendarService idempotency', () => {
         expect(get).toHaveBeenCalledWith({ calendarId, eventId: expectedId });
         expect(update).toHaveBeenCalledWith(expect.objectContaining({ eventId: expectedId }));
         expect(repository.updateAppointmentGoogleEvent)
-            .toHaveBeenCalledWith(appointmentId, tenantId, expectedId, 'https://calendar/existing');
+            .toHaveBeenCalledWith(appointmentId, tenantId, expectedId, 'https://calendar/existing', null, null);
     });
 
     it('preserva ID legado e apenas atualiza o evento existente', async () => {
@@ -112,7 +117,7 @@ describe('GoogleCalendarService idempotency', () => {
         expect(insert).not.toHaveBeenCalled();
         expect(update).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'legacy-event' }));
         expect(repository.updateAppointmentGoogleEvent)
-            .toHaveBeenCalledWith(appointmentId, tenantId, 'legacy-event', 'https://calendar/legacy');
+            .toHaveBeenCalledWith(appointmentId, tenantId, 'legacy-event', 'https://calendar/legacy', null, null);
     });
 
     it('repara root recorrente vinculado a uma ocorrência antes de enviar RRULE', async () => {
@@ -170,5 +175,46 @@ describe('GoogleCalendarService idempotency', () => {
         expect(insert.mock.calls[0][0].requestBody.id).toBe(expectedId);
         expect(insert.mock.calls[1][0].requestBody.id).toBe(expectedId);
         expect(repository.markAppointmentGoogleSyncError).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancela só a 1ª ocorrência de uma série ao invés de cancelar o master, quando há filhos ativos', async () => {
+        const root = new PsychotherapyAppointment(
+            appointmentId, tenantId, 'patient-1', new Date('2026-08-04T13:40:00.000Z'),
+            50, 'canceled', 'biweekly', new Date('2026-12-15T23:59:59.000Z'),
+            null, 'master-event-id', 'https://calendar.google/event', 'confirm-token', null
+        );
+        const activeChild = new PsychotherapyAppointment(
+            'child-1', tenantId, 'patient-1', new Date('2026-08-18T13:40:00.000Z'),
+            50, 'scheduled', 'none', null,
+            null, null, null, 'confirm-token-2', null, appointmentId
+        );
+        repository.listSeriesAppointments.mockResolvedValue([root, activeChild]);
+        instances.mockResolvedValue({
+            data: {
+                items: [
+                    { id: 'master-event-id_20260804T134000Z', originalStartTime: { dateTime: '2026-08-04T13:40:00.000Z' } }
+                ]
+            }
+        });
+
+        await service.syncAppointment(tenantId, root, 'FRAN', null, 'https://confirm');
+
+        expect(instances).toHaveBeenCalledWith(expect.objectContaining({ calendarId, eventId: 'master-event-id' }));
+        expect(patch).toHaveBeenCalledWith({
+            calendarId,
+            eventId: 'master-event-id_20260804T134000Z',
+            requestBody: { status: 'cancelled' }
+        });
+        expect(update).not.toHaveBeenCalled();
+        expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('cancelRecurringInstance retorna false e não faz PATCH quando nenhuma instância bate com o horário', async () => {
+        instances.mockResolvedValue({ data: { items: [] } });
+
+        const result = await service.cancelRecurringInstance(tenantId, 'master-event-id', new Date('2026-08-04T13:40:00.000Z'));
+
+        expect(result).toBe(false);
+        expect(patch).not.toHaveBeenCalled();
     });
 });
