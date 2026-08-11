@@ -148,6 +148,8 @@ export interface ListAppointmentsOptions {
     patientId?: string;
     page?: number;
     limit?: number;
+    status?: string[];
+    googleSyncStates?: string[];
 }
 
 export interface UpcomingAppointment {

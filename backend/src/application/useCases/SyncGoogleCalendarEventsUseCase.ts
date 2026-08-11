@@ -209,20 +209,25 @@ export class SyncGoogleCalendarEventsUseCase {
      * retroativamente.
      */
     private async createMissingGcalEvents(tenantId: string, timeMin: Date, timeMax: Date): Promise<void> {
+        // Filtro de status e de google_sync_state aplicado direto na query SQL —
+        // não em memória após um LIMIT — para que agendamentos pendentes não fiquem
+        // invisíveis quando o tenant tem mais de `limit` agendamentos na janela
+        // (BUG histórico: LIMIT 200 + filtro em memória deixava o excedente
+        // permanentemente 'pending', nunca alcançado pelo cron).
         const { data: appointments } = await this.repository.listAppointments(tenantId, {
             start: timeMin,
             end: timeMax,
-            limit: 200
+            status: ['scheduled', 'confirmed'],
+            googleSyncStates: ['pending', 'error', 'processing'],
+            limit: 1000
         });
 
         const staleProcessingBefore = Date.now() - 10 * 60_000;
         const missing = appointments.filter(a =>
-            (a.status === 'scheduled' || a.status === 'confirmed') && (
-                a.googleSyncState === 'pending' ||
-                a.googleSyncState === 'error' ||
-                (a.googleSyncState === 'processing' &&
-                    (a.googleSyncUpdatedAt?.getTime() ?? 0) < staleProcessingBefore)
-            )
+            a.googleSyncState === 'pending' ||
+            a.googleSyncState === 'error' ||
+            (a.googleSyncState === 'processing' &&
+                (a.googleSyncUpdatedAt?.getTime() ?? 0) < staleProcessingBefore)
         );
         if (missing.length === 0) return;
 
@@ -257,6 +262,20 @@ export class SyncGoogleCalendarEventsUseCase {
         const root = await this.repository.findAppointmentById(tenantId, child.parentId);
         if (!root || root.recurrence === 'none' || !root.recurrenceEndDate) return false;
         if (child.scheduledAt.getTime() > root.recurrenceEndDate.getTime()) return false;
+
+        if (root.recurrence === 'monthly') {
+            // FREQ=MONTHLY sem INTERVAL (ver GoogleCalendarService.syncAppointment):
+            // a ocorrência cai no mesmo dia/hora do mês, N meses após o root.
+            const rootDate = root.scheduledAt;
+            const childDate = child.scheduledAt;
+            const monthDiff =
+                (childDate.getFullYear() - rootDate.getFullYear()) * 12 +
+                (childDate.getMonth() - rootDate.getMonth());
+            if (monthDiff < 0) return false;
+            const expected = new Date(rootDate);
+            expected.setMonth(expected.getMonth() + monthDiff);
+            return expected.getTime() === childDate.getTime();
+        }
 
         const intervalDays = root.recurrence === 'weekly' ? 7 : 14;
         const diffDays = Math.round((child.scheduledAt.getTime() - root.scheduledAt.getTime()) / (1000 * 60 * 60 * 24));

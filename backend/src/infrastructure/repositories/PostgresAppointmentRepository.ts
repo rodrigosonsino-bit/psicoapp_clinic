@@ -537,6 +537,14 @@ export class PostgresAppointmentRepository {
             params.push(options.end);
             whereClause += ` AND scheduled_at <= $${params.length}`;
         }
+        if (options.status && options.status.length > 0) {
+            params.push(options.status);
+            whereClause += ` AND status = ANY($${params.length})`;
+        }
+        if (options.googleSyncStates && options.googleSyncStates.length > 0) {
+            params.push(options.googleSyncStates);
+            whereClause += ` AND google_sync_state = ANY($${params.length})`;
+        }
 
         const page = options.page ?? 1;
         const limit = options.limit ?? 50;

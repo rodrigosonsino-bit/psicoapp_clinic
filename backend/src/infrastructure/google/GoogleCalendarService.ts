@@ -236,6 +236,30 @@ export class GoogleCalendarService {
             );
         }
 
+        // Um root de série recorrente carrega o RRULE no mesmo evento mestre que
+        // representa a 1ª ocorrência. Se o root for cancelado/faltou (mapStatus
+        // → 'cancelled') enquanto a série ainda tem filhos ativos, um PUT normal
+        // cancelaria a SÉRIE INTEIRA no Google Calendar real do terapeuta — os
+        // filhos semanais seguintes continuariam 'scheduled' no app, mas
+        // sumiriam do calendário do Google. Cancelar só a 1ª ocorrência sem
+        // afetar o master exige uma operação dedicada sobre a instância
+        // específica (events.instances + update por originalStartTime), ainda
+        // não implementada — até lá, bloqueamos o push de status=cancelled
+        // para o master nesse cenário, preservando a série no Google Calendar.
+        if (!appointment.parentId && appointment.recurrence !== 'none' && this.mapStatus(appointment.status) === 'cancelled') {
+            const seriesMembers = await this.repository.listSeriesAppointments(tenantId, appointment.id);
+            const hasActiveChild = seriesMembers.some(
+                m => m.id !== appointment.id && (m.status === 'scheduled' || m.status === 'confirmed')
+            );
+            if (hasActiveChild) {
+                logger.warn(
+                    { tenantId, appointmentId: appointment.id },
+                    '⛔ Root de série recorrente cancelado, mas a série tem filhos ativos — push de cancelamento para o evento mestre bloqueado para não cancelar a série inteira no Google Calendar'
+                );
+                return;
+            }
+        }
+
         const stored = await this.repository.getGoogleOAuthTokens(tenantId);
         const calendarId = stored?.calendarId ?? 'primary';
         const calendar = google.calendar({ version: 'v3', auth });
