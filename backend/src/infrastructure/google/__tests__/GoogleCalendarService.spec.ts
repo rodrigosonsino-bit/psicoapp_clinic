@@ -217,4 +217,60 @@ describe('GoogleCalendarService idempotency', () => {
         expect(result).toBe(false);
         expect(patch).not.toHaveBeenCalled();
     });
+
+    it('truncateRecurringSeries adiciona UNTIL um dia antes do corte, preservando FREQ/INTERVAL', async () => {
+        get.mockResolvedValue({
+            data: { recurrence: ['RRULE:FREQ=WEEKLY;UNTIL=20261215T235959Z'] }
+        });
+
+        const result = await service.truncateRecurringSeries(tenantId, 'master-event-id', new Date('2026-09-10T13:40:00.000Z'));
+
+        expect(result).toBe(true);
+        expect(get).toHaveBeenCalledWith({ calendarId, eventId: 'master-event-id' });
+        expect(patch).toHaveBeenCalledWith({
+            calendarId,
+            eventId: 'master-event-id',
+            requestBody: { recurrence: ['RRULE:FREQ=WEEKLY;UNTIL=20260909T235959Z'] }
+        });
+    });
+
+    it('truncateRecurringSeries resolve o ID mestre real quando o salvo é uma ocorrência', async () => {
+        get.mockResolvedValue({
+            data: { recurrence: ['RRULE:FREQ=WEEKLY;UNTIL=20261215T235959Z'] }
+        });
+
+        await service.truncateRecurringSeries(tenantId, 'master-event-id_20260804T134000Z', new Date('2026-09-10T13:40:00.000Z'));
+
+        expect(get).toHaveBeenCalledWith({ calendarId, eventId: 'master-event-id' });
+        expect(patch).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'master-event-id' }));
+    });
+
+    it('truncateRecurringSeries retorna false quando o evento não tem RRULE', async () => {
+        get.mockResolvedValue({ data: { recurrence: undefined } });
+
+        const result = await service.truncateRecurringSeries(tenantId, 'master-event-id', new Date('2026-09-10T13:40:00.000Z'));
+
+        expect(result).toBe(false);
+        expect(patch).not.toHaveBeenCalled();
+    });
+
+    it('cria evento mestre recorrente próprio para um filho de série quando treatAsSeriesRoot=true', async () => {
+        const child = new PsychotherapyAppointment(
+            'child-1', tenantId, 'patient-1', new Date('2026-09-10T13:40:00.000Z'),
+            50, 'scheduled', 'biweekly', new Date('2026-12-15T23:59:59.000Z'),
+            null, null, null, 'confirm-token', null, appointmentId
+        );
+        const expectedChildId = new GoogleCalendarEventIdFactory().create(tenantId, 'child-1', 0);
+        insert.mockResolvedValue({ data: { id: expectedChildId, htmlLink: 'https://calendar/child-master' } });
+
+        await service.syncAppointment(
+            tenantId, child, 'Paciente', null, 'https://confirm',
+            false, /* forceCreate */ true, /* recoveryDepth */ 0, /* treatAsSeriesRoot */ true
+        );
+
+        expect(insert).toHaveBeenCalledTimes(1);
+        expect(insert.mock.calls[0][0].requestBody.recurrence).toEqual([
+            'RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261215T235959Z'
+        ]);
+    });
 });

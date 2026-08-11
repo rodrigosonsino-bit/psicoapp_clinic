@@ -201,7 +201,12 @@ export class GoogleCalendarService {
         confirmUrl: string,
         isPastoral = false,
         forceCreate = false,
-        recoveryDepth = 0
+        recoveryDepth = 0,
+        // Trata este agendamento como dono de um evento mestre recorrente
+        // próprio no Google mesmo tendo parentId (usado quando uma série é
+        // "dividida" — ver splitRecurringSeriesAt/SavePsychotherapyAppointmentUseCase).
+        // Sem isso, apenas o root (parentId nulo) pode carregar RRULE.
+        treatAsSeriesRoot = false
     ): Promise<void> {
         const auth = await this.getAuthenticatedClient(tenantId);
         if (!auth) {
@@ -209,12 +214,14 @@ export class GoogleCalendarService {
             return;
         }
 
+        const isSeriesRoot = !appointment.parentId || treatAsSeriesRoot;
+
         // Um root recorrente deve apontar para o evento mestre. IDs expandidos
         // (`master_YYYYMMDDTHHMMSSZ`) representam uma ocorrência e rejeitam PUT
         // com RRULE (HTTP 400). Corrigir aqui protege todos os chamadores do
         // serviço, inclusive mudanças de status e o retry do cron.
         const occurrenceMatch = /^(.+)_[0-9]{8}T[0-9]{6}Z$/.exec(appointment.googleEventId ?? '');
-        if (!appointment.parentId && appointment.recurrence !== 'none' && occurrenceMatch) {
+        if (isSeriesRoot && appointment.recurrence !== 'none' && occurrenceMatch) {
             const masterEventId = occurrenceMatch[1];
             await this.repository.updateAppointmentGoogleEvent(
                 appointment.id,
@@ -232,7 +239,7 @@ export class GoogleCalendarService {
             );
             return this.syncAppointment(
                 tenantId, repaired, patientName, patientPhone, confirmUrl,
-                isPastoral, forceCreate, recoveryDepth
+                isPastoral, forceCreate, recoveryDepth, treatAsSeriesRoot
             );
         }
 
@@ -328,8 +335,9 @@ export class GoogleCalendarService {
             },
         };
 
-        // Root de série recorrente: adicionar RRULE para que o GCal exiba como evento recorrente
-        if (appointment.recurrence !== 'none' && appointment.recurrenceEndDate && !appointment.parentId) {
+        // Root de série recorrente (ou um novo sub-root de série dividida, via
+        // treatAsSeriesRoot): adicionar RRULE para que o GCal exiba como evento recorrente
+        if (appointment.recurrence !== 'none' && appointment.recurrenceEndDate && isSeriesRoot) {
             const until = new Date(appointment.recurrenceEndDate);
             until.setUTCHours(23, 59, 59, 0);
             const untilStr = until.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -416,7 +424,7 @@ export class GoogleCalendarService {
                         if ([404, 410].includes(this.errorCode(getErr))) {
                             await this.recreateWithNextGeneration(
                                 tenantId, appointment, patientName, patientPhone,
-                                confirmUrl, isPastoral, forceCreate, recoveryDepth
+                                confirmUrl, isPastoral, forceCreate, recoveryDepth, treatAsSeriesRoot
                             );
                             return;
                         }
@@ -426,7 +434,7 @@ export class GoogleCalendarService {
                     if (existing.data.status === 'cancelled') {
                         await this.recreateWithNextGeneration(
                             tenantId, appointment, patientName, patientPhone,
-                            confirmUrl, isPastoral, forceCreate, recoveryDepth
+                            confirmUrl, isPastoral, forceCreate, recoveryDepth, treatAsSeriesRoot
                         );
                         return;
                     }
@@ -478,7 +486,7 @@ export class GoogleCalendarService {
             if ([404, 410].includes(this.errorCode(err)) && appointment.googleEventId) {
                 await this.recreateWithNextGeneration(
                     tenantId, appointment, patientName, patientPhone,
-                    confirmUrl, isPastoral, forceCreate, recoveryDepth
+                    confirmUrl, isPastoral, forceCreate, recoveryDepth, treatAsSeriesRoot
                 );
             } else {
                 await this.markSyncErrorSafely(appointment.id, tenantId, err);
@@ -495,7 +503,8 @@ export class GoogleCalendarService {
         confirmUrl: string,
         isPastoral: boolean,
         forceCreate: boolean,
-        recoveryDepth: number
+        recoveryDepth: number,
+        treatAsSeriesRoot: boolean
     ): Promise<void> {
         if (recoveryDepth >= 2) {
             const error = new Error('Limite de recuperação de evento Google removido excedido.');
@@ -517,7 +526,7 @@ export class GoogleCalendarService {
         );
         await this.syncAppointment(
             tenantId, fresh, patientName, patientPhone, confirmUrl,
-            isPastoral, forceCreate, recoveryDepth + 1
+            isPastoral, forceCreate, recoveryDepth + 1, treatAsSeriesRoot
         );
     }
 
@@ -581,6 +590,81 @@ export class GoogleCalendarService {
             return true;
         } catch (err) {
             logger.error({ err, tenantId, masterEventId, scheduledAt }, 'Erro ao cancelar instância específica de série recorrente');
+            return false;
+        }
+    }
+
+    /**
+     * "Divide" uma série recorrente: encerra o RRULE do evento MESTRE atual
+     * (`masterEventId`) um dia antes de `cutoffDate`, via PATCH que só toca o
+     * campo `recurrence` — nunca reconstrói o eventBody, preserva título,
+     * descrição, conferência etc. Usado quando a recorrência de uma sessão no
+     * MEIO de uma série é alterada (ex.: semanal → quinzenal a partir de
+     * aqui): sem isso, o master antigo continua gerando ocorrências fantasmas
+     * no Google mesmo depois do app já ter apagado/regenerado os agendamentos
+     * futuros localmente. O chamador é responsável por criar o novo evento
+     * mestre (com o novo padrão) a partir de `cutoffDate` — ver
+     * SavePsychotherapyAppointmentUseCase.
+     *
+     * Resolve automaticamente o mesmo bug de vínculo de ocorrência tratado em
+     * cancelRecurringInstance/repairCorruptedSeriesLink (root apontando para
+     * um ID de ocorrência em vez do master).
+     */
+    async truncateRecurringSeries(
+        tenantId: string,
+        masterEventId: string,
+        cutoffDate: Date
+    ): Promise<boolean> {
+        const auth = await this.getAuthenticatedClient(tenantId);
+        if (!auth) return false;
+
+        const occurrenceMatch = /^(.+)_[0-9]{8}T[0-9]{6}Z$/.exec(masterEventId);
+        const resolvedMasterId = occurrenceMatch ? occurrenceMatch[1] : masterEventId;
+
+        const stored = await this.repository.getGoogleOAuthTokens(tenantId);
+        const calendarId = stored?.calendarId ?? 'primary';
+        const calendar = google.calendar({ version: 'v3', auth });
+
+        try {
+            const existing = await calendar.events.get({ calendarId, eventId: resolvedMasterId });
+            const currentRules = existing.data.recurrence ?? [];
+            const rrule = currentRules.find(r => r.startsWith('RRULE:'));
+            if (!rrule) {
+                logger.warn(
+                    { tenantId, masterEventId: resolvedMasterId },
+                    'truncateRecurringSeries: evento não tem RRULE (não é uma série) — nada a truncar'
+                );
+                return false;
+            }
+
+            // UNTIL fica no fim do dia ANTERIOR ao corte, pro padrão antigo parar
+            // de gerar ocorrências a partir da data em que o novo padrão assume.
+            const until = new Date(cutoffDate);
+            until.setDate(until.getDate() - 1);
+            until.setUTCHours(23, 59, 59, 0);
+            const untilStr = until.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+
+            const newRrule = rrule.includes('UNTIL=')
+                ? rrule.replace(/UNTIL=[0-9TZ]+/, `UNTIL=${untilStr}`)
+                : `${rrule};UNTIL=${untilStr}`;
+
+            await calendar.events.patch({
+                calendarId,
+                eventId: resolvedMasterId,
+                requestBody: { recurrence: [newRrule] },
+            });
+            logger.info(
+                { tenantId, masterEventId: resolvedMasterId, oldRrule: rrule, newRrule },
+                '✂️ Série recorrente dividida — RRULE do evento mestre antigo truncado antes da nova recorrência assumir'
+            );
+            return true;
+        } catch (err) {
+            const code = this.errorCode(err);
+            if (code === 404 || code === 410) {
+                logger.warn({ tenantId, masterEventId: resolvedMasterId }, 'truncateRecurringSeries: evento mestre não existe mais no Google — nada a truncar');
+                return false;
+            }
+            logger.error({ err, tenantId, masterEventId: resolvedMasterId }, 'Erro ao truncar série recorrente no Google Calendar');
             return false;
         }
     }

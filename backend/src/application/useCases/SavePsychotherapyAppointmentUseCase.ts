@@ -89,6 +89,12 @@ export class SavePsychotherapyAppointmentUseCase {
                         logger.error({ err, appointmentId: appointment.id }, 'Falha ao gerar novas sessões futuras da série recorrente');
                     }
                 }
+
+                try {
+                    await this.splitSeriesInGoogleCalendar(appointment);
+                } catch (err) {
+                    logger.error({ err, appointmentId: appointment.id }, 'Falha ao dividir a série no Google Calendar após mudança de recorrência');
+                }
             }
 
             return appointment;
@@ -214,6 +220,57 @@ export class SavePsychotherapyAppointmentUseCase {
                 '➕ Sessão futura criada automaticamente (novo padrão de recorrência aplicado na edição)'
             );
         }
+    }
+
+    /**
+     * Quando a recorrência é alterada a partir de uma sessão que NÃO é o root
+     * da série (ex.: mudar de semanal pra quinzenal a partir da 5ª sessão),
+     * `pruneStraySiblings`/`generateMissingOccurrences` já corrigem o banco,
+     * mas o evento MESTRE recorrente no Google Calendar (que pertence ao
+     * root, com o RRULE antigo) nunca é tocado — continuaria gerando
+     * ocorrências fantasmas do padrão antigo indefinidamente. Aqui "dividimos"
+     * a série no Google: truncamos o RRULE do master antigo um dia antes da
+     * âncora, e (se o novo padrão não for 'none') a própria âncora ganha seu
+     * próprio evento mestre recorrente novo a partir dali — mesmo padrão que
+     * apps de calendário usam em "editar este e os próximos eventos".
+     *
+     * Quando a âncora É o root (`parentId` nulo), nada a fazer aqui: o
+     * `syncWithGoogleCalendar` já disparado em `execute()` reescreve o RRULE
+     * do próprio evento mestre do root normalmente.
+     */
+    private async splitSeriesInGoogleCalendar(anchor: PsychotherapyAppointment): Promise<void> {
+        if (!anchor.parentId) return;
+
+        const root = await this.repository.findAppointmentById(anchor.tenantId, anchor.parentId);
+        if (root?.googleEventId) {
+            await this.googleCalendar.truncateRecurringSeries(anchor.tenantId, root.googleEventId, anchor.scheduledAt);
+        }
+
+        if (anchor.recurrence === 'none') return;
+
+        // A âncora vai virar dona de um evento mestre recorrente próprio — força
+        // um evento novo em vez de reaproveitar o googleEventId atual (que era
+        // uma ocorrência vinculada ao master ANTIGO, incapaz de carregar RRULE).
+        await this.repository.advanceAppointmentGoogleEventGeneration(
+            anchor.id, anchor.tenantId, anchor.googleEventGeneration
+        );
+        const fresh = await this.repository.findAppointmentById(anchor.tenantId, anchor.id);
+        if (!fresh) return;
+
+        const patient = await this.repository.findPatientById(anchor.tenantId, fresh.patientId);
+        if (!patient) return;
+
+        const confirmUrl = `${APP_BASE_URL}/confirm/${fresh.confirmToken}`;
+        const isPastoral = patient.email === PASTORAL_SENTINEL_EMAIL;
+
+        await this.googleCalendar.syncAppointment(
+            anchor.tenantId, fresh, patient.name, patient.phone, confirmUrl,
+            isPastoral, /* forceCreate */ true, /* recoveryDepth */ 0, /* treatAsSeriesRoot */ true
+        );
+        logger.info(
+            { tenantId: anchor.tenantId, appointmentId: anchor.id, rootId: anchor.parentId, newRecurrence: anchor.recurrence },
+            '🔀 Série dividida no Google Calendar — novo evento mestre recorrente criado a partir da âncora'
+        );
     }
 
     /**
