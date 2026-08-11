@@ -11,6 +11,26 @@ import { Pool } from 'pg';
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:3000';
 
 /**
+ * Extrai o link do Google Meet (e o nome do "space", para paridade com o
+ * caminho push em GoogleCalendarService) de um evento retornado pela
+ * Calendar API. Ocorrências de séries recorrentes herdam `hangoutLink` /
+ * `conferenceData` do evento mestre, mas nem todo evento tem conferência —
+ * por isso os retornos são sempre nullable.
+ */
+function extractMeetInfo(event: any): { meetLink: string | null; meetSpaceName: string | null } {
+    const meetLink =
+        event.hangoutLink ??
+        event.conferenceData?.entryPoints?.find((entry: any) => entry.entryPointType === 'video')?.uri ??
+        null;
+
+    const isGoogleMeet = event.conferenceData?.conferenceSolution?.key?.type === 'hangoutsMeet';
+    const confId = event.conferenceData?.conferenceId;
+    const meetSpaceName = isGoogleMeet && confId ? `spaces/${confId}` : null;
+
+    return { meetLink, meetSpaceName };
+}
+
+/**
  * Sincronização Google Calendar → PsicoApp.
  *
  * O PsicoApp é a referência (fonte da verdade) para os agendamentos. O Google
@@ -275,6 +295,39 @@ export class SyncGoogleCalendarEventsUseCase {
     }
 
     /**
+     * Backfill pontual: agendamentos vinculados a um evento do Google Calendar
+     * antes desta correção podem ter ficado sem google_meet_link (bug histórico
+     * em que o pull-sync vinculava o googleEventId mas descartava o
+     * hangoutLink). Preenche apenas quando ainda está ausente — nunca
+     * sobrescreve um link já salvo, mesmo que o Google devolva outro.
+     */
+    private async backfillMeetLinkIfMissing(
+        tenantId: string,
+        existingAppt: PsychotherapyAppointment,
+        event: any
+    ): Promise<void> {
+        if (existingAppt.modality !== 'online' || existingAppt.googleMeetLink || !existingAppt.googleEventId) {
+            return;
+        }
+
+        const { meetLink, meetSpaceName } = extractMeetInfo(event);
+        if (!meetLink) return;
+
+        await this.repository.updateAppointmentGoogleEvent(
+            existingAppt.id,
+            tenantId,
+            existingAppt.googleEventId,
+            existingAppt.googleEventUrl ?? '',
+            meetLink,
+            meetSpaceName
+        );
+        logger.info(
+            { tenantId, appointmentId: existingAppt.id, eventId: event.id },
+            '🩹 google_meet_link preenchido retroativamente (bug histórico do pull-sync corrigido)'
+        );
+    }
+
+    /**
      * Se o horário/duração do evento no Google divergem do agendamento do app,
      * corrige o Google Calendar de volta (nunca o contrário).
      */
@@ -354,6 +407,7 @@ export class SyncGoogleCalendarEventsUseCase {
         if (existingAppt) {
             const patient = await this.repository.findPatientById(config.tenantId, existingAppt.patientId);
             if (!patient) return;
+            await this.backfillMeetLinkIfMissing(config.tenantId, existingAppt, event);
             await this.correctDriftIfNeeded(config.tenantId, existingAppt, patient, event);
             return;
         }
@@ -382,7 +436,8 @@ export class SyncGoogleCalendarEventsUseCase {
         // Prioridade 1: sem googleEventId (criado pelo app, ainda não vinculado).
         const unlinked = nearby.data.find(a => !a.googleEventId);
         if (unlinked) {
-            await this.repository.updateAppointmentGoogleEvent(unlinked.id, config.tenantId, event.id, event.htmlLink ?? '');
+            const { meetLink, meetSpaceName } = extractMeetInfo(event);
+            await this.repository.updateAppointmentGoogleEvent(unlinked.id, config.tenantId, event.id, event.htmlLink ?? '', meetLink, meetSpaceName);
             logger.info({ tenantId: config.tenantId, appointmentId: unlinked.id, eventId: event.id }, '🔗 Agendamento avulso vinculado ao evento do Google Calendar');
             const refreshed = await this.repository.findAppointmentById(config.tenantId, unlinked.id);
             if (refreshed) await this.correctDriftIfNeeded(config.tenantId, refreshed, patient, event);
@@ -394,7 +449,8 @@ export class SyncGoogleCalendarEventsUseCase {
         if (nearby.data.length > 0) {
             const sameSlot = nearby.data[0];
             logger.info({ tenantId: config.tenantId, appointmentId: sameSlot.id, existingGcalId: sameSlot.googleEventId, newGcalId: event.id }, '🔗 Agendamento existente no mesmo horário — vinculando novo eventId (evita duplicata)');
-            await this.repository.updateAppointmentGoogleEvent(sameSlot.id, config.tenantId, event.id, event.htmlLink ?? '');
+            const { meetLink: sameSlotMeetLink, meetSpaceName: sameSlotMeetSpaceName } = extractMeetInfo(event);
+            await this.repository.updateAppointmentGoogleEvent(sameSlot.id, config.tenantId, event.id, event.htmlLink ?? '', sameSlotMeetLink, sameSlotMeetSpaceName);
             const refreshed = await this.repository.findAppointmentById(config.tenantId, sameSlot.id);
             if (refreshed) await this.correctDriftIfNeeded(config.tenantId, refreshed, patient, event);
             return;
@@ -484,6 +540,7 @@ export class SyncGoogleCalendarEventsUseCase {
                         });
                     }
 
+                    await this.backfillMeetLinkIfMissing(config.tenantId, existing, event);
                     await this.correctDriftIfNeeded(config.tenantId, existing, patient, event);
                     continue;
                 }
@@ -508,7 +565,8 @@ export class SyncGoogleCalendarEventsUseCase {
                 );
 
                 if (unlinkedSibling) {
-                    await this.repository.updateAppointmentGoogleEvent(unlinkedSibling.id, config.tenantId, event.id, event.htmlLink ?? '');
+                    const { meetLink: siblingMeetLink, meetSpaceName: siblingMeetSpaceName } = extractMeetInfo(event);
+                    await this.repository.updateAppointmentGoogleEvent(unlinkedSibling.id, config.tenantId, event.id, event.htmlLink ?? '', siblingMeetLink, siblingMeetSpaceName);
                     logger.info({ tenantId: config.tenantId, appointmentId: unlinkedSibling.id, eventId: event.id }, '🔗 Filho de série vinculado ao evento do Google Calendar');
                     const refreshed = await this.repository.findAppointmentById(config.tenantId, unlinkedSibling.id);
                     if (refreshed) {
@@ -527,7 +585,8 @@ export class SyncGoogleCalendarEventsUseCase {
                 });
                 const anyExisting = nearby.data.find(a => !a.googleEventId || Math.abs(a.scheduledAt.getTime() - start.getTime()) < 120_000);
                 if (anyExisting) {
-                    await this.repository.updateAppointmentGoogleEvent(anyExisting.id, config.tenantId, event.id, event.htmlLink ?? '');
+                    const { meetLink: orphanMeetLink, meetSpaceName: orphanMeetSpaceName } = extractMeetInfo(event);
+                    await this.repository.updateAppointmentGoogleEvent(anyExisting.id, config.tenantId, event.id, event.htmlLink ?? '', orphanMeetLink, orphanMeetSpaceName);
                     logger.info({ tenantId: config.tenantId, appointmentId: anyExisting.id, eventId: event.id }, '🔗 Agendamento órfão no mesmo horário vinculado (evita duplicata em série)');
                     const refreshed = await this.repository.findAppointmentById(config.tenantId, anyExisting.id);
                     if (refreshed) {

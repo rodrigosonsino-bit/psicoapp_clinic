@@ -90,7 +90,110 @@ describe('SyncGoogleCalendarEventsUseCase — restauração de evento removido',
         );
 
         expect(repository.updateAppointmentGoogleEvent).toHaveBeenCalledWith(
-            childId, tenantId, occurrenceId, 'https://calendar.google.test/event'
+            childId, tenantId, occurrenceId, 'https://calendar.google.test/event', null, null
         );
+    });
+
+    it('captura hangoutLink/conferenceData ao vincular um filho de série ainda sem googleEventId', async () => {
+        const tenantId = '22222222-2222-4222-8222-222222222222';
+        const rootId = '11111111-1111-4111-8111-111111111111';
+        const childId = '55555555-5555-4555-8555-555555555555';
+        const patientId = '33333333-3333-4333-8333-333333333333';
+        const masterId = 'google-master';
+        const occurrenceId = `${masterId}_20260803T140000Z`;
+        const root = {
+            id: rootId, tenantId, patientId, parentId: null,
+            scheduledAt: new Date('2026-07-27T14:00:00.000Z'), durationMinutes: 50,
+            status: 'scheduled', recurrence: 'weekly', googleEventId: masterId,
+        } as PsychotherapyAppointment;
+        const child = {
+            id: childId, tenantId, patientId, parentId: rootId,
+            scheduledAt: new Date('2026-08-03T14:00:00.000Z'), durationMinutes: 50,
+            status: 'scheduled', recurrence: 'none', googleEventId: null, modality: 'online',
+        } as PsychotherapyAppointment;
+        const patient = { id: patientId, tenantId, name: 'ALICE', phone: '+5518997067933' } as any;
+        const linkedChild = { ...child, googleEventId: occurrenceId } as PsychotherapyAppointment;
+        const repository = {
+            findAppointmentByGoogleEventId: jest.fn()
+                .mockResolvedValueOnce(null)
+                .mockResolvedValueOnce(root),
+            listSeriesAppointments: jest.fn().mockResolvedValue([root, child]),
+            findPatientById: jest.fn().mockResolvedValue(patient),
+            updateAppointmentGoogleEvent: jest.fn().mockResolvedValue(undefined),
+            findAppointmentById: jest.fn().mockResolvedValue(linkedChild),
+        } as unknown as IPsychotherapyRepository;
+        const googleCalendar = { syncAppointment: jest.fn() } as unknown as GoogleCalendarService;
+        const useCase = new SyncGoogleCalendarEventsUseCase(repository, googleCalendar, {} as Pool);
+
+        await (useCase as any).syncSeriesGroup(
+            { tenantId, calendarId: 'calendar-id' },
+            masterId,
+            [{
+                id: occurrenceId,
+                recurringEventId: masterId,
+                summary: 'título editado sem nome do paciente',
+                start: { dateTime: '2026-08-03T14:00:00.000Z' },
+                end: { dateTime: '2026-08-03T14:50:00.000Z' },
+                htmlLink: 'https://calendar.google.test/event',
+                hangoutLink: 'https://meet.google.com/abc-defg-hij',
+                conferenceData: {
+                    conferenceId: 'abc-defg-hij',
+                    conferenceSolution: { key: { type: 'hangoutsMeet' } },
+                },
+            }],
+            []
+        );
+
+        expect(repository.updateAppointmentGoogleEvent).toHaveBeenCalledWith(
+            childId, tenantId, occurrenceId, 'https://calendar.google.test/event',
+            'https://meet.google.com/abc-defg-hij', 'spaces/abc-defg-hij'
+        );
+    });
+
+    it('preenche retroativamente google_meet_link de um agendamento já vinculado quando o link nunca foi capturado (bug histórico)', async () => {
+        const tenantId = '22222222-2222-4222-8222-222222222222';
+        const appointmentId = '66666666-6666-4666-8666-666666666666';
+        const patientId = '33333333-3333-4333-8333-333333333333';
+        const eventId = 'existing-event-id';
+        const existingAppt = {
+            id: appointmentId, tenantId, patientId, parentId: null,
+            scheduledAt: new Date('2026-08-03T14:00:00.000Z'), durationMinutes: 50,
+            status: 'scheduled', recurrence: 'none', googleEventId: eventId,
+            googleEventUrl: 'https://calendar.google.test/existing',
+            modality: 'online', googleMeetLink: null,
+        } as PsychotherapyAppointment;
+        const patient = { id: patientId, tenantId, name: 'ALICE', phone: '+5518997067933' } as any;
+        const repository = {
+            findAppointmentByGoogleEventId: jest.fn().mockResolvedValue(existingAppt),
+            findPatientById: jest.fn().mockResolvedValue(patient),
+            updateAppointmentGoogleEvent: jest.fn().mockResolvedValue(undefined),
+        } as unknown as IPsychotherapyRepository;
+        const googleCalendar = { syncAppointment: jest.fn() } as unknown as GoogleCalendarService;
+        const useCase = new SyncGoogleCalendarEventsUseCase(repository, googleCalendar, {} as Pool);
+
+        await (useCase as any).syncSingleEvent(
+            { tenantId, calendarId: 'calendar-id' },
+            {
+                id: eventId,
+                summary: 'ALICE',
+                start: { dateTime: '2026-08-03T14:00:00.000Z' },
+                end: { dateTime: '2026-08-03T14:50:00.000Z' },
+                htmlLink: 'https://calendar.google.test/existing',
+                hangoutLink: 'https://meet.google.com/xyz-uvwx-rst',
+                conferenceData: {
+                    conferenceId: 'xyz-uvwx-rst',
+                    conferenceSolution: { key: { type: 'hangoutsMeet' } },
+                },
+            },
+            [patient]
+        );
+
+        expect(repository.updateAppointmentGoogleEvent).toHaveBeenCalledWith(
+            appointmentId, tenantId, eventId, 'https://calendar.google.test/existing',
+            'https://meet.google.com/xyz-uvwx-rst', 'spaces/xyz-uvwx-rst'
+        );
+        // syncAppointment (push) não deve ser chamado — backfill é uma correção
+        // local de metadados, sem tempo/duração divergentes.
+        expect(googleCalendar.syncAppointment).not.toHaveBeenCalled();
     });
 });
