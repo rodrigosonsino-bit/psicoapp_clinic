@@ -76,7 +76,7 @@ export default function MonthGrid({ currentDate, appointments, patients, groups,
                     opacity: (a.status === 'canceled' || a.status === 'no_show') ? 0.6 : 1,
                     boxShadow: coveredAppointmentIds.has(a.id) ? 'inset 0 0 0 1px rgba(255,255,255,0.7)' : undefined
                   }}
-                  title={coveredAppointmentIds.has(a.id) ? 'Sessão paga' : undefined}
+                  title={coveredAppointmentIds.has(a.id) ? 'Incluída por ordem cronológica no contador mensal de sessões pagas; não vincula esta sessão a um pagamento específico.' : undefined}
                 >
                   <span style={{ fontWeight: 600 }}>{format(new Date(a.scheduledAt), 'HH:mm')}</span> {getPatientFirstName(a)}
                 </div>

@@ -258,7 +258,7 @@ export default function Appointments() {
       const targetSessions = Math.max(0, record.expectedSessions - record.absences);
       const newPaidSessions = Math.min(record.paidSessions + 1, targetSessions);
       if (newPaidSessions === record.paidSessions) {
-        toast.info('Esse mês já está com todas as sessões esperadas marcadas como pagas.');
+        toast.info('O saldo mensal já contempla todas as sessões esperadas.');
         return;
       }
       const newStatus: 'paid' | 'partial' | 'pending' =
@@ -267,10 +267,10 @@ export default function Appointments() {
         method: 'POST',
         body: JSON.stringify({ ...record, paidSessions: newPaidSessions, paymentStatus: newStatus })
       });
-      toast.success(`Sessão marcada como paga (${newPaidSessions}/${targetSessions} pagas em ${month}).`);
+      toast.success(`+1 sessão paga adicionada ao saldo de ${month} (${newPaidSessions}/${targetSessions}).`);
       await loadAppointments(page, filterPatientId, viewType, currentDate);
     } catch (err) {
-      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao marcar sessão como paga.');
+      toast.error((err instanceof Error ? err.message : String(err)) || 'Erro ao atualizar o saldo de sessões pagas do mês.');
     }
   };
 
@@ -560,7 +560,7 @@ export default function Appointments() {
                         {STATUS_LABEL[a.status]}
                       </span>
                       {coveredAppointmentIds.has(a.id) && (
-                        <span title="Sessão paga" style={{ display: 'inline-flex', verticalAlign: 'middle', marginLeft: 4 }}>
+                        <span title="Incluída por ordem cronológica no contador mensal de sessões pagas; não vincula esta sessão a um pagamento específico." style={{ display: 'inline-flex', verticalAlign: 'middle', marginLeft: 4 }}>
                           <CheckCircle2 size={13} style={{ color: '#ffffff' }} />
                         </span>
                       )}

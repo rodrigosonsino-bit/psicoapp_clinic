@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format, addMonths, subMonths } from 'date-fns';
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle, Clock, MessageCircle, Download, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle, Clock, MessageCircle, Download, Search, Info } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import type { MonthlyRecord, Patient, MonthResponse, PaginatedResponse } from '../types/api';
 
@@ -470,6 +470,12 @@ export default function MonthlyRecords() {
                           <span className="text-small" style={{ opacity: 0.6 }}>
                             / {Math.max(0, r.expectedSessions - r.absences)} sessões
                             {r.absences > 0 && ` (${r.absences} falta${r.absences !== 1 ? 's' : ''})`}
+                          </span>
+                          <span
+                            title="Sessões pagas contam, em ordem cronológica, entre as sessões elegíveis já ocorridas no mês (exclui canceladas e faltas) — não indicam qual pagamento específico corresponde a qual sessão."
+                            style={{ display: 'inline-flex', verticalAlign: 'middle', opacity: 0.5, cursor: 'help' }}
+                          >
+                            <Info size={12} />
                           </span>
                           {r.patientId && (
                             advancingRecordId === r.id ? (

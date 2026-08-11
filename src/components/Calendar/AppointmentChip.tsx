@@ -92,7 +92,7 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
           e.stopPropagation();
           setShowPopover(!showPopover);
         }}
-        title={isPaid ? 'Sessão paga' : undefined}
+        title={isPaid ? 'Incluída por ordem cronológica no contador mensal de sessões pagas; não vincula esta sessão a um pagamento específico.' : undefined}
       >
         <div className="chip-time">{timeStr}</div>
         <div className="chip-name" style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -150,7 +150,7 @@ export default function AppointmentChip({ appointment, patientName, patientPhone
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <DollarSign size={14} style={{ color: 'var(--status-success)' }} />
-                    <span>Marcar sessão como paga</span>
+                    <span>Adicionar sessão paga ao saldo do mês</span>
                   </div>
                 </button>
               )}
