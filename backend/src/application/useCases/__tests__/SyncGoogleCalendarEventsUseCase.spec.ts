@@ -196,4 +196,79 @@ describe('SyncGoogleCalendarEventsUseCase — restauração de evento removido',
         // local de metadados, sem tempo/duração divergentes.
         expect(googleCalendar.syncAppointment).not.toHaveBeenCalled();
     });
+
+    it('dispara push mesmo sem drift de horário quando o evento online não tem NENHUMA conferência do Meet', async () => {
+        const tenantId = '22222222-2222-4222-8222-222222222222';
+        const appointmentId = '66666666-6666-4666-8666-666666666666';
+        const patientId = '33333333-3333-4333-8333-333333333333';
+        const eventId = 'existing-event-id';
+        const existingAppt = {
+            id: appointmentId, tenantId, patientId, parentId: null,
+            scheduledAt: new Date('2026-08-03T14:00:00.000Z'), durationMinutes: 50,
+            status: 'scheduled', recurrence: 'none', googleEventId: eventId,
+            googleEventUrl: 'https://calendar.google.test/existing',
+            modality: 'online', googleMeetLink: null,
+        } as PsychotherapyAppointment;
+        const patient = { id: patientId, tenantId, name: 'ALICE', phone: '+5518997067933' } as any;
+        const repository = {
+            findAppointmentByGoogleEventId: jest.fn().mockResolvedValue(existingAppt),
+            findPatientById: jest.fn().mockResolvedValue(patient),
+            updateAppointmentGoogleEvent: jest.fn().mockResolvedValue(undefined),
+        } as unknown as IPsychotherapyRepository;
+        const googleCalendar = { syncAppointment: jest.fn().mockResolvedValue(undefined) } as unknown as GoogleCalendarService;
+        const useCase = new SyncGoogleCalendarEventsUseCase(repository, googleCalendar, {} as Pool);
+
+        await (useCase as any).syncSingleEvent(
+            { tenantId, calendarId: 'calendar-id' },
+            {
+                id: eventId,
+                summary: 'ALICE',
+                start: { dateTime: '2026-08-03T14:00:00.000Z' },
+                end: { dateTime: '2026-08-03T14:50:00.000Z' },
+                htmlLink: 'https://calendar.google.test/existing',
+                // sem hangoutLink nem conferenceData — evento nunca teve Meet.
+            },
+            [patient]
+        );
+
+        expect(googleCalendar.syncAppointment).toHaveBeenCalledWith(
+            tenantId, existingAppt, patient.name, patient.phone, expect.any(String), false
+        );
+    });
+
+    it('NÃO dispara push por falta de Meet quando o agendamento está cancelado/no_show', async () => {
+        const tenantId = '22222222-2222-4222-8222-222222222222';
+        const appointmentId = '66666666-6666-4666-8666-666666666666';
+        const patientId = '33333333-3333-4333-8333-333333333333';
+        const eventId = 'existing-event-id';
+        const existingAppt = {
+            id: appointmentId, tenantId, patientId, parentId: null,
+            scheduledAt: new Date('2026-08-03T14:00:00.000Z'), durationMinutes: 50,
+            status: 'no_show', recurrence: 'none', googleEventId: eventId,
+            googleEventUrl: 'https://calendar.google.test/existing',
+            modality: 'online', googleMeetLink: null,
+        } as PsychotherapyAppointment;
+        const patient = { id: patientId, tenantId, name: 'ALICE', phone: '+5518997067933' } as any;
+        const repository = {
+            findAppointmentByGoogleEventId: jest.fn().mockResolvedValue(existingAppt),
+            findPatientById: jest.fn().mockResolvedValue(patient),
+            updateAppointmentGoogleEvent: jest.fn().mockResolvedValue(undefined),
+        } as unknown as IPsychotherapyRepository;
+        const googleCalendar = { syncAppointment: jest.fn() } as unknown as GoogleCalendarService;
+        const useCase = new SyncGoogleCalendarEventsUseCase(repository, googleCalendar, {} as Pool);
+
+        await (useCase as any).syncSingleEvent(
+            { tenantId, calendarId: 'calendar-id' },
+            {
+                id: eventId,
+                summary: 'ALICE',
+                start: { dateTime: '2026-08-03T14:00:00.000Z' },
+                end: { dateTime: '2026-08-03T14:50:00.000Z' },
+                htmlLink: 'https://calendar.google.test/existing',
+            },
+            [patient]
+        );
+
+        expect(googleCalendar.syncAppointment).not.toHaveBeenCalled();
+    });
 });

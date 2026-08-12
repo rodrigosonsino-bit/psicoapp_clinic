@@ -348,7 +348,14 @@ export class SyncGoogleCalendarEventsUseCase {
 
     /**
      * Se o horário/duração do evento no Google divergem do agendamento do app,
-     * corrige o Google Calendar de volta (nunca o contrário).
+     * corrige o Google Calendar de volta (nunca o contrário). Também dispara
+     * um push quando o agendamento é online/ativo mas o evento no Google não
+     * tem NENHUMA conferência do Meet (nem hangoutLink nem conferenceData) —
+     * caso contrário esse gap nunca seria corrigido: backfillMeetLinkIfMissing
+     * só copia um link que já existe no evento, e sem drift de horário/duração
+     * nenhum outro código pede a criação do Meet (ex.: agendamento criado como
+     * presencial e depois trocado pra online sem mudar o horário, ou evento
+     * vinculado por heurística a um evento pré-existente sem Meet).
      */
     private async correctDriftIfNeeded(
         tenantId: string,
@@ -362,14 +369,24 @@ export class SyncGoogleCalendarEventsUseCase {
 
         const timeDrifted = existingAppt.scheduledAt.getTime() !== start.getTime();
         const durationDrifted = existingAppt.durationMinutes !== durationMinutes;
-        if (!timeDrifted && !durationDrifted) return;
+
+        const { meetLink: googleMeetLink } = extractMeetInfo(event);
+        const missingMeetConference =
+            existingAppt.modality === 'online' &&
+            existingAppt.status !== 'canceled' &&
+            existingAppt.status !== 'no_show' &&
+            !googleMeetLink;
+
+        if (!timeDrifted && !durationDrifted && !missingMeetConference) return;
 
         const target = await this.repairCorruptedSeriesLink(tenantId, existingAppt);
         const isPastoral = patient.email === PASTORAL_SENTINEL_EMAIL;
         await this.googleCalendar.syncAppointment(tenantId, target, patient.name, patient.phone, this.confirmUrlFor(target), isPastoral);
         logger.info(
-            { tenantId, appointmentId: target.id, eventId: event.id },
-            '🔧 Divergência no Google Calendar corrigida a partir do PsicoApp (app é a referência)'
+            { tenantId, appointmentId: target.id, eventId: event.id, timeDrifted, durationDrifted, missingMeetConference },
+            timeDrifted || durationDrifted
+                ? '🔧 Divergência no Google Calendar corrigida a partir do PsicoApp (app é a referência)'
+                : '🎥 Conferência do Meet ausente no evento — solicitando criação via push do PsicoApp'
         );
     }
 
