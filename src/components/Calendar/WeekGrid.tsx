@@ -40,6 +40,26 @@ export default function WeekGrid({ days, appointments, patients, groups, covered
   const handleColumnClick = (day: Date, e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const offsetY = e.clientY - rect.top;
+
+    // Ignora o clique se ele cair perto (poucos px de margem) de um
+    // agendamento já existente nesse dia. Sem essa margem, um clique que erra
+    // o chip por pouco (chips são estreitos, principalmente em dias cheios)
+    // abre "Novo Agendamento" em vez de editar o existente — se a terapeuta
+    // não perceber e escolher o mesmo paciente, o preenchimento automático de
+    // recorrência (a partir do cadastro do paciente) gera uma SÉRIE INTEIRA
+    // duplicada, quase idêntica à original. Já aconteceu em produção (ver
+    // investigação da paciente FRAN, sessão 2026-08-11).
+    const HIT_SLOP_MIN = 6;
+    const clickedMinOfDay = offsetY / PX_PER_MINUTE + GRID_START_HOUR * 60;
+    const dayAppts = appointments.filter(a => isSameDay(new Date(a.scheduledAt), day));
+    const nearExistingAppointment = dayAppts.some(a => {
+      const start = new Date(a.scheduledAt);
+      const startMin = start.getHours() * 60 + start.getMinutes();
+      const endMin = startMin + a.durationMinutes;
+      return clickedMinOfDay >= startMin - HIT_SLOP_MIN && clickedMinOfDay <= endMin + HIT_SLOP_MIN;
+    });
+    if (nearExistingAppointment) return;
+
     const totalMin = Math.round(offsetY / PX_PER_MINUTE / 30) * 30; // snap to 30 min
     const date = new Date(day);
     date.setHours(GRID_START_HOUR + Math.floor(totalMin / 60), totalMin % 60, 0, 0);
