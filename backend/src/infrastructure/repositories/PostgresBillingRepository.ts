@@ -767,6 +767,18 @@ export class PostgresBillingRepository {
         return this.computeSummaryFromRecords(month, records);
     }
 
+    async listPatientMonthlyRecordsBefore(tenantId: string, patientId: string, month: string): Promise<PsychotherapyMonthlyRecord[]> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT *
+            FROM psychotherapy_monthly_records
+            WHERE tenant_id = $1 AND patient_id = $2 AND month < $3
+            ORDER BY month ASC;
+        `, [validTenantId, patientId, month]);
+
+        return result.rows.map(row => mapMonthlyRecord(row));
+    }
+
     private computeSummaryFromRecords(month: string, records: PsychotherapyMonthlyRecord[]): PsychotherapyMonthSummary {
         return records.reduce<PsychotherapyMonthSummary>((acc, record) => {
             acc.totalPatients += 1;

@@ -12,6 +12,8 @@ export interface BillingReminderCandidate {
     phoneMasked: string;
     month: string;
     amountCents: number;
+    overdueMonthsCount: number;
+    overdueTotalCents: number;
     sent: boolean;
     error?: string;
 }
@@ -141,6 +143,37 @@ export class BillingReminderScheduler {
         }
     }
 
+    /**
+     * Soma o saldo pendente dos registros mensais do paciente anteriores a `month`.
+     * Fonte de verdade é pendingAmountCents (o mesmo valor computado usado pela cobrança
+     * em si) — não paymentStatus, que é um campo manual e pode ficar desalinhado (ex:
+     * marcado 'paid' por engano com saldo ainda positivo). Quando isso acontece, logamos
+     * um warning em vez de mascarar a dívida.
+     * Best-effort: falha nessa consulta não deve derrubar o envio da cobrança do mês
+     * corrente para o paciente — se falhar, retorna zero e loga o erro (o alerta é um
+     * complemento informativo, a cobrança em si não depende dele).
+     */
+    private async getOverdueSummary(tenantId: string, patientId: string, month: string): Promise<{ overdueMonthsCount: number; overdueTotalCents: number }> {
+        try {
+            const priorRecords = await this.repository.listPatientMonthlyRecordsBefore(tenantId, patientId, month);
+            const overdueRecords = priorRecords.filter(r => r.pendingAmountCents > 0);
+
+            for (const r of overdueRecords) {
+                if (r.paymentStatus === 'paid') {
+                    logger.warn(`Inconsistência: registro ${r.month} do paciente ${patientId} está paymentStatus='paid' mas pendingAmountCents=${r.pendingAmountCents}.`);
+                }
+            }
+
+            return {
+                overdueMonthsCount: overdueRecords.length,
+                overdueTotalCents: overdueRecords.reduce((sum, r) => sum + r.pendingAmountCents, 0)
+            };
+        } catch (error: any) {
+            logger.warn(`Falha ao calcular inadimplência acumulada do paciente ${patientId}: ${error.message}. Cobrança do mês corrente segue sem o alerta.`);
+            return { overdueMonthsCount: 0, overdueTotalCents: 0 };
+        }
+    }
+
     private async processTenant(tenantId: string, month: string, dryRun: boolean, adminMirrorPhone: string | null): Promise<BillingReminderCandidate[]> {
         // Pega registros mensais
         const records = await this.repository.listMonthlyRecords(tenantId, month);
@@ -175,6 +208,11 @@ export class BillingReminderScheduler {
                 ? `${'*'.repeat(patient.phone.length - 4)}${patient.phone.slice(-4)}`
                 : patient.phone;
 
+            // Soma o saldo pendente de meses anteriores já fechados (inadimplência
+            // acumulada), para alertar o paciente mesmo sem cobrar automaticamente
+            // esse valor — a cobrança em si continua isolada por mês (ver processTenant).
+            const { overdueMonthsCount, overdueTotalCents } = await this.getOverdueSummary(tenantId, patient.id, month);
+
             if (dryRun) {
                 results.push({
                     tenantId,
@@ -183,6 +221,8 @@ export class BillingReminderScheduler {
                     phoneMasked,
                     month,
                     amountCents: record.pendingAmountCents,
+                    overdueMonthsCount,
+                    overdueTotalCents,
                     sent: false
                 });
                 continue;
@@ -196,7 +236,25 @@ export class BillingReminderScheduler {
             const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
             const mesExtenso = monthNames[parseInt(monthStr, 10) - 1];
 
-            const message = `Olá ${patientName},\n\nA sua fatura de sessões referente a ${mesExtenso}/${yearStr} fechou em ${valorReais}.\n\nVocê pode realizar o pagamento via Pix. Qualquer dúvida, estou à disposição!`;
+            let message = `Olá ${patientName},\n\nA sua fatura de sessões referente a ${mesExtenso}/${yearStr} fechou em ${valorReais}.\n\nVocê pode realizar o pagamento via Pix. Qualquer dúvida, estou à disposição!`;
+
+            // Variável "valor" enviada ao template da Meta: quando há inadimplência
+            // acumulada, o alerta é anexado nessa mesma variável (numa única linha, sem
+            // quebras de linha) porque o template billing_reminder já está aprovado na Meta
+            // com exatamente 3 variáveis fixas — adicionar uma 4ª variável ou mudar a
+            // estrutura do corpo exigiria resubmeter o template para reaprovação manual.
+            // No canal Baileys (texto livre, sem template) o alerta vai em parágrafo à parte
+            // em `message`, que é mais legível.
+            let valorTemplateParam = valorReais;
+
+            if (overdueTotalCents > 0) {
+                const overdueReais = (overdueTotalCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                const mesesLabel = overdueMonthsCount === 1 ? 'mês anterior' : `${overdueMonthsCount} meses anteriores`;
+                message += `\n\n⚠️ Este valor é só de ${mesExtenso}/${yearStr}. Além dele, consta separadamente ${overdueReais} em aberto de ${mesesLabel}. Podemos combinar a regularização?`;
+                // Redação explícita de que o valor extra NÃO está somado ao valor principal
+                // da variável — evita o paciente ler "R$ X + R$ Y" como cobrança de R$ X+Y.
+                valorTemplateParam = `${valorReais} (aviso: há também ${overdueReais} pendente de ${mesesLabel}, valor separado, não incluído nesta fatura)`;
+            }
 
             try {
                 if (provider === 'meta_cloud' && this.whatsappCloudClient) {
@@ -204,7 +262,7 @@ export class BillingReminderScheduler {
                         patient.phone,
                         'billing_reminder',
                         'en', // Template está aprovado na Meta como idioma "en" (não "en_US") — confirmado via Graph API /message_templates
-                        [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorReais] }]
+                        [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorTemplateParam] }]
                     );
 
                     if (outcome.kind !== 'accepted') {
@@ -243,7 +301,7 @@ export class BillingReminderScheduler {
                             adminMirrorPhone,
                             'billing_reminder',
                             'en',
-                            [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorReais] }]
+                            [{ type: 'body', values: [patientName, `${mesExtenso}/${yearStr}`, valorTemplateParam] }]
                         );
                     } catch (mirrorError: any) {
                         // Best-effort: falha no espelho não deve afetar o envio original,
@@ -259,6 +317,8 @@ export class BillingReminderScheduler {
                     phoneMasked,
                     month,
                     amountCents: record.pendingAmountCents,
+                    overdueMonthsCount,
+                    overdueTotalCents,
                     sent: true
                 });
             } catch (sendError: any) {
@@ -270,6 +330,8 @@ export class BillingReminderScheduler {
                     phoneMasked,
                     month,
                     amountCents: record.pendingAmountCents,
+                    overdueMonthsCount,
+                    overdueTotalCents,
                     sent: false,
                     error: sendError.message
                 });

@@ -40,9 +40,10 @@ function makeRecord(overrides: Partial<{
     paidSessions: number;
     absences: number;
     previousMonthPaidCents: number;
+    month: string;
 }> = {}): PsychotherapyMonthlyRecord {
     return new PsychotherapyMonthlyRecord(
-        'record-1', TENANT_ID, 'patient-1', MONTH, 'Joel', 'weekly',
+        'record-1', TENANT_ID, 'patient-1', overrides.month ?? MONTH, 'Joel', 'weekly',
         'per_session',
         overrides.sessionPriceCents ?? 10000,
         overrides.expectedSessions ?? 2,
@@ -61,6 +62,7 @@ describe('BillingReminderScheduler — elegibilidade de per_session', () => {
         const whatsappCloudClient = mock<WhatsappCloudClient>();
         repository.listTenantsWithAutomaticBilling.mockResolvedValue([makeTenant()]);
         repository.hasSentBillingReminder.mockResolvedValue(false);
+        repository.listPatientMonthlyRecordsBefore.mockResolvedValue([]);
         whatsappCloudClient.sendTemplateMessage.mockResolvedValue({ kind: 'accepted' } as any);
 
         process.env.WHATSAPP_PROVIDER = 'meta_cloud';
@@ -134,5 +136,104 @@ describe('BillingReminderScheduler — elegibilidade de per_session', () => {
         const results = await scheduler.runOnce({ dryRun: true });
 
         expect(results).toHaveLength(1);
+    });
+});
+
+const brl = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+describe('BillingReminderScheduler — alerta de inadimplência acumulada', () => {
+    const setup = () => {
+        const repository = mock<IPsychotherapyRepository>();
+        const whatsappCloudClient = mock<WhatsappCloudClient>();
+        repository.listTenantsWithAutomaticBilling.mockResolvedValue([makeTenant()]);
+        repository.hasSentBillingReminder.mockResolvedValue(false);
+        repository.listMonthlyRecords.mockResolvedValue([makeRecord({ paymentStatus: 'pending' })]);
+        repository.findActivePatientById.mockResolvedValue(makePatient({ paymentType: 'per_session' }));
+        whatsappCloudClient.sendTemplateMessage.mockResolvedValue({ kind: 'accepted' } as any);
+
+        process.env.WHATSAPP_PROVIDER = 'meta_cloud';
+        const scheduler = new BillingReminderScheduler(repository, undefined, whatsappCloudClient);
+        return { repository, whatsappCloudClient, scheduler };
+    };
+
+    it('sem meses anteriores em aberto: não altera o valor enviado no template', async () => {
+        const { repository, whatsappCloudClient, scheduler } = setup();
+        repository.listPatientMonthlyRecordsBefore.mockResolvedValue([]);
+
+        await scheduler.runOnce({ dryRun: false });
+
+        const [, , , components] = whatsappCloudClient.sendTemplateMessage.mock.calls[0];
+        expect(components[0].values[2]).toBe(brl(10000));
+    });
+
+    it('um mês anterior em aberto: soma corretamente e avisa que o valor não está incluído na fatura atual', async () => {
+        const { repository, whatsappCloudClient, scheduler } = setup();
+        repository.listPatientMonthlyRecordsBefore.mockResolvedValue([
+            makeRecord({ month: '2026-06', paymentStatus: 'pending', paidSessions: 0, expectedSessions: 1 })
+        ]);
+
+        const results = await scheduler.runOnce({ dryRun: false });
+
+        expect(results[0].overdueMonthsCount).toBe(1);
+        expect(results[0].overdueTotalCents).toBe(10000);
+        // amountCents da cobrança do mês corrente continua isolado (não soma o atraso)
+        expect(results[0].amountCents).toBe(10000);
+
+        const [, , , components] = whatsappCloudClient.sendTemplateMessage.mock.calls[0];
+        expect(components[0].values[2]).toContain('não incluído nesta fatura');
+        expect(components[0].values[2]).toContain(`${brl(10000)} pendente`);
+    });
+
+    it('vários meses anteriores em aberto: soma o total e conta corretamente', async () => {
+        const { repository, scheduler } = setup();
+        repository.listPatientMonthlyRecordsBefore.mockResolvedValue([
+            makeRecord({ month: '2026-05', paymentStatus: 'pending', paidSessions: 0, expectedSessions: 1 }),
+            makeRecord({ month: '2026-06', paymentStatus: 'partial', paidSessions: 0, expectedSessions: 1 })
+        ]);
+
+        const results = await scheduler.runOnce({ dryRun: false });
+
+        expect(results[0].overdueMonthsCount).toBe(2);
+        expect(results[0].overdueTotalCents).toBe(20000);
+    });
+
+    it('mês anterior já pago (pendingAmountCents = 0) não entra no alerta', async () => {
+        const { repository, whatsappCloudClient, scheduler } = setup();
+        repository.listPatientMonthlyRecordsBefore.mockResolvedValue([
+            makeRecord({ month: '2026-06', paymentStatus: 'paid', paidSessions: 1, expectedSessions: 1 })
+        ]);
+
+        const results = await scheduler.runOnce({ dryRun: false });
+
+        expect(results[0].overdueMonthsCount).toBe(0);
+        expect(results[0].overdueTotalCents).toBe(0);
+        const [, , , components] = whatsappCloudClient.sendTemplateMessage.mock.calls[0];
+        expect(components[0].values[2]).toBe(brl(10000));
+    });
+
+    it('status inconsistente (paymentStatus=paid mas pendingAmountCents>0) ainda entra no alerta', async () => {
+        const { repository, scheduler } = setup();
+        repository.listPatientMonthlyRecordsBefore.mockResolvedValue([
+            makeRecord({ month: '2026-06', paymentStatus: 'paid', paidSessions: 0, expectedSessions: 1 })
+        ]);
+
+        const results = await scheduler.runOnce({ dryRun: false });
+
+        expect(results[0].overdueMonthsCount).toBe(1);
+        expect(results[0].overdueTotalCents).toBe(10000);
+    });
+
+    it('falha ao consultar meses anteriores não impede o envio da cobrança do mês corrente', async () => {
+        const { repository, whatsappCloudClient, scheduler } = setup();
+        repository.listPatientMonthlyRecordsBefore.mockRejectedValue(new Error('timeout no banco'));
+
+        const results = await scheduler.runOnce({ dryRun: false });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].sent).toBe(true);
+        expect(results[0].overdueMonthsCount).toBe(0);
+        expect(results[0].overdueTotalCents).toBe(0);
+        const [, , , components] = whatsappCloudClient.sendTemplateMessage.mock.calls[0];
+        expect(components[0].values[2]).toBe(brl(10000));
     });
 });

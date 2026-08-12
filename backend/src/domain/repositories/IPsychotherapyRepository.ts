@@ -276,6 +276,9 @@ export interface IPsychotherapyRepository {
      *  por sessão(ões) de um mês que ainda não foi gerado/fechado. */
     addAdvanceCredit(data: AddAdvanceCreditDTO): Promise<PsychotherapyMonthlyRecord>;
     listMonthlyRecords(tenantId: string, month: string): Promise<PsychotherapyMonthlyRecord[]>;
+    /** Registros mensais de um paciente anteriores a `month` (exclusive), usado para
+     *  calcular inadimplência acumulada de meses fechados que ainda não foram pagos. */
+    listPatientMonthlyRecordsBefore(tenantId: string, patientId: string, month: string): Promise<PsychotherapyMonthlyRecord[]>;
     getMonthSummary(tenantId: string, month: string): Promise<PsychotherapyMonthSummary>;
     getTenantProfile(tenantId: string): Promise<TenantProfile | null>;
     updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile>;

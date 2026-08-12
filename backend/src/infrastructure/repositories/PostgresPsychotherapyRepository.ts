@@ -123,6 +123,10 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         return this.billingRepository.listMonthlyRecords(tenantId, month);
     }
 
+    async listPatientMonthlyRecordsBefore(tenantId: string, patientId: string, month: string): Promise<PsychotherapyMonthlyRecord[]> {
+        return this.billingRepository.listPatientMonthlyRecordsBefore(tenantId, patientId, month);
+    }
+
     async getMonthSummary(tenantId: string, month: string): Promise<PsychotherapyMonthSummary> {
         return this.billingRepository.getMonthSummary(tenantId, month);
     }
