@@ -1,5 +1,5 @@
 import { injectable, inject } from 'tsyringe';
-import { google } from 'googleapis';
+import { google, calendar_v3 } from 'googleapis';
 import { IPsychotherapyRepository, GoogleOAuthTokens } from '../../domain/repositories/IPsychotherapyRepository';
 import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalendarService';
 import { PsychotherapyPatient } from '../../domain/models/PsychotherapyPatient';
@@ -129,16 +129,31 @@ export class SyncGoogleCalendarEventsUseCase {
         const timeMax = new Date();
         timeMax.setDate(now.getDate() + 30);
 
-        const response = await calendar.events.list({
-            calendarId: config.calendarId ?? 'primary',
-            timeMin: timeMin.toISOString(),
-            timeMax: timeMax.toISOString(),
-            singleEvents: true,
-            orderBy: 'startTime',
-            showDeleted: true
-        });
-
-        const events = response.data.items ?? [];
+        // calendar.events.list pagina (250 itens por página por padrão). Sem
+        // percorrer nextPageToken, qualquer evento além da 1ª página fica
+        // permanentemente invisível pro sync — sem erro, sem log, apenas
+        // nunca processado. Com showDeleted:true (necessário pra restaurar
+        // eventos apagados externamente) e vários pacientes com séries
+        // recorrentes expandidas numa janela de 37 dias, é fácil passar de
+        // 250 itens. Descoberto em produção: uma sessão real (paciente
+        // "FELIPE") ficou 2+ dias sem sincronizar porque sua ocorrência
+        // simplesmente nunca aparecia na 1ª página.
+        const events: calendar_v3.Schema$Event[] = [];
+        let pageToken: string | undefined;
+        do {
+            const response = await calendar.events.list({
+                calendarId: config.calendarId ?? 'primary',
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString(),
+                singleEvents: true,
+                orderBy: 'startTime',
+                showDeleted: true,
+                maxResults: 2500,
+                pageToken
+            });
+            events.push(...(response.data.items ?? []));
+            pageToken = response.data.nextPageToken ?? undefined;
+        } while (pageToken);
 
         // ── 0. Agendamentos do app sem evento espelhado no Google: criar os que faltam ──
         // Cobre o caso de um push anterior ter falhado (ex.: 404 ao tentar atualizar um

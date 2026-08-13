@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { google } from 'googleapis';
 import { SyncGoogleCalendarEventsUseCase } from '../SyncGoogleCalendarEventsUseCase';
 import { PsychotherapyAppointment, AppointmentStatus } from '../../../domain/models/PsychotherapyAppointment';
 import { IPsychotherapyRepository } from '../../../domain/repositories/IPsychotherapyRepository';
@@ -270,5 +271,72 @@ describe('SyncGoogleCalendarEventsUseCase — restauração de evento removido',
         );
 
         expect(googleCalendar.syncAppointment).not.toHaveBeenCalled();
+    });
+
+    it('percorre todas as páginas de calendar.events.list — evento só presente na 2ª página ainda é processado', async () => {
+        const tenantId = '22222222-2222-4222-8222-222222222222';
+        const patientId = '33333333-3333-4333-8333-333333333333';
+        const eventIdPage2 = 'event-on-page-2';
+
+        const patient = { id: patientId, tenantId, name: 'FELIPE', phone: null } as any;
+        const unlinkedAppt = {
+            id: 'appt-page2', tenantId, patientId, parentId: null,
+            scheduledAt: new Date('2026-08-13T10:30:00.000Z'), durationMinutes: 50,
+            status: 'scheduled', recurrence: 'none', googleEventId: null,
+        } as PsychotherapyAppointment;
+
+        const list = jest.fn()
+            .mockResolvedValueOnce({
+                data: {
+                    items: [{
+                        id: 'event-on-page-1', status: 'confirmed',
+                        start: { dateTime: '2026-08-10T14:00:00.000Z' }, end: { dateTime: '2026-08-10T14:50:00.000Z' },
+                        summary: 'Outro Paciente',
+                    }],
+                    nextPageToken: 'page-2-token',
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    items: [{
+                        id: eventIdPage2, status: 'confirmed',
+                        start: { dateTime: '2026-08-13T10:30:00.000Z' }, end: { dateTime: '2026-08-13T10:30:00.000Z' },
+                        summary: 'FELIPE', htmlLink: 'https://calendar.google.test/page2',
+                    }],
+                    // sem nextPageToken — última página
+                },
+            });
+        jest.spyOn(google, 'calendar').mockReturnValue({ events: { list } } as any);
+
+        const repository = {
+            listAllGoogleOAuthTokens: jest.fn().mockResolvedValue([
+                { tenantId, calendarId: 'calendar-id' }
+            ]),
+            listAppointments: jest.fn().mockResolvedValue({ data: [unlinkedAppt], total: 1 }),
+            listPatients: jest.fn().mockResolvedValue([patient]),
+            findAppointmentByGoogleEventId: jest.fn().mockResolvedValue(null),
+            updateAppointmentGoogleEvent: jest.fn().mockResolvedValue(undefined),
+            findAppointmentById: jest.fn().mockResolvedValue(unlinkedAppt),
+        } as unknown as IPsychotherapyRepository;
+
+        const googleCalendar = {
+            getAuthenticatedClient: jest.fn().mockResolvedValue({}),
+            syncAppointment: jest.fn().mockResolvedValue(undefined),
+        } as unknown as GoogleCalendarService;
+
+        const pool = { connect: jest.fn().mockResolvedValue({
+            query: jest.fn().mockResolvedValue({ rows: [{ acquired: true }] }),
+            release: jest.fn(),
+        }) } as unknown as Pool;
+
+        const useCase = new SyncGoogleCalendarEventsUseCase(repository, googleCalendar, pool);
+        await useCase.execute();
+
+        expect(list).toHaveBeenCalledTimes(2);
+        expect(list.mock.calls[1][0]).toMatchObject({ pageToken: 'page-2-token' });
+        // Evento só existente na 2ª página foi vinculado ao agendamento do app.
+        expect(repository.updateAppointmentGoogleEvent).toHaveBeenCalledWith(
+            'appt-page2', tenantId, eventIdPage2, 'https://calendar.google.test/page2', null, null
+        );
     });
 });
