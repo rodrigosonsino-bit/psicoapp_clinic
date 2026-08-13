@@ -484,14 +484,54 @@ export class GoogleCalendarService {
             }
         } catch (err: any) {
             if ([404, 410].includes(this.errorCode(err)) && appointment.googleEventId) {
-                await this.recreateWithNextGeneration(
-                    tenantId, appointment, patientName, patientPhone,
-                    confirmUrl, isPastoral, forceCreate, recoveryDepth, treatAsSeriesRoot
-                );
+                // Um 404/410 no update() pode ser falso positivo (atraso de propagação
+                // do Google, rate limit mal classificado, hiccup transitório) — recriar
+                // sem confirmar duplicaria o evento, já vivo, sob um novo ID de geração.
+                // Confirma com um GET direto no evento antigo antes de assumir que ele
+                // sumiu de verdade, mesma classificação usada no caminho de conflito 409
+                // do insert() acima (ausente OU cancelado = pode recriar; presente e ativo,
+                // ou resposta inconclusiva de erro, não recria).
+                const absence = await this.classifyEventAbsence(calendar, calendarId, appointment.googleEventId);
+
+                if (absence === 'gone' || absence === 'cancelled') {
+                    await this.recreateWithNextGeneration(
+                        tenantId, appointment, patientName, patientPhone,
+                        confirmUrl, isPastoral, forceCreate, recoveryDepth, treatAsSeriesRoot
+                    );
+                } else {
+                    await this.markSyncErrorSafely(appointment.id, tenantId, err);
+                    logger.warn(
+                        { err, appointmentId: appointment.id, eventId: appointment.googleEventId, absence },
+                        absence === 'present'
+                            ? '⚠️ update() retornou 404/410 mas o evento ainda existe ativo no Google — não recriando para evitar duplicata; erro registrado para nova tentativa'
+                            : '⚠️ update() retornou 404/410 e a confirmação do evento foi inconclusiva (erro não classificável) — não recriando por segurança; erro registrado para nova tentativa'
+                    );
+                }
             } else {
                 await this.markSyncErrorSafely(appointment.id, tenantId, err);
                 logger.error({ err, appointmentId: appointment.id }, 'Erro ao sincronizar evento Google Calendar');
             }
+        }
+    }
+
+    /**
+     * Confirma via GET direto se um evento do Google realmente pode ser tratado como
+     * "sumido" (elegível para recriação com nova geração): 'gone' (404/410) ou
+     * 'cancelled' (existe mas com status cancelled, mesmo tratamento do caminho de
+     * conflito 409 do insert()). 'present' = existe e está ativo, não recriar.
+     * 'inconclusive' = erro não-404/410 no GET (403/429/5xx) — não dá pra confirmar
+     * nem ausência nem presença, então não recria por segurança.
+     */
+    private async classifyEventAbsence(
+        calendar: calendar_v3.Calendar,
+        calendarId: string,
+        eventId: string
+    ): Promise<'gone' | 'cancelled' | 'present' | 'inconclusive'> {
+        try {
+            const existing = await calendar.events.get({ calendarId, eventId });
+            return existing.data.status === 'cancelled' ? 'cancelled' : 'present';
+        } catch (getErr: any) {
+            return [404, 410].includes(this.errorCode(getErr)) ? 'gone' : 'inconclusive';
         }
     }
 
@@ -512,7 +552,7 @@ export class GoogleCalendarService {
             throw error;
         }
 
-        await this.repository.advanceAppointmentGoogleEventGeneration(
+        const newGeneration = await this.repository.advanceAppointmentGoogleEventGeneration(
             appointment.id,
             tenantId,
             appointment.googleEventGeneration
@@ -520,8 +560,26 @@ export class GoogleCalendarService {
         const fresh = await this.repository.findAppointmentById(tenantId, appointment.id);
         if (!fresh) throw new Error('Agendamento não encontrado após avançar geração do evento Google.');
 
+        if (newGeneration === null) {
+            // CAS não bateu: outra execução concorrente (cron, retry, edição manual) já
+            // avançou a geração e presumivelmente já recriou o evento. Prosseguir aqui
+            // aplicaria dados potencialmente obsoletos por cima do que a outra execução
+            // já escreveu — reconcilia com o estado atual normalmente (sem incrementar
+            // recoveryDepth como uma nova tentativa de recuperação) e não força outra
+            // recriação.
+            logger.info(
+                { appointmentId: appointment.id, expectedGeneration: appointment.googleEventGeneration },
+                'ℹ️ Geração do evento Google já avançada por outra execução concorrente — reconciliando com o estado atual em vez de recriar de novo'
+            );
+            await this.syncAppointment(
+                tenantId, fresh, patientName, patientPhone, confirmUrl,
+                isPastoral, forceCreate, recoveryDepth, treatAsSeriesRoot
+            );
+            return;
+        }
+
         logger.warn(
-            { appointmentId: appointment.id, previousGeneration: appointment.googleEventGeneration },
+            { appointmentId: appointment.id, previousGeneration: appointment.googleEventGeneration, newGeneration },
             'Evento Google removido; recriando com nova geração idempotente'
         );
         await this.syncAppointment(

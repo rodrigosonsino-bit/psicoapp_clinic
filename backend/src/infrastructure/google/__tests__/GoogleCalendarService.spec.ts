@@ -19,7 +19,7 @@ describe('GoogleCalendarService idempotency', () => {
     let patch: jest.Mock;
     let instances: jest.Mock;
 
-    const appointment = (googleEventId: string | null = null) => new PsychotherapyAppointment(
+    const appointment = (googleEventId: string | null = null, generation = 0) => new PsychotherapyAppointment(
         appointmentId,
         tenantId,
         'patient-1',
@@ -32,7 +32,13 @@ describe('GoogleCalendarService idempotency', () => {
         googleEventId,
         googleEventId ? 'https://calendar.google/event' : null,
         'confirm-token',
-        null
+        null,
+        null,
+        new Date(),
+        new Date(),
+        null,
+        'idle',
+        generation
     );
 
     beforeEach(() => {
@@ -175,6 +181,83 @@ describe('GoogleCalendarService idempotency', () => {
         expect(insert.mock.calls[0][0].requestBody.id).toBe(expectedId);
         expect(insert.mock.calls[1][0].requestBody.id).toBe(expectedId);
         expect(repository.markAppointmentGoogleSyncError).toHaveBeenCalledTimes(1);
+    });
+
+    it('update() retorna 404 mas o evento ainda existe ativo: não recria (evitaria duplicata)', async () => {
+        update.mockRejectedValue({ code: 404 });
+        get.mockResolvedValue({ data: { id: 'legacy-event', status: 'confirmed' } });
+
+        await service.syncAppointment(tenantId, appointment('legacy-event'), 'Paciente', null, 'https://confirm');
+
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'legacy-event' }));
+        expect(get).toHaveBeenCalledWith({ calendarId, eventId: 'legacy-event' });
+        expect(insert).not.toHaveBeenCalled();
+        expect(repository.advanceAppointmentGoogleEventGeneration).not.toHaveBeenCalled();
+        expect(repository.updateAppointmentGoogleEvent).not.toHaveBeenCalled();
+        expect(repository.markAppointmentGoogleSyncError).toHaveBeenCalledTimes(1);
+    });
+
+    it('update() retorna 404 e o GET também confirma ausência (404/410): recria com nova geração', async () => {
+        const expectedGen1Id = new GoogleCalendarEventIdFactory().create(tenantId, appointmentId, 1);
+        update.mockRejectedValue({ code: 404 });
+        get.mockRejectedValue({ code: 404 });
+        // advanceAppointmentGoogleEventGeneration incrementa a geração (0 -> 1) e zera
+        // google_event_id no banco antes de recriar — o findAppointmentById seguinte
+        // reflete isso, então o insert deve usar o ID determinístico da geração 1.
+        repository.advanceAppointmentGoogleEventGeneration.mockResolvedValue(1);
+        repository.findAppointmentById.mockResolvedValue(appointment(null, 1));
+        insert.mockResolvedValue({ data: { id: expectedGen1Id, htmlLink: 'https://calendar/recreated' } });
+
+        await service.syncAppointment(tenantId, appointment('legacy-event'), 'Paciente', null, 'https://confirm');
+
+        expect(get).toHaveBeenCalledWith({ calendarId, eventId: 'legacy-event' });
+        expect(repository.advanceAppointmentGoogleEventGeneration).toHaveBeenCalledTimes(1);
+        expect(insert).toHaveBeenCalledTimes(1);
+        expect(insert.mock.calls[0][0].requestBody.id).toBe(expectedGen1Id);
+    });
+
+    it('update() retorna 404 e o GET confirma o evento como cancelled: recria com nova geração', async () => {
+        const expectedGen1Id = new GoogleCalendarEventIdFactory().create(tenantId, appointmentId, 1);
+        update.mockRejectedValue({ code: 404 });
+        get.mockResolvedValue({ data: { id: 'legacy-event', status: 'cancelled' } });
+        repository.advanceAppointmentGoogleEventGeneration.mockResolvedValue(1);
+        repository.findAppointmentById.mockResolvedValue(appointment(null, 1));
+        insert.mockResolvedValue({ data: { id: expectedGen1Id, htmlLink: 'https://calendar/recreated' } });
+
+        await service.syncAppointment(tenantId, appointment('legacy-event'), 'Paciente', null, 'https://confirm');
+
+        expect(repository.advanceAppointmentGoogleEventGeneration).toHaveBeenCalledTimes(1);
+        expect(insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('update() retorna 404 e o GET falha com erro inconclusivo (429): não recria, marca erro', async () => {
+        update.mockRejectedValue({ code: 404 });
+        get.mockRejectedValue({ code: 429 });
+
+        await service.syncAppointment(tenantId, appointment('legacy-event'), 'Paciente', null, 'https://confirm');
+
+        expect(insert).not.toHaveBeenCalled();
+        expect(repository.advanceAppointmentGoogleEventGeneration).not.toHaveBeenCalled();
+        expect(repository.markAppointmentGoogleSyncError).toHaveBeenCalledTimes(1);
+    });
+
+    it('recreateWithNextGeneration: CAS perdido (outra execução já avançou) reconcilia sem forçar nova recriação', async () => {
+        update
+            .mockRejectedValueOnce({ code: 404 })
+            .mockResolvedValueOnce({ data: { id: 'event-from-other-run', htmlLink: 'https://calendar/other-run' } });
+        get.mockRejectedValue({ code: 404 });
+        // advanceAppointmentGoogleEventGeneration retorna null quando outra execução
+        // concorrente já avançou a geração primeiro (CAS não bateu). O agendamento
+        // recarregado já reflete o que essa outra execução escreveu.
+        repository.advanceAppointmentGoogleEventGeneration.mockResolvedValue(null);
+        repository.findAppointmentById.mockResolvedValue(appointment('event-from-other-run', 1));
+
+        await service.syncAppointment(tenantId, appointment('legacy-event'), 'Paciente', null, 'https://confirm');
+
+        // Reconcilia contra o evento já criado pela outra execução via update normal,
+        // em vez de inserir outro evento novo por cima.
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'event-from-other-run' }));
+        expect(insert).not.toHaveBeenCalled();
     });
 
     it('cancela só a 1ª ocorrência de uma série ao invés de cancelar o master, quando há filhos ativos', async () => {
