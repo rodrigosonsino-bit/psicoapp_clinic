@@ -1124,7 +1124,7 @@ function AppointmentModal({ appointment, patients, initialScheduledAt, onClose, 
           )}
 
           <div className="flex gap-4">
-            <div className="form-group w-full">
+            <div className="form-group w-full" style={{ minWidth: '230px' }}>
               <label className="form-label">Data e Hora *</label>
               <input required type="datetime-local" className="form-control"
                 value={formData.scheduledAt}

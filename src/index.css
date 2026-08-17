@@ -195,6 +195,25 @@ button {
   box-shadow: 0 0 0 3px rgba(109, 93, 252, 0.2);
 }
 
+/* Ícone nativo do seletor de data/hora (Chrome/Edge/Safari) é escuro por padrão —
+   quase invisível no fundo escuro do input. color-scheme avisa o navegador pra
+   desenhar o ícone (e o popup do calendário) já em paleta clara/contrastante —
+   mais confiável que inverter cor via filter, que deixava um cinza lavado. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+  /* Reserva espaço real pro ícone nativo — sem isso o texto (ex: "22/08/2026,
+     10:00") encosta ou fica por baixo do ícone quando o campo é estreito. */
+  padding-right: 2.25rem;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
 /* Tables */
 .table-container {
   width: 100%;
