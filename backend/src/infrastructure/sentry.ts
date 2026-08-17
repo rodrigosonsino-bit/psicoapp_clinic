@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node';
 import type { Request } from 'express';
 import { AppError } from '../domain/errors/AppError';
+import { redactBookingToken } from './urlRedaction';
 
 // Nomes de campos tratados como sensíveis em qualquer nível do payload do evento
 // (body, query, headers, cookies, extras) — cobre credenciais e dado clínico/pessoal
@@ -17,6 +18,12 @@ const SENSITIVE_KEY_PATTERN =
 function stripQueryString(url: string): string {
     const separatorIndex = url.search(/[?#]/);
     return separatorIndex === -1 ? url : url.slice(0, separatorIndex);
+}
+
+// stripQueryString não protege o token de /book e /book-public — ele mora no path,
+// não na query string. Compõe as duas em toda superfície que carrega uma URL crua.
+function sanitizeUrl(url: string): string {
+    return redactBookingToken(stripQueryString(url));
 }
 
 function scrubObject(value: unknown, depth = 0): unknown {
@@ -46,7 +53,7 @@ export function initSentry(): void {
             if (breadcrumb.data) {
                 breadcrumb.data = scrubObject(breadcrumb.data) as Record<string, unknown>;
                 if (typeof breadcrumb.data.url === 'string') {
-                    breadcrumb.data.url = stripQueryString(breadcrumb.data.url);
+                    breadcrumb.data.url = sanitizeUrl(breadcrumb.data.url);
                 }
             }
             return breadcrumb;
@@ -57,7 +64,7 @@ export function initSentry(): void {
                 delete event.request.cookies;
                 delete event.request.query_string;
                 if (event.request.url) {
-                    event.request.url = stripQueryString(event.request.url);
+                    event.request.url = sanitizeUrl(event.request.url);
                 }
                 if (event.request.headers) {
                     event.request.headers = scrubObject(event.request.headers) as Record<string, string>;
@@ -97,7 +104,7 @@ export function captureServerException(err: unknown, req?: Request): void {
         if (userId) scope.setTag('user_id', userId);
         if (req) {
             scope.setTag('method', req.method);
-            scope.setTag('route', req.route?.path || req.path);
+            scope.setTag('route', req.route?.path || redactBookingToken(req.path));
         }
         Sentry.captureException(err);
     });

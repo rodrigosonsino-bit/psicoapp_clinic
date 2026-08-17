@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../../domain/errors/AppError';
 import { logger } from '../../infrastructure/logger';
 import { captureServerException } from '../../infrastructure/sentry';
+import { redactBookingToken } from '../../infrastructure/urlRedaction';
 
 /**
  * Middleware global de tratamento de erros do Express.
@@ -26,7 +27,7 @@ export function errorHandler(
         name: err.name || 'Error',
         statusCode: err.statusCode || 500,
         method: req.method,
-        url: req.originalUrl,
+        url: redactBookingToken(req.originalUrl),
         stack: isProduction ? undefined : err.stack
     }, '❌ [Express Global Error]');
 

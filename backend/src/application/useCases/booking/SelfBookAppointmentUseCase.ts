@@ -22,12 +22,32 @@ export class SelfBookAppointmentUseCase {
         if (isNaN(scheduledAt.getTime())) throw new AppError('Data/hora inválida.', 400);
         if (scheduledAt <= new Date()) throw new AppError('Não é possível agendar no passado.', 400);
 
+        // Exige o instante exato do slot (sem segundos/ms) — sem isso, um horário como
+        // 10:00:37 também casaria com o slot "10:00" na comparação por HH:mm abaixo,
+        // permitindo agendar fora da grade real do terapeuta.
+        if (scheduledAt.getUTCSeconds() !== 0 || scheduledAt.getUTCMilliseconds() !== 0) {
+            throw new AppError('Horário inválido para agendamento.', 400);
+        }
+
         const conflict = await this.repository.listActiveAppointmentDatetimes(
             tenantId,
             new Date(scheduledAt.getTime() - 60_000),
             new Date(scheduledAt.getTime() + 60_000)
         );
         if (conflict.length > 0) throw new AppError('Este horário já foi reservado. Por favor, escolha outro.', 409);
+
+        // Valida contra a grade de disponibilidade ANTES de criar/tocar o paciente — sem
+        // isso, uma tentativa fora da grade cria um paciente órfão antes de descobrir que
+        // o slot não existe (achado da auditoria do Codex de 2026-08-17).
+        // Comparar no fuso de negócio (BRT, -03:00 fixo), independente do fuso do
+        // servidor (UTC em produção).
+        const slots = await this.repository.listAvailabilitySlots(tenantId);
+        const brtWall = new Date(scheduledAt.getTime() - 3 * 60 * 60 * 1000);
+        const dow = brtWall.getUTCDay();
+        const hhmm = `${String(brtWall.getUTCHours()).padStart(2, '0')}:${String(brtWall.getUTCMinutes()).padStart(2, '0')}`;
+        const matchingSlot = slots.find(s => s.dayOfWeek === dow && s.startTime === hhmm && s.isActive);
+        if (!matchingSlot) throw new AppError('Este horário não está disponível para agendamento.', 409);
+        const durationMinutes = matchingSlot.durationMinutes;
 
         // Upsert: busca por celular, cria se não existir
         const normalizedPhone = phone.trim();
@@ -41,15 +61,6 @@ export class SelfBookAppointmentUseCase {
                 reminderChannel: 'whatsapp',
             });
         }
-
-        const slots = await this.repository.listAvailabilitySlots(tenantId);
-        // Comparar com a grade de disponibilidade no fuso de negócio (BRT, -03:00),
-        // independente do fuso do servidor (UTC em produção).
-        const brtWall = new Date(scheduledAt.getTime() - 3 * 60 * 60 * 1000);
-        const dow = brtWall.getUTCDay();
-        const hhmm = `${String(brtWall.getUTCHours()).padStart(2, '0')}:${String(brtWall.getUTCMinutes()).padStart(2, '0')}`;
-        const matchingSlot = slots.find(s => s.dayOfWeek === dow && s.startTime === hhmm && s.isActive);
-        const durationMinutes = matchingSlot?.durationMinutes ?? 50;
 
         const appointment = await this.repository.saveAppointment({
             tenantId,

@@ -825,7 +825,11 @@ export class PostgresAppointmentRepository {
             WHERE tenant_id = $1
               AND scheduled_at >= $2
               AND scheduled_at < $3
-              AND status NOT IN ('canceled', 'no_show');
+              -- Alinhado com a exclusion constraint de calendar_events (migration 100):
+              -- só 'canceled' libera o horário — 'no_show' continua bloqueando lá, então
+              -- esta checagem otimista não pode dizer "livre" pra um horário que o banco
+              -- vai rejeitar em seguida (achado da auditoria do Codex de 2026-08-17).
+              AND status <> 'canceled';
         `, [validTenantId, from, to]);
         return result.rows.map(r => new Date(r.scheduled_at));
     }
