@@ -61,11 +61,17 @@ export class WhatsappCloudClient {
             if (p.type === 'header') {
                 return { type: 'header', parameters: p.values.map(text => ({ type: 'text', text })) };
             }
+            const subType = p.subType ?? 'quick_reply';
             return {
                 type: 'button',
-                sub_type: 'quick_reply',
+                sub_type: subType,
                 index: String(p.buttonIndex ?? 0),
-                parameters: p.values.map(text => ({ type: 'payload', payload: text })),
+                // Botão de URL dinâmica: o valor é só o SUFIXO que a Meta concatena ao prefixo
+                // fixo cadastrado no template, e vai como type:'text' — 'payload' é exclusivo de
+                // quick_reply.
+                parameters: subType === 'url'
+                    ? p.values.map(text => ({ type: 'text', text }))
+                    : p.values.map(text => ({ type: 'payload', payload: text })),
             };
         });
 

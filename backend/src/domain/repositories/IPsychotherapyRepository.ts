@@ -165,6 +165,9 @@ export interface UpcomingAppointment {
     durationMinutes: number;
     googleMeetLink?: string | null;
     modality?: 'online' | 'presencial';
+    /** Token da página pública de confirmação/cancelamento (`/confirm/:token`). A coluna tem
+     * DEFAULT gen_random_uuid() mas não é NOT NULL — trate como nullable. */
+    confirmToken: string | null;
 }
 
 export type ReminderLogStatus = 'success' | 'failed';

@@ -590,7 +590,8 @@ export class PostgresAppointmentRepository {
                 a.scheduled_at,
                 a.duration_minutes,
                 a.google_meet_link,
-                a.modality
+                a.modality,
+                a.confirm_token
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
             JOIN tenants t ON t.id = a.tenant_id
@@ -613,7 +614,8 @@ export class PostgresAppointmentRepository {
             scheduledAt:    new Date(row.scheduled_at),
             durationMinutes: row.duration_minutes,
             googleMeetLink: row.google_meet_link,
-            modality:       row.modality
+            modality:       row.modality,
+            confirmToken:   row.confirm_token
         }));
     }
 
@@ -631,6 +633,7 @@ export class PostgresAppointmentRepository {
                 a.scheduled_at,
                 a.duration_minutes,
                 a.google_meet_link,
+                a.confirm_token,
                 a.modality
             FROM psychotherapy_appointments a
             JOIN psychotherapy_patients p ON p.id = a.patient_id
@@ -675,7 +678,8 @@ export class PostgresAppointmentRepository {
             scheduledAt:    new Date(row.scheduled_at),
             durationMinutes: row.duration_minutes,
             googleMeetLink: row.google_meet_link,
-            modality:       row.modality
+            modality:       row.modality,
+            confirmToken:   row.confirm_token
         }));
     }
 

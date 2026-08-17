@@ -18,6 +18,15 @@ function resolveTemplateVariable(varName: string, appt: UpcomingAppointment): st
             return formatDateTimeBR(appt.scheduledAt);
         case 'duracao':
             return String(appt.durationMinutes);
+        case 'confirmToken':
+            // Falha explícita em vez de pular o botão: um template aprovado com botão de URL
+            // dinâmica exige esse componente em toda mensagem — omiti-lo só transferiria a
+            // falha para a Cloud API, com um erro menos claro. Coluna tem DEFAULT mas não é
+            // NOT NULL (dado legado/futuro update explícito), então trata como possível.
+            if (!appt.confirmToken) {
+                throw new Error('Agendamento sem confirmToken — não é possível montar o botão do lembrete.');
+            }
+            return appt.confirmToken;
         default:
             throw new Error(`Variável de template não mapeada: ${varName}`);
     }
@@ -66,6 +75,22 @@ export class WhatsappCloudSender implements IReminderMessageSender {
             parameters.push({
                 type: 'header',
                 values: template.parameterSchema.header.map(varName => resolveTemplateVariable(varName, appt)),
+            });
+        }
+        if (template.parameterSchema.buttons?.length) {
+            // 'buttons' hoje significa "variáveis do botão de índice 0" — um único botão de URL
+            // dinâmica, não uma lista de botões. Mais de uma variável indicaria configuração
+            // inconsistente do template (buttonIndex fixo em 0 só é seguro para um botão).
+            if (template.parameterSchema.buttons.length !== 1) {
+                throw new Error(
+                    `Template de lembrete deve configurar exatamente uma variável para o botão de URL, encontrou ${template.parameterSchema.buttons.length}.`
+                );
+            }
+            parameters.push({
+                type: 'button',
+                subType: 'url',
+                buttonIndex: 0,
+                values: [resolveTemplateVariable(template.parameterSchema.buttons[0], appt)],
             });
         }
 

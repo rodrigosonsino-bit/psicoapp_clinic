@@ -17,6 +17,10 @@ export interface TemplateComponentParameter {
     type: 'body' | 'header' | 'button';
     /** Índice do botão (só relevante para type='button'). */
     buttonIndex?: number;
+    /** Sub-tipo do botão (só relevante para type='button'). Default 'quick_reply' — nenhum
+     * caller usava type='button' antes de 'url' existir, então o default preserva o único
+     * comportamento que já existia. */
+    subType?: 'quick_reply' | 'url';
     values: string[];
 }
 
