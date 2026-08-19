@@ -223,9 +223,27 @@ export class TranscriptionJobScheduler {
         // google.meet é a REST API v2 (requer googleapiclient ou googleapis >= 108)
         const meetClient = google.meet({ version: 'v2', auth: oauth2Client });
 
+        // meet_space_name no banco é montado em extractMeetInfo()/GoogleCalendarService a
+        // partir de conferenceData.conferenceId da Calendar API — que é o CÓDIGO da reunião
+        // (ex: "spaces/eqp-uqmk-kgs"), não o nome canônico do recurso que a Meet API v2 exige
+        // no filtro de conferenceRecords.list (ex: "spaces/V9UtzWD_lT8B"). São dois sistemas
+        // de ID diferentes do próprio Google. spaces.get() aceita o código como alias e
+        // devolve o nome canônico — resolve aqui em vez de mudar o valor salvo no banco (que
+        // já existe pra todas as sessões antigas). Achado real: sessão da Lucilene
+        // (2026-08-19) tinha transcrição pronta no Google, mas o filtro nunca batia.
+        let canonicalSpaceName = meetSpaceName;
+        try {
+            const space = await meetClient.spaces.get({ name: meetSpaceName });
+            if (space.data.name) {
+                canonicalSpaceName = space.data.name;
+            }
+        } catch (err: any) {
+            log.warn({ err, meetSpaceName }, '[TranscriptionJobScheduler] Falha ao resolver nome canônico do space — tentando com o valor salvo mesmo assim');
+        }
+
         // Listar conference records filtrando por space.name
         const records = await meetClient.conferenceRecords.list({
-            filter: `space.name="${meetSpaceName}"`,
+            filter: `space.name="${canonicalSpaceName}"`,
             pageSize: 10
         });
 
@@ -306,12 +324,17 @@ export class TranscriptionJobScheduler {
         try {
             await client.query('BEGIN');
 
-            // 1. Obter info do appointment e tenant timezone
+            // 1. Obter info do appointment. Achado real (2026-08-19, sessão da Lucilene):
+            // essa query referenciava `t.timezone`, coluna que nunca existiu em `tenants` —
+            // toda tentativa de commitDraft falhava com "column t.timezone does not exist" e
+            // o job era abandonado depois de MAX_ATTEMPTS, então nenhuma nota clínica automática
+            // jamais foi criada por essa pipeline até esta correção. App é single-region
+            // (America/Sao_Paulo), mesmo fuso hardcoded já usado em todo o resto do backend
+            // (ver PostgresExpenseRepository, shared.ts) — não precisa de JOIN com tenants.
             const aptResult = await client.query(
-                `SELECT a.patient_id, (a.scheduled_at AT TIME ZONE t.timezone)::date as note_date
-                 FROM psychotherapy_appointments a
-                 JOIN tenants t ON a.tenant_id = t.id
-                 WHERE a.id = $1 AND a.tenant_id = $2`,
+                `SELECT patient_id, (scheduled_at AT TIME ZONE 'America/Sao_Paulo')::date as note_date
+                 FROM psychotherapy_appointments
+                 WHERE id = $1 AND tenant_id = $2`,
                 [job.appointment_id, job.tenant_id]
             );
 
