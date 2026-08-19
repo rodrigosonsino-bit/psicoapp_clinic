@@ -35,6 +35,18 @@ export class PostgresTenantProfileRepository {
         return result.rows.map(row => this.mapTenantProfile(row));
     }
 
+    /** Todos os tenants com cadastro (nome preenchido) — usado por rotinas que não
+     *  dependem de opt-in de cobrança automática, como o aviso de renovação de série
+     *  recorrente. Tenants vazios (sem full_name, nunca configurados) ficam de fora. */
+    async listAllTenants(): Promise<TenantProfile[]> {
+        const result = await this.dbPool.query(`
+            SELECT id, name, email, full_name, document, professional_id, address, totp_enabled, booking_page, card_fee_rates, transcription_preference, automatic_billing_reminders, admin_mirror_phone
+            FROM tenants
+            WHERE full_name IS NOT NULL;
+        `);
+        return result.rows.map(row => this.mapTenantProfile(row));
+    }
+
     async updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile> {
         const tenantId = validateTenantId(data.tenantId);
 
@@ -119,5 +131,56 @@ export class PostgresTenantProfileRepository {
                 revoked_at = CASE WHEN EXCLUDED.status = 'revoked' THEN NOW() ELSE NULL END,
                 updated_at = NOW();
         `, [validTenantId, provider, status, googleAccountId || null, scopes ? scopes : null]);
+    }
+
+    /**
+     * Ativa a transcrição nativa do Meet de forma atômica — achado real (2026-08-18):
+     * antes, o callback OAuth fazia updateTenantProfile(transcriptionPreference) e
+     * upsertTranscriptionIntegration como 2 chamadas soltas fora de transação. Uma
+     * falha na segunda deixava a preferência marcada como 'google_meet_native' sem
+     * nenhuma linha em transcription_integrations — o scheduler nunca processava
+     * nada, mas a tela de perfil (que só olha transcriptionPreference) mostrava
+     * "Ativo" mesmo assim. As duas escritas agora vivem na mesma transação: ou as
+     * duas persistem, ou nenhuma.
+     */
+    async activateMeetTranscription(tenantId: string, googleAccountId?: string, scopes?: string[]): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        const client = await this.dbPool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query(
+                `UPDATE tenants SET transcription_preference = 'google_meet_native', updated_at = NOW() WHERE id = $1`,
+                [validTenantId]
+            );
+            await client.query(`
+                INSERT INTO transcription_integrations (tenant_id, provider, status, google_account_id, scopes_granted, enabled_at)
+                VALUES ($1, 'google_meet_native', 'active', $2, $3, NOW())
+                ON CONFLICT (tenant_id, provider) DO UPDATE SET
+                    status = 'active',
+                    google_account_id = COALESCE(EXCLUDED.google_account_id, transcription_integrations.google_account_id),
+                    scopes_granted = COALESCE(EXCLUDED.scopes_granted, transcription_integrations.scopes_granted),
+                    enabled_at = CASE WHEN transcription_integrations.status != 'active' THEN NOW() ELSE transcription_integrations.enabled_at END,
+                    revoked_at = NULL,
+                    updated_at = NOW();
+            `, [validTenantId, googleAccountId || null, scopes ? scopes : null]);
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            client.release();
+        }
+    }
+
+    /** Status real da integração (não confundir com tenants.transcription_preference,
+     *  que só guarda a intenção/última tentativa — a UI deve checar isto pra saber se
+     *  a integração de fato está ativa). null = nunca configurada. */
+    async getTranscriptionIntegrationStatus(tenantId: string, provider: 'google_meet_native' | 'deepgram_web'): Promise<'pending_consent' | 'active' | 'revoked' | 'error' | null> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query<{ status: 'pending_consent' | 'active' | 'revoked' | 'error' }>(
+            `SELECT status FROM transcription_integrations WHERE tenant_id = $1 AND provider = $2`,
+            [validTenantId, provider]
+        );
+        return result.rows[0]?.status ?? null;
     }
 }

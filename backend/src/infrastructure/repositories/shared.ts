@@ -78,7 +78,8 @@ export function mapSession(row: SessionRow): PsychotherapySession {
         notes: row.notes ?? undefined,
         appointmentId: row.appointment_id ?? undefined,
         createdAt: new Date(row.created_at),
-        updatedAt: new Date(row.updated_at)
+        updatedAt: new Date(row.updated_at),
+        googleMeetLink: row.google_meet_link ?? undefined
     };
 }
 

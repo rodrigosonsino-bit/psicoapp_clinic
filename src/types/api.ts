@@ -238,6 +238,17 @@ export interface PendingPatientDetail {
   sessions: PendingSessionDetail[];
 }
 
+export interface RecurrenceRenewalNotice {
+  id: string;
+  tenantId: string;
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  recurrenceEndDate: string;
+  status: 'pending' | 'renewed' | 'dismissed' | 'expired';
+  notifiedAt: string;
+}
+
 export interface PendingGroupChargeDetail {
   groupPaymentId: string;
   groupName: string;

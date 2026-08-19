@@ -86,6 +86,10 @@ export interface SessionRow {
     appointment_id: string | null;
     created_at: Date;
     updated_at: Date;
+    /** Só presente quando a query faz JOIN com psychotherapy_appointments (ver
+     *  listSessions) — google_meet_link não existe como coluna própria em
+     *  psychotherapy_sessions, sempre vem do agendamento vinculado. */
+    google_meet_link?: string | null;
 }
 
 // Linha da tabela: psychotherapy_expenses

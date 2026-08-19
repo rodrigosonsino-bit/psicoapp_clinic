@@ -564,7 +564,28 @@ function GoogleCalendarSection() {
 function GoogleMeetTranscriptionSection({ preference, onPreferenceChange }: { preference: 'deepgram_web' | 'google_meet_native', onPreferenceChange: (pref: 'deepgram_web' | 'google_meet_native') => void }) {
   const [connecting, setConnecting] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Status REAL da integração (transcription_integrations), separado da preferência —
+  // achado real (2026-08-18): a preferência podia ficar marcada como 'google_meet_native'
+  // sem a integração ter sido criada de verdade, e a tela mostrava "Ativo" enganosamente.
+  const [integrationStatus, setIntegrationStatus] = useState<'pending_consent' | 'active' | 'revoked' | 'error' | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(true);
   const toast = useToast();
+
+  useEffect(() => {
+    let cancelled = false;
+    if (preference !== 'google_meet_native') {
+      setCheckingStatus(false);
+      return;
+    }
+    setCheckingStatus(true);
+    fetchApi<{ status: typeof integrationStatus }>('/api/profile/transcription-integration-status?provider=google_meet_native')
+      .then(res => { if (!cancelled) setIntegrationStatus(res.status); })
+      .catch(() => { if (!cancelled) setIntegrationStatus(null); })
+      .finally(() => { if (!cancelled) setCheckingStatus(false); });
+    return () => { cancelled = true; };
+  }, [preference]);
+
+  const reallyActive = preference === 'google_meet_native' && integrationStatus === 'active';
 
   const handleConnect = async () => {
     try {
@@ -602,7 +623,32 @@ function GoogleMeetTranscriptionSection({ preference, onPreferenceChange }: { pr
         <h3 className="text-h3" style={{ margin: 0 }}>Motor de Transcrição: {preference === 'google_meet_native' ? 'Google Meet API' : 'Upload (Deepgram)'}</h3>
       </div>
 
-      {preference === 'google_meet_native' ? (
+      {preference === 'google_meet_native' && checkingStatus ? (
+        <p style={{ color: 'var(--text-muted)' }}>Verificando status da integração...</p>
+      ) : preference === 'google_meet_native' && !reallyActive ? (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <XCircle size={18} style={{ color: 'var(--status-danger)' }} />
+            <div>
+              <p style={{ color: 'var(--text-primary)', fontWeight: 500, margin: 0 }}>
+                Preferência marcada, mas a integração <strong>não está ativa</strong>
+              </p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.2rem 0 0' }}>
+                A autorização com o Google não foi concluída corretamente. Clique em "Ativar" novamente pra refazer a conexão — nenhuma transcrição automática vai funcionar até isso ser resolvido.
+              </p>
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleConnect}
+            disabled={connecting}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}
+          >
+            <Smartphone size={16} />
+            {connecting ? 'Redirecionando...' : 'Ativar novamente'}
+          </button>
+        </div>
+      ) : preference === 'google_meet_native' ? (
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <CheckCircle size={18} style={{ color: 'var(--status-success)' }} />

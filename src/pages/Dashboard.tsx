@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
-import { TrendingUp, TrendingDown, DollarSign, AlertCircle, User, X, CheckCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, AlertCircle, User, X, CheckCircle, RefreshCw } from 'lucide-react';
 import { fetchApi } from '../services/api';
-import type { DashboardAnalytics, Appointment, Patient, PaginatedResponse, PendingDetails, PendingPatientDetail } from '../types/api';
+import type { DashboardAnalytics, Appointment, Patient, PaginatedResponse, PendingDetails, PendingPatientDetail, RecurrenceRenewalNotice } from '../types/api';
 import { formatCurrency, translateAppointmentStatus } from '../utils/formatters';
 import Skeleton, { SkeletonCard } from '../components/Skeleton';
 import { startOfDay, endOfDay } from 'date-fns';
@@ -31,8 +31,47 @@ export default function Dashboard() {
   const [loadingPendingDetails, setLoadingPendingDetails] = useState(false);
   const [pendingDetailsError, setPendingDetailsError] = useState(false);
   const [settlingRecordId, setSettlingRecordId] = useState<string | null>(null);
+  const [pendingRenewals, setPendingRenewals] = useState<RecurrenceRenewalNotice[]>([]);
+  const [renewingAppointmentId, setRenewingAppointmentId] = useState<string | null>(null);
   const currentMonth = format(new Date(), 'yyyy-MM');
   const toast = useToast();
+
+  const loadPendingRenewals = useCallback(async () => {
+    try {
+      const res = await fetchApi<{ data: RecurrenceRenewalNotice[] }>('/api/psychotherapy/recurrence-renewals/pending');
+      setPendingRenewals(res.data);
+    } catch (err) {
+      // Não bloqueia o resto do dashboard — é um aviso complementar.
+      console.error('Erro ao carregar avisos de renovação de série', err);
+    }
+  }, []);
+
+  const handleRenewSeries = useCallback(async (notice: RecurrenceRenewalNotice, additionalMonths: number) => {
+    setRenewingAppointmentId(notice.appointmentId);
+    try {
+      await fetchApi(`/api/psychotherapy/recurrence-renewals/${notice.appointmentId}/renew`, {
+        method: 'POST',
+        body: JSON.stringify({ additionalMonths })
+      });
+      setPendingRenewals(prev => prev.filter(n => n.id !== notice.id));
+      toast.success(`Série de ${notice.patientName} renovada por mais ${additionalMonths} ${additionalMonths === 1 ? 'mês' : 'meses'}.`);
+    } catch (err) {
+      console.error('Erro ao renovar série', err);
+      toast.error('Não foi possível renovar a série. Tente novamente.');
+    } finally {
+      setRenewingAppointmentId(null);
+    }
+  }, [toast]);
+
+  const handleDismissRenewal = useCallback(async (notice: RecurrenceRenewalNotice) => {
+    try {
+      await fetchApi(`/api/psychotherapy/recurrence-renewals/${notice.appointmentId}/dismiss`, { method: 'POST' });
+      setPendingRenewals(prev => prev.filter(n => n.id !== notice.id));
+    } catch (err) {
+      console.error('Erro ao dispensar aviso de renovação', err);
+      toast.error('Não foi possível dispensar o aviso.');
+    }
+  }, [toast]);
 
   const openPendingDetails = useCallback(async () => {
     setShowPendingModal(true);
@@ -113,7 +152,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadAnalytics();
-  }, [loadAnalytics]);
+    loadPendingRenewals();
+  }, [loadAnalytics, loadPendingRenewals]);
 
   const chartData = useMemo(() => {
     if (!analytics?.sixMonthsTrend) return [];
@@ -231,6 +271,55 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {pendingRenewals.length > 0 && (
+        <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', border: '1px solid var(--status-warning)' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <RefreshCw size={18} color="var(--status-warning)" />
+            <h3 style={{ margin: 0 }}>Séries recorrentes vencendo</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {pendingRenewals.map(notice => (
+              <div
+                key={notice.id}
+                className="flex justify-between items-center"
+                style={{ flexWrap: 'wrap', gap: '0.5rem', padding: '0.5rem 0', borderTop: '1px solid var(--border-color)' }}
+              >
+                <div>
+                  <strong>{notice.patientName}</strong>
+                  <span className="text-small" style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                    vence em {format(new Date(`${notice.recurrenceEndDate}T12:00:00`), 'dd/MM/yyyy')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3].map(months => (
+                    <button
+                      key={months}
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
+                      disabled={renewingAppointmentId === notice.appointmentId}
+                      onClick={() => handleRenewSeries(notice, months)}
+                    >
+                      +{months} {months === 1 ? 'mês' : 'meses'}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Dispensar aviso"
+                    aria-label="Dispensar aviso"
+                    disabled={renewingAppointmentId === notice.appointmentId}
+                    onClick={() => handleDismissRenewal(notice)}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showPendingModal && (
         <div className="modal-overlay" onClick={() => setShowPendingModal(false)}>

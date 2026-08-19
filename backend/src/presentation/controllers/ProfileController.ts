@@ -45,4 +45,16 @@ export class ProfileController {
 
         res.status(200).json(updatedProfile.toJSON());
     };
+
+    /** Status REAL da integração de transcrição (transcription_integrations), não confundir
+     *  com tenants.transcription_preference — que é só a última intenção/tentativa e pode
+     *  ficar dessincronizada dela (achado real: 2026-08-18, ver activateMeetTranscription). */
+    getTranscriptionIntegrationStatus = async (req: Request, res: Response): Promise<void> => {
+        const tenantId = (req as any).tenantId || (req as any).userId;
+        if (!tenantId) throw new Error('Tenant não identificado');
+
+        const provider = (req.query.provider as string) === 'deepgram_web' ? 'deepgram_web' : 'google_meet_native';
+        const status = await this.repository.getTranscriptionIntegrationStatus(tenantId, provider);
+        res.status(200).json({ status });
+    };
 }

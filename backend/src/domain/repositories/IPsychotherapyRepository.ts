@@ -170,6 +170,26 @@ export interface UpcomingAppointment {
     confirmToken: string | null;
 }
 
+/** Série recorrente (root) cujo recurrence_end_date cai dentro da janela de aviso. */
+export interface ExpiringRecurrenceRoot {
+    appointment: PsychotherapyAppointment;
+    patientName: string;
+    patientPhone: string | null;
+}
+
+export type RecurrenceRenewalNoticeStatus = 'pending' | 'renewed' | 'dismissed' | 'expired';
+
+export interface RecurrenceRenewalNotice {
+    id: string;
+    tenantId: string;
+    appointmentId: string;
+    patientId: string;
+    patientName: string;
+    recurrenceEndDate: Date;
+    status: RecurrenceRenewalNoticeStatus;
+    notifiedAt: Date;
+}
+
 export type ReminderLogStatus = 'success' | 'failed';
 export type ReminderLogChannel = 'whatsapp' | 'email';
 
@@ -286,6 +306,9 @@ export interface IPsychotherapyRepository {
     getTenantProfile(tenantId: string): Promise<TenantProfile | null>;
     updateTenantProfile(data: UpdateTenantProfileDTO): Promise<TenantProfile>;
     upsertTranscriptionIntegration(tenantId: string, provider: 'google_meet_native' | 'deepgram_web', status: 'pending_consent' | 'active' | 'revoked' | 'error', googleAccountId?: string, scopes?: string[]): Promise<void>;
+    /** Ativa a preferência + integração do Meet numa única transação (ver PostgresTenantProfileRepository). */
+    activateMeetTranscription(tenantId: string, googleAccountId?: string, scopes?: string[]): Promise<void>;
+    getTranscriptionIntegrationStatus(tenantId: string, provider: 'google_meet_native' | 'deepgram_web'): Promise<'pending_consent' | 'active' | 'revoked' | 'error' | null>;
     saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt>;
     listReceipts(tenantId: string, patientId?: string): Promise<PsychotherapyReceipt[]>;
     deleteReceipt(tenantId: string, id: string, voidedBy: string, reason: string): Promise<void>;
@@ -362,6 +385,15 @@ export interface IPsychotherapyRepository {
     listTenantsWithAutomaticBilling(): Promise<TenantProfile[]>;
     logBillingReminder(tenantId: string, patientId: string, month: string): Promise<void>;
     hasSentBillingReminder(tenantId: string, patientId: string, month: string): Promise<boolean>;
+
+    // Recurrence Renewal Reminders (cap de 3 meses em série nova + aviso de vencimento)
+    listAllTenants(): Promise<TenantProfile[]>;
+    listExpiringRecurrenceRoots(tenantId: string, fromDate: Date, toDate: Date): Promise<ExpiringRecurrenceRoot[]>;
+    /** Idempotente via UNIQUE(appointment_id, recurrence_end_date): retorna o id só quando
+     *  criou uma linha nova (deve notificar); retorna null quando já existia (não notifica de novo). */
+    createRecurrenceRenewalNotice(tenantId: string, appointmentId: string, patientId: string, recurrenceEndDate: Date): Promise<string | null>;
+    listPendingRecurrenceRenewals(tenantId: string): Promise<RecurrenceRenewalNotice[]>;
+    resolveRecurrenceRenewalNotice(tenantId: string, appointmentId: string, status: 'renewed' | 'dismissed'): Promise<void>;
 }
 
 export interface FinancialPayment {

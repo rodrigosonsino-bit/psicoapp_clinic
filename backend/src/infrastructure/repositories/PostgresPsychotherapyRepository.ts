@@ -143,6 +143,14 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
         await this.tenantProfileRepository.upsertTranscriptionIntegration(tenantId, provider, status, googleAccountId, scopes);
     }
 
+    async activateMeetTranscription(tenantId: string, googleAccountId?: string, scopes?: string[]): Promise<void> {
+        await this.tenantProfileRepository.activateMeetTranscription(tenantId, googleAccountId, scopes);
+    }
+
+    async getTranscriptionIntegrationStatus(tenantId: string, provider: 'google_meet_native' | 'deepgram_web') {
+        return this.tenantProfileRepository.getTranscriptionIntegrationStatus(tenantId, provider);
+    }
+
     async saveReceipt(data: SaveReceiptDTO): Promise<PsychotherapyReceipt> {
         return this.billingRepository.saveReceipt(data);
     }
@@ -415,6 +423,26 @@ export class PostgresPsychotherapyRepository implements IPsychotherapyRepository
 
     async hasSentBillingReminder(tenantId: string, patientId: string, month: string): Promise<boolean> {
         return this.billingRepository.hasSentBillingReminder(tenantId, patientId, month);
+    }
+
+    async listAllTenants(): Promise<TenantProfile[]> {
+        return this.tenantProfileRepository.listAllTenants();
+    }
+
+    async listExpiringRecurrenceRoots(tenantId: string, fromDate: Date, toDate: Date) {
+        return this.appointmentRepository.listExpiringRecurrenceRoots(tenantId, fromDate, toDate);
+    }
+
+    async createRecurrenceRenewalNotice(tenantId: string, appointmentId: string, patientId: string, recurrenceEndDate: Date): Promise<string | null> {
+        return this.appointmentRepository.createRecurrenceRenewalNotice(tenantId, appointmentId, patientId, recurrenceEndDate);
+    }
+
+    async listPendingRecurrenceRenewals(tenantId: string) {
+        return this.appointmentRepository.listPendingRecurrenceRenewals(tenantId);
+    }
+
+    async resolveRecurrenceRenewalNotice(tenantId: string, appointmentId: string, status: 'renewed' | 'dismissed'): Promise<void> {
+        return this.appointmentRepository.resolveRecurrenceRenewalNotice(tenantId, appointmentId, status);
     }
 
     async listSessionLinksForMonth(tenantId: string, month: string): Promise<Record<string, string>> {

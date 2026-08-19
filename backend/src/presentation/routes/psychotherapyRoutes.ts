@@ -9,6 +9,7 @@ import { ReceiptController } from '../controllers/ReceiptController';
 import { SessionController } from '../controllers/SessionController';
 import { ExpenseController } from '../controllers/ExpenseController';
 import { AppointmentController } from '../controllers/AppointmentController';
+import { RecurrenceRenewalController } from '../controllers/RecurrenceRenewalController';
 import { ExportController } from '../controllers/ExportController';
 import { ClinicalNoteController } from '../controllers/ClinicalNoteController';
 import { ProntuarioController } from '../controllers/ProntuarioController';
@@ -411,6 +412,7 @@ export function createPsychotherapyRoutes(): Router {
     // Profile
     router.get('/profile', asyncHandler((req, res) => profileController.getProfile(req, res)));
     router.put('/profile', validateBody(updateProfileSchema), asyncHandler((req, res) => profileController.updateProfile(req, res)));
+    router.get('/profile/transcription-integration-status', asyncHandler((req, res) => profileController.getTranscriptionIntegrationStatus(req, res)));
 
     // Payments (Financial Lifecycle)
     router.post('/psychotherapy/groups/:groupId/charges', validateParams(groupIdParamSchema), validateBody(generateGroupChargesSchema), asyncHandler((req, res) => groupController.generateCharges(req, res)));
@@ -518,6 +520,20 @@ export function createPsychotherapyRoutes(): Router {
     router.patch('/psychotherapy/appointments/:id/modality', validateParams(uuidParamSchema), validateBody(updateAppointmentModalitySchema), asyncHandler((req, res) => appointmentController.updateModality(req, res)));
     router.get('/psychotherapy/appointments/covered/:month', validateParams(monthParamSchema), asyncHandler((req, res) => appointmentController.listCoveredAppointmentIds(req, res)));
     router.get('/psychotherapy/appointments/session-links/:month', validateParams(monthParamSchema), asyncHandler((req, res) => appointmentController.listSessionLinksForMonth(req, res)));
+
+    // Recurrence Renewal (cap de 3 meses em série nova + aviso de vencimento)
+    const recurrenceRenewalController = container.resolve(RecurrenceRenewalController);
+
+    const renewRecurrenceSchema = z.object({
+        additionalMonths: z.number().int().min(1).max(3)
+    });
+    const appointmentIdParamSchema = z.object({
+        appointmentId: z.string().uuid('ID do agendamento inválido')
+    });
+
+    router.get('/psychotherapy/recurrence-renewals/pending', asyncHandler((req, res) => recurrenceRenewalController.listPending(req, res)));
+    router.post('/psychotherapy/recurrence-renewals/:appointmentId/renew', validateParams(appointmentIdParamSchema), validateBody(renewRecurrenceSchema), asyncHandler((req, res) => recurrenceRenewalController.renew(req, res)));
+    router.post('/psychotherapy/recurrence-renewals/:appointmentId/dismiss', validateParams(appointmentIdParamSchema), asyncHandler((req, res) => recurrenceRenewalController.dismiss(req, res)));
 
     // CSV Exports
     const exportController = container.resolve(ExportController);

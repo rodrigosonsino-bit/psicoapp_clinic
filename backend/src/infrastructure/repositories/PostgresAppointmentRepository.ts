@@ -848,6 +848,74 @@ export class PostgresAppointmentRepository {
         return result.rows.map(row => mapAppointment(row));
     }
 
+    async listExpiringRecurrenceRoots(tenantId: string, fromDate: Date, toDate: Date): Promise<import('../../domain/repositories/IPsychotherapyRepository').ExpiringRecurrenceRoot[]> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT a.*, p.name AS patient_name, p.full_name AS patient_full_name, p.phone AS patient_phone
+            FROM psychotherapy_appointments a
+            JOIN psychotherapy_patients p ON p.id = a.patient_id
+            WHERE a.tenant_id = $1
+              AND a.parent_id IS NULL
+              AND a.recurrence != 'none'
+              AND a.status != 'canceled'
+              AND a.recurrence_end_date BETWEEN $2 AND $3
+              AND p.deleted_at IS NULL
+            ORDER BY a.recurrence_end_date ASC;
+        `, [validTenantId, fromDate, toDate]);
+
+        return result.rows.map(row => ({
+            appointment: mapAppointment(row),
+            patientName: row.patient_full_name || row.patient_name,
+            patientPhone: row.patient_phone ?? null
+        }));
+    }
+
+    async createRecurrenceRenewalNotice(tenantId: string, appointmentId: string, patientId: string, recurrenceEndDate: Date): Promise<string | null> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(
+            `INSERT INTO psychotherapy_recurrence_renewal_notices
+                (tenant_id, appointment_id, patient_id, recurrence_end_date)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (appointment_id, recurrence_end_date) DO NOTHING
+             RETURNING id;`,
+            [validTenantId, appointmentId, patientId, recurrenceEndDate]
+        );
+        return result.rows[0]?.id ?? null;
+    }
+
+    async listPendingRecurrenceRenewals(tenantId: string): Promise<import('../../domain/repositories/IPsychotherapyRepository').RecurrenceRenewalNotice[]> {
+        const validTenantId = validateTenantId(tenantId);
+        const result = await this.dbPool.query(`
+            SELECT n.id, n.tenant_id, n.appointment_id, n.patient_id, n.recurrence_end_date, n.status, n.notified_at,
+                   COALESCE(p.full_name, p.name) AS patient_name
+            FROM psychotherapy_recurrence_renewal_notices n
+            JOIN psychotherapy_patients p ON p.id = n.patient_id
+            WHERE n.tenant_id = $1 AND n.status = 'pending'
+            ORDER BY n.recurrence_end_date ASC;
+        `, [validTenantId]);
+
+        return result.rows.map(row => ({
+            id: row.id,
+            tenantId: row.tenant_id,
+            appointmentId: row.appointment_id,
+            patientId: row.patient_id,
+            patientName: row.patient_name,
+            recurrenceEndDate: new Date(row.recurrence_end_date),
+            status: row.status,
+            notifiedAt: new Date(row.notified_at)
+        }));
+    }
+
+    async resolveRecurrenceRenewalNotice(tenantId: string, appointmentId: string, status: 'renewed' | 'dismissed'): Promise<void> {
+        const validTenantId = validateTenantId(tenantId);
+        await this.dbPool.query(
+            `UPDATE psychotherapy_recurrence_renewal_notices
+             SET status = $3, resolved_at = NOW()
+             WHERE tenant_id = $1 AND appointment_id = $2 AND status = 'pending';`,
+            [validTenantId, appointmentId, status]
+        );
+    }
+
     async listSessionLinksForMonth(tenantId: string, month: string): Promise<Record<string, string>> {
         const validTenantId = validateTenantId(tenantId);
         const result = await this.dbPool.query(`

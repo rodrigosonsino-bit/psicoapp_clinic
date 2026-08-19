@@ -197,25 +197,33 @@ export class PostgresSessionRepository {
         pagination?: PaginationOptions
     ): Promise<PaginatedResult<PsychotherapySession>> {
         const validTenantId = validateTenantId(tenantId);
-        let query = 'SELECT *, COUNT(*) OVER() AS total_count FROM psychotherapy_sessions WHERE tenant_id = $1';
+        // LEFT JOIN com appointments pra trazer o google_meet_link — psychotherapy_sessions
+        // nunca teve essa coluna própria (achado real 2026-08-19: a sessão da Lucilene tinha
+        // Meet sincronizado no agendamento, mas a tela mostrava "sem link" porque mapSession
+        // nunca lia isso de lugar nenhum). LEFT (não INNER) porque appointment_id pode ser
+        // null em sessão criada manualmente pelo Diário de Sessões.
+        let query = `SELECT s.*, a.google_meet_link, COUNT(*) OVER() AS total_count
+                      FROM psychotherapy_sessions s
+                      LEFT JOIN psychotherapy_appointments a ON a.id = s.appointment_id
+                      WHERE s.tenant_id = $1`;
         const params: any[] = [validTenantId];
 
         if (patientId) {
             params.push(patientId);
-            query += ` AND patient_id = $${params.length}`;
+            query += ` AND s.patient_id = $${params.length}`;
         }
 
         if (start) {
             params.push(start);
-            query += ` AND date >= $${params.length}`;
+            query += ` AND s.date >= $${params.length}`;
         }
 
         if (end) {
             params.push(end);
-            query += ` AND date <= $${params.length}`;
+            query += ` AND s.date <= $${params.length}`;
         }
 
-        query += ' ORDER BY date DESC';
+        query += ' ORDER BY s.date DESC';
 
         if (pagination) {
             const offset = (pagination.page - 1) * pagination.limit;

@@ -67,8 +67,10 @@ export class GoogleAuthController {
         try {
             const { tenantId: authTenantId, intent } = await this.googleCalendar.exchangeCodeForTokens(code, state);
             if (intent === 'meet_transcription') {
-                await this.repository.updateTenantProfile({ tenantId: authTenantId, transcriptionPreference: 'google_meet_native' });
-                await this.repository.upsertTranscriptionIntegration(authTenantId, 'google_meet_native', 'active');
+                // Uma única transação (ver PostgresTenantProfileRepository.activateMeetTranscription) —
+                // achado real: as 2 escritas soltas deixavam a preferência marcada sem a
+                // integração existir, e a tela de perfil mostrava "Ativo" mesmo assim.
+                await this.repository.activateMeetTranscription(authTenantId);
             }
             res.redirect(`${APP_FRONTEND_URL}/profile?google=connected&intent=${intent}`);
         } catch (err) {

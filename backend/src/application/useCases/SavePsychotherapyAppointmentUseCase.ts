@@ -42,6 +42,17 @@ export class SavePsychotherapyAppointmentUseCase {
         if (data.durationMinutes !== undefined && (data.durationMinutes < 10 || data.durationMinutes > 240)) {
             throw new AppError('Duração da sessão deve estar entre 10 e 240 minutos', 400);
         }
+        // Cap de 3 meses só na CRIAÇÃO de série nova (não retroativo a séries
+        // já existentes, nem a edições de recorrência de uma série antiga —
+        // decisão explícita do usuário). Sem isso, séries recorrentes correm
+        // indefinidamente sem checkpoint, o que já causou descompasso real
+        // entre agenda e faturamento (caso Almira, 2026-08-13).
+        if (!data.id && data.recurrence && data.recurrence !== 'none' && data.recurrenceEndDate) {
+            const maxRecurrenceEndDate = this.addMonths(data.scheduledAt, 3);
+            if (data.recurrenceEndDate > maxRecurrenceEndDate) {
+                throw new AppError('Séries recorrentes novas podem durar no máximo 3 meses. Ao final desse período, você poderá renovar pelo painel ou WhatsApp.', 400);
+            }
+        }
 
         if (!data.id) {
             if (data.recurrence && data.recurrence !== 'none' && data.recurrenceEndDate) {
@@ -142,6 +153,46 @@ export class SavePsychotherapyAppointmentUseCase {
         }
 
         return updatedTarget;
+    }
+
+    /**
+     * Renova uma série recorrente estendendo `recurrenceEndDate` a partir do fim atual
+     * (não a partir de hoje — evita sobrepor/pular ocorrências se a renovação acontecer
+     * antes do último dia) e gerando as ocorrências que faltam no novo trecho. Diferente
+     * do fluxo de edição normal (mode='single'), que só chama `generateMissingOccurrences`
+     * quando o TIPO de recorrência muda — aqui o tipo permanece igual, só a data final
+     * avança, então chamamos o gerador diretamente.
+     */
+    async renewSeries(tenantId: string, rootAppointmentId: string, additionalMonths: number): Promise<PsychotherapyAppointment> {
+        const root = await this.repository.findAppointmentById(tenantId, rootAppointmentId);
+        if (!root) {
+            throw new AppError('Agendamento não encontrado', 404);
+        }
+        if (root.parentId) {
+            throw new AppError('Só é possível renovar a partir do agendamento raiz da série', 400);
+        }
+        if (root.recurrence === 'none' || !root.recurrenceEndDate) {
+            throw new AppError('Este agendamento não é uma série recorrente', 400);
+        }
+
+        const newEndDate = this.addMonths(root.recurrenceEndDate, additionalMonths);
+
+        const updatedRoot = await this.repository.saveAppointment({
+            id: root.id,
+            tenantId,
+            patientId: root.patientId,
+            scheduledAt: root.scheduledAt,
+            durationMinutes: root.durationMinutes,
+            status: root.status,
+            recurrence: root.recurrence,
+            recurrenceEndDate: newEndDate,
+            notes: root.notes,
+            parentId: null
+        });
+
+        await this.generateMissingOccurrences(updatedRoot);
+
+        return updatedRoot;
     }
 
     /**
@@ -291,6 +342,12 @@ export class SavePsychotherapyAppointmentUseCase {
             return monthsDiff > 0;
         }
         return false;
+    }
+
+    private addMonths(date: Date, months: number): Date {
+        const result = new Date(date);
+        result.setMonth(result.getMonth() + months);
+        return result;
     }
 
     private calculateOccurrences(start: Date, endDate: Date, recurrence: 'weekly' | 'biweekly' | 'monthly'): Date[] {

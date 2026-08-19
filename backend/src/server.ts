@@ -24,6 +24,7 @@ import { Pool } from 'pg';
 import { ReminderScheduler } from './infrastructure/scheduler/ReminderScheduler';
 import { MeetLinkScheduler } from './infrastructure/scheduler/MeetLinkScheduler';
 import { BillingReminderScheduler } from './infrastructure/schedulers/BillingReminderScheduler';
+import { RecurrenceRenewalReminderScheduler } from './infrastructure/schedulers/RecurrenceRenewalReminderScheduler';
 import { SyncGoogleCalendarEventsUseCase } from './application/useCases/SyncGoogleCalendarEventsUseCase';
 import { GoogleCalendarSyncJob } from './infrastructure/scheduler/GoogleCalendarSyncJob';
 import { IPsychotherapyRepository } from './domain/repositories/IPsychotherapyRepository';
@@ -299,6 +300,9 @@ if (require.main === module) {
                         const billingReminderScheduler = new BillingReminderScheduler(repository, whatsappSessionManager, cloudClient);
                         billingReminderScheduler.start();
                     }
+
+                    const recurrenceRenewalReminderScheduler = new RecurrenceRenewalReminderScheduler(repository, whatsappSessionManager, cloudClient);
+                    recurrenceRenewalReminderScheduler.start();
                 }
 
                 if (process.env.ENABLE_GCAL_SYNC === 'true') {
