@@ -11,8 +11,14 @@ import './index.css';
 initSentry();
 
 createRoot(document.getElementById('root')!, {
-  onUncaughtError: Sentry.reactErrorHandler(),
-  onCaughtError: Sentry.reactErrorHandler(),
+  onUncaughtError: Sentry.reactErrorHandler((error, errorInfo) => {
+    // eslint-disable-next-line no-console
+    console.error('[onUncaughtError]', error, errorInfo);
+  }),
+  onCaughtError: Sentry.reactErrorHandler((error, errorInfo) => {
+    // eslint-disable-next-line no-console
+    console.error('[onCaughtError]', error, errorInfo);
+  }),
 }).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={<ErrorFallback />}>
