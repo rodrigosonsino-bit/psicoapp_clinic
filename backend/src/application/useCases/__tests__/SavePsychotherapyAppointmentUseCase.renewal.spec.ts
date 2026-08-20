@@ -20,7 +20,8 @@ describe('SavePsychotherapyAppointmentUseCase — cap de 3 meses e renovação d
         repository = {
             findAppointmentById: jest.fn(),
             saveAppointment: jest.fn(),
-            listSeriesAppointments: jest.fn().mockResolvedValue([])
+            listSeriesAppointments: jest.fn().mockResolvedValue([]),
+            listActiveAppointmentDatetimes: jest.fn().mockResolvedValue([])
         } as unknown as jest.Mocked<IPsychotherapyRepository>;
 
         googleCalendar = {
@@ -110,6 +111,34 @@ describe('SavePsychotherapyAppointmentUseCase — cap de 3 meses e renovação d
             // Root atualizado + pelo menos uma ocorrência nova gerada dentro do novo trecho.
             expect(repository.saveAppointment).toHaveBeenCalledWith(expect.objectContaining({ id: rootId }));
             expect(repository.saveAppointment.mock.calls.length).toBeGreaterThan(1);
+        });
+
+        it('não tenta recriar ocorrência em horário já ocupado por outro agendamento ativo do tenant (achado real, paciente JUNIOR)', async () => {
+            const root = new PsychotherapyAppointment(
+                rootId, tenantId, patientId, new Date('2026-06-01T13:00:00.000Z'),
+                50, 'scheduled', 'weekly', new Date('2026-06-15T13:00:00.000Z'),
+                null, null, null, 'token', null, null
+            );
+            repository.findAppointmentById.mockResolvedValue(root);
+            repository.saveAppointment.mockImplementation(async (data: any) =>
+                new PsychotherapyAppointment(
+                    data.id ?? 'new-id', tenantId, patientId, data.scheduledAt,
+                    data.durationMinutes ?? 50, data.status ?? 'scheduled', data.recurrence ?? 'none',
+                    data.recurrenceEndDate ?? null, data.notes ?? null, null, null, 'token', null, data.parentId ?? null
+                )
+            );
+            // O paciente já tem uma sessão avulsa (fora da série, parent_id nulo) marcada
+            // manualmente bem no meio do novo trecho — listActiveAppointmentDatetimes (checagem
+            // tenant-wide, não só da série) precisa enxergar isso e pular esse horário.
+            const occupiedSlot = new Date('2026-06-08T13:00:00.000Z');
+            (repository.listActiveAppointmentDatetimes as jest.Mock).mockResolvedValue([occupiedSlot]);
+
+            await useCase.renewSeries(tenantId, rootId, 1);
+
+            const attemptedSlot = repository.saveAppointment.mock.calls.some(
+                ([data]: any) => data.scheduledAt?.getTime() === occupiedSlot.getTime()
+            );
+            expect(attemptedSlot).toBe(false);
         });
 
         it('rejeita renovar um agendamento que não é o root da série', async () => {

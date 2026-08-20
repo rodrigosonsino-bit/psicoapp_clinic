@@ -251,6 +251,21 @@ export class SavePsychotherapyAppointmentUseCase {
                 .map(s => s.scheduledAt.getTime())
         );
 
+        // Além do que já existe NESTA série, verifica também qualquer outro agendamento ativo
+        // do tenant no mesmo horário (ex.: sessões avulsas pré-marcadas manualmente pro mesmo
+        // paciente cobrindo o mesmo slot) — sem isso, a geração tentava inserir uma ocorrência
+        // duplicada e estourava a constraint de exclusão no banco (23P01 → 409 "Este horário
+        // conflita com outro agendamento ativo"), achado real ao renovar a série do JUNIOR
+        // (2026-08-20): ele já tinha sessões avulsas cadastradas exatamente nas datas que a
+        // renovação tentou gerar.
+        const lastOccurrence = occurrences[occurrences.length - 1];
+        if (lastOccurrence) {
+            const rangeStart = new Date(anchor.scheduledAt.getTime() + 1000);
+            const rangeEnd = new Date(lastOccurrence.getTime() + 1000);
+            const tenantWideTimes = await this.repository.listActiveAppointmentDatetimes(anchor.tenantId, rangeStart, rangeEnd);
+            for (const t of tenantWideTimes) existingTimes.add(t.getTime());
+        }
+
         for (let i = 1; i < occurrences.length; i++) {
             const occurrenceDate = occurrences[i];
             if (existingTimes.has(occurrenceDate.getTime())) continue;
