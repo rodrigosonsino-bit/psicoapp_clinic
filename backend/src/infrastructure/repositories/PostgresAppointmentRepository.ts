@@ -900,7 +900,14 @@ export class PostgresAppointmentRepository {
             appointmentId: row.appointment_id,
             patientId: row.patient_id,
             patientName: row.patient_name,
-            recurrenceEndDate: new Date(row.recurrence_end_date),
+            // recurrence_end_date é coluna DATE (sem hora) — serializa como "YYYY-MM-DD"
+            // puro. Um Date aqui vira timestamp ISO completo no JSON (toISOString()), e o
+            // frontend concatena "T12:00:00" nele esperando um "YYYY-MM-DD" puro — gerava
+            // "...T00:00:00.000ZT12:00:00" (data inválida) e quebrava o Dashboard inteiro
+            // pra qualquer tenant com aviso de renovação pendente (achado real, 2026-08-20).
+            recurrenceEndDate: row.recurrence_end_date instanceof Date
+                ? row.recurrence_end_date.toISOString().slice(0, 10)
+                : String(row.recurrence_end_date).slice(0, 10),
             status: row.status,
             notifiedAt: new Date(row.notified_at)
         }));

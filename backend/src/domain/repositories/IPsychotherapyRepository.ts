@@ -185,7 +185,7 @@ export interface RecurrenceRenewalNotice {
     appointmentId: string;
     patientId: string;
     patientName: string;
-    recurrenceEndDate: Date;
+    recurrenceEndDate: string; // "YYYY-MM-DD" — coluna DATE, sem componente de hora
     status: RecurrenceRenewalNoticeStatus;
     notifiedAt: Date;
 }
