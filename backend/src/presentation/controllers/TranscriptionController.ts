@@ -109,53 +109,72 @@ export class TranscriptionController {
      */
     async getTranscription(req: AuthenticatedRequest, res: Response): Promise<void> {
         const tenantId = req.tenantId!;
-        const { id: appointmentId } = req.params;
+        const { id: sessionId } = req.params;
+
+        // O :id da rota é o id do Diário de Sessões (psychotherapy_sessions.id) — NUNCA o id
+        // do agendamento. São UUIDs distintos (psychotherapy_sessions tem seu próprio gen_random_uuid()
+        // em UpdateAppointmentStatusUseCase/PostgresAppointmentRepository.updateAppointmentStatus).
+        // Achado real (2026-08-20, sessão do Felipe): a pipeline automática do Meet grava a nota
+        // em psychotherapy_clinical_notes com appointment_id = agendamento, mas esta consulta
+        // filtrava por appointment_id = sessionId (o id errado) — nunca batia, então o rascunho
+        // gerado com sucesso ficava invisível na tela pra QUALQUER sessão vinda de agendamento,
+        // desde sempre (não é regressão de ontem). Resolve appointment_id via a própria sessão antes.
+        const sessionResult = await this.dbPool.query(`
+            SELECT appointment_id FROM psychotherapy_sessions
+            WHERE tenant_id = $1 AND id = $2;
+        `, [tenantId, sessionId]);
+        const appointmentId: string | null = sessionResult.rows[0]?.appointment_id ?? null;
 
         // 1. Check if there's a clinical note (draft or final)
-        const noteResult = await this.dbPool.query(`
-            SELECT id, appointment_id, content, status, version, created_at, updated_at
-            FROM psychotherapy_clinical_notes
-            WHERE tenant_id = $1 AND appointment_id = $2;
-        `, [tenantId, appointmentId]);
+        if (appointmentId) {
+            const noteResult = await this.dbPool.query(`
+                SELECT id, appointment_id, content, status, version, created_at, updated_at
+                FROM psychotherapy_clinical_notes
+                WHERE tenant_id = $1 AND appointment_id = $2;
+            `, [tenantId, appointmentId]);
 
-        if (noteResult.rows.length > 0) {
-            const row = noteResult.rows[0];
-            res.status(200).json({
-                id:            row.id,
-                appointmentId: row.appointment_id,
-                rawTranscript: null, // no longer stored locally in note
-                soapDraft:     row.content,
-                status:        row.status === 'draft' ? 'draft' : 'completed',
-                version:       row.version,
-                createdAt:     row.created_at,
-                updatedAt:     row.updated_at,
-            });
-            return;
+            if (noteResult.rows.length > 0) {
+                const row = noteResult.rows[0];
+                res.status(200).json({
+                    id:            row.id,
+                    appointmentId: row.appointment_id,
+                    rawTranscript: null, // no longer stored locally in note
+                    soapDraft:     row.content,
+                    status:        row.status === 'draft' ? 'draft' : 'completed',
+                    version:       row.version,
+                    createdAt:     row.created_at,
+                    updatedAt:     row.updated_at,
+                });
+                return;
+            }
+
+            // 2. Check if there's a background transcription job
+            const jobResult = await this.dbPool.query(`
+                SELECT status, updated_at
+                FROM transcription_jobs
+                WHERE tenant_id = $1 AND appointment_id = $2
+                ORDER BY created_at DESC LIMIT 1;
+            `, [tenantId, appointmentId]);
+
+            if (jobResult.rows.length > 0) {
+                const jobRow = jobResult.rows[0];
+                res.status(200).json({
+                    status: jobRow.status, // 'pending', 'waiting_artifact', 'processing', 'completed', 'failed'
+                    updatedAt: jobRow.updated_at
+                });
+                return;
+            }
         }
 
-        // 2. Check if there's a background transcription job
-        const jobResult = await this.dbPool.query(`
-            SELECT status, updated_at
-            FROM transcription_jobs
-            WHERE tenant_id = $1 AND appointment_id = $2
-            ORDER BY created_at DESC LIMIT 1;
-        `, [tenantId, appointmentId]);
-
-        if (jobResult.rows.length > 0) {
-            const jobRow = jobResult.rows[0];
-            res.status(200).json({
-                status: jobRow.status, // 'pending', 'waiting_artifact', 'processing', 'completed', 'failed'
-                updatedAt: jobRow.updated_at
-            });
-            return;
-        }
-
-        // 3. Fallback to legacy session_transcripts (for deepgram_web audio uploads)
+        // 3. Fallback to legacy session_transcripts (for deepgram_web audio uploads) —
+        // essa tabela é escrita por transcribeSession()/transcribeFromText() usando o
+        // mesmo :id de sessão que chega aqui, então session_id (não appointmentId) é a
+        // chave correta neste passo.
         const result = await this.dbPool.query(`
             SELECT id, tenant_id, session_id, raw_transcript, summary_draft, created_at, updated_at
             FROM session_transcripts
             WHERE tenant_id = $1 AND session_id = $2;
-        `, [tenantId, appointmentId]);
+        `, [tenantId, sessionId]);
 
         if (result.rows.length === 0) {
             res.status(404).json({ message: 'Nenhuma transcrição encontrada para esta sessão.' });
