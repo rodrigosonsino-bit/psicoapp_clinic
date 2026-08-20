@@ -2,6 +2,7 @@ import { injectable, inject } from 'tsyringe';
 import { IPsychotherapyRepository } from '../../domain/repositories/IPsychotherapyRepository';
 import { GoogleCalendarService } from '../../infrastructure/google/GoogleCalendarService';
 import { PsychotherapyAppointment } from '../../domain/models/PsychotherapyAppointment';
+import { NotFoundError } from '../../domain/errors/NotFoundError';
 import { logger } from '../../infrastructure/logger';
 
 @injectable()
@@ -13,7 +14,7 @@ export class DeletePsychotherapyAppointmentUseCase {
 
     async execute(tenantId: string, id: string, mode: 'single' | 'future' | 'all' = 'single'): Promise<void> {
         const appointment = await this.repository.findAppointmentById(tenantId, id);
-        if (!appointment) return;
+        if (!appointment) throw new NotFoundError('Agendamento não encontrado ou não autorizado');
 
         if (mode === 'single') {
             await this.repository.deleteAppointment(tenantId, id);

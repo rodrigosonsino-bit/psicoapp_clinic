@@ -9,6 +9,18 @@ import { logger } from '../../infrastructure/logger';
 
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:3000';
 
+// Achado de pentest 2026-08-19: o token de confirmação/cancelamento não tinha expiração
+// própria — só perdia validade quando o status já virava canceled/no_show/attended, o que
+// não acontece automaticamente se ninguém mexer no agendamento. Um token vazado ficava
+// utilizável indefinidamente antes disso. Cap simples: 24h de graça após o horário previsto
+// de término da sessão (agendamento pode atrasar/estender um pouco de verdade).
+const CONFIRM_TOKEN_GRACE_MS = 24 * 60 * 60 * 1000;
+
+function isConfirmTokenExpired(scheduledAt: Date, durationMinutes: number): boolean {
+    const sessionEndMs = scheduledAt.getTime() + durationMinutes * 60 * 1000;
+    return Date.now() > sessionEndMs + CONFIRM_TOKEN_GRACE_MS;
+}
+
 @injectable()
 export class AppointmentConfirmController {
     constructor(
@@ -37,6 +49,10 @@ export class AppointmentConfirmController {
             });
         }
 
+        if (isConfirmTokenExpired(appointment.scheduledAt, appointment.durationMinutes)) {
+            return res.status(410).json({ error: 'Este link de confirmação expirou.' });
+        }
+
         return res.status(200).json({
             data: {
                 id: appointment.id,
@@ -52,6 +68,13 @@ export class AppointmentConfirmController {
     /** POST /appointments/confirm/:token — paciente confirma presença */
     async confirm(req: Request, res: Response): Promise<Response> {
         const { token } = req.params;
+
+        const appointment = await this.repository.findAppointmentByConfirmToken(token);
+        if (appointment && !['canceled', 'no_show', 'attended'].includes(appointment.status)
+            && isConfirmTokenExpired(appointment.scheduledAt, appointment.durationMinutes)) {
+            return res.status(410).json({ error: 'Este link de confirmação expirou.' });
+        }
+
         const updated = await this.repository.confirmAppointmentByToken(token);
 
         if (!updated) {
@@ -81,6 +104,10 @@ export class AppointmentConfirmController {
         }
         if (['canceled', 'no_show', 'attended'].includes(appointment.status)) {
             return res.status(409).json({ error: 'Este agendamento já foi processado e não pode mais ser cancelado por aqui.' });
+        }
+
+        if (isConfirmTokenExpired(appointment.scheduledAt, appointment.durationMinutes)) {
+            return res.status(410).json({ error: 'Este link de confirmação expirou.' });
         }
 
         const updated = await this.updateStatusUseCase.execute(appointment.tenantId, appointment.id, 'canceled');

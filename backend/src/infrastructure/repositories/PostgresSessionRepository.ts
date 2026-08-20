@@ -183,6 +183,12 @@ export class PostgresSessionRepository {
             return mapClinicalNote(result.rows[0]);
         } catch (error) {
             await client.query('ROLLBACK');
+            // patient_id de outro tenant esbarra na FK composta fk_clinical_notes_patient_tenant
+            // (migration 053) — sem isso, um paciente inexistente/cross-tenant vazava um erro de
+            // Postgres cru pro errorHandler (500 genérico em vez de 404).
+            if ((error as { code?: string }).code === '23503') {
+                throw new NotFoundError('Paciente não encontrado ou não autorizado');
+            }
             throw error;
         } finally {
             client.release();

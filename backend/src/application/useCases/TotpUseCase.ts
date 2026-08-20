@@ -56,10 +56,13 @@ export class TotpUseCase {
         }
     }
 
-    async disable(tenantId: string, token: string): Promise<void> {
+    async disable(tenantId: string, token: string, password: string): Promise<void> {
         const tenant = await this.repository.findTenantById(tenantId);
         if (!tenant) throw new AppError('Usuário não encontrado', 404);
         if (!tenant.totpEnabled) throw new AppError('2FA não está ativo', 400);
+
+        const passwordValid = await bcrypt.compare(password, tenant.passwordHash);
+        if (!passwordValid) throw new AppError('Senha incorreta', 401);
 
         const secretDecrypted = decrypt(tenant.totpSecret!);
         const result = await verify({ token, secret: secretDecrypted });

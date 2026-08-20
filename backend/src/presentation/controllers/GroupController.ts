@@ -572,11 +572,15 @@ export class GroupController {
         // Vamos apenas deletar hard por agora, seguindo o padrão de simplificação, ou setar left_at = NOW() se preferir histórico.
         // O select de list members filtra "WHERE tgm.left_at IS NULL" então left_at = NOW() é o mais seguro clinicamente.
         
-        await this.dbPool.query(`
+        const result = await this.dbPool.query(`
             UPDATE therapy_group_members
             SET left_at = CURRENT_DATE
-            WHERE group_id = $1 AND patient_id = $2
+            WHERE group_id = $1 AND patient_id = $2 AND left_at IS NULL
         `, [groupId, patientId]);
+
+        if (result.rowCount === 0) {
+            throw new AppError('Membro não encontrado neste grupo', 404);
+        }
 
         res.status(200).json({ success: true, message: 'Paciente removido do grupo' });
     }

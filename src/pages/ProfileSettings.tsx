@@ -977,6 +977,7 @@ function TwoFactorSection({ enabled, onStatusChange }: { enabled: boolean, onSta
   const [setup, setSetup] = useState<TotpSetupResult | null>(null);
   const [step, setStep] = useState<'idle' | 'setup' | 'disable'>('idle');
   const [token, setToken] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
 
@@ -1013,10 +1014,11 @@ function TwoFactorSection({ enabled, onStatusChange }: { enabled: boolean, onSta
     e.preventDefault();
     try {
       setSubmitting(true);
-      await fetchApi('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ token }) });
+      await fetchApi('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ token, password: disablePassword }) });
       toast.success('2FA desativado.');
       setStep('idle');
       setToken('');
+      setDisablePassword('');
       setSetup(null);
       onStatusChange(false);
     } catch (err) {
@@ -1104,17 +1106,23 @@ function TwoFactorSection({ enabled, onStatusChange }: { enabled: boolean, onSta
       {step === 'disable' && (
         <form onSubmit={handleDisable}>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-            Insira o código atual do seu app autenticador para desativar o 2FA.
+            Insira sua senha e o código atual do seu app autenticador para desativar o 2FA.
           </p>
+          <div className="form-group" style={{ maxWidth: '280px' }}>
+            <label className="form-label">Senha *</label>
+            <input required type="password" className="form-control" placeholder="Sua senha"
+              value={disablePassword} onChange={e => setDisablePassword(e.target.value)}
+              disabled={submitting} autoFocus />
+          </div>
           <div className="form-group" style={{ maxWidth: '280px' }}>
             <label className="form-label">Código 2FA *</label>
             <input required type="text" className="form-control" placeholder="000000"
               value={token} onChange={e => setToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              maxLength={6} disabled={submitting} style={{ letterSpacing: '0.4rem', textAlign: 'center' }} autoFocus />
+              maxLength={6} disabled={submitting} style={{ letterSpacing: '0.4rem', textAlign: 'center' }} />
           </div>
           <div className="flex gap-2 mt-3">
-            <button type="button" className="btn btn-secondary" onClick={() => { setStep('idle'); setToken(''); }} disabled={submitting}>Cancelar</button>
-            <button type="submit" className="btn btn-danger" disabled={submitting || token.length < 6}>
+            <button type="button" className="btn btn-secondary" onClick={() => { setStep('idle'); setToken(''); setDisablePassword(''); }} disabled={submitting}>Cancelar</button>
+            <button type="submit" className="btn btn-danger" disabled={submitting || token.length < 6 || disablePassword.length < 1}>
               {submitting ? 'Desativando...' : 'Desativar 2FA'}
             </button>
           </div>

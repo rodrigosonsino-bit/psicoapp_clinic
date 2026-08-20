@@ -32,6 +32,10 @@ const totpTokenSchema = z.object({
     token: z.string().length(6, 'Código TOTP deve ter 6 dígitos').or(z.string().length(8, 'Código de backup deve ter 8 caracteres'))
 });
 
+const totpDisableSchema = totpTokenSchema.extend({
+    password: z.string().min(1, 'Senha é obrigatória')
+});
+
 /**
  * Brute-force guard dedicado às rotas de autenticação sensíveis (login / verificação de 2FA).
  * Mais estrito que o rate limit global do server.ts (300/15min, compartilhado com TODA a API) —
@@ -108,7 +112,7 @@ export function createAuthRoutes(): Router {
     // 2FA — requer JWT válido
     router.post('/2fa/setup', authMiddleware, asyncHandler((req, res) => totpController.setup(req, res)));
     router.post('/2fa/verify', authMiddleware, loginRateLimit, validateBody(totpTokenSchema), asyncHandler((req, res) => totpController.verify(req, res)));
-    router.post('/2fa/disable', authMiddleware, validateBody(totpTokenSchema), asyncHandler((req, res) => totpController.disable(req, res)));
+    router.post('/2fa/disable', authMiddleware, validateBody(totpDisableSchema), asyncHandler((req, res) => totpController.disable(req, res)));
 
     // Google Calendar OAuth
     const googleAuthController = container.resolve(GoogleAuthController);

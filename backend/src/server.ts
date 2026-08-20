@@ -12,7 +12,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
+import type { AuthenticatedRequest } from './presentation/middlewares/authMiddleware';
 import { createPsychotherapyRoutes } from './presentation/routes/psychotherapyRoutes';
 import { createAuthRoutes } from './presentation/routes/authRoutes';
 import { createHealthRoutes } from './presentation/routes/healthRoutes';
@@ -87,11 +88,44 @@ app.use('/api', createWhatsappCloudWebhookRoutes(whatsappCloudRepository));
 
 // ── Rate Limiters ────────────────────────────────────────────────────────────
 
+// Caminhos de polling do WhatsApp (achado de pentest 2026-08-19): o frontend consulta
+// /whatsapp-messages/unseen a cada 5s (mais outro polling de 5s por conversa aberta),
+// e isso sozinho consumia ~60% da cota do rate limit global (300/15min) — deixando pouca
+// margem pra ações reais do usuário no mesmo IP. Roteado para whatsappPollRateLimit
+// (bucket próprio, mais generoso) em vez do global.
+// req.path já vem sem o prefixo '/api' aqui dentro (globalRateLimit é montado com
+// app.use('/api', ...), que reescreve req.path/req.baseUrl como qualquer Router do Express).
+const WHATSAPP_POLL_PATHS = [
+    '/psychotherapy/whatsapp-messages/unseen',
+    /^\/psychotherapy\/patients\/[^/]+\/whatsapp-messages$/
+];
+const isWhatsappPollPath = (path: string, method: string) =>
+    method === 'GET' && WHATSAPP_POLL_PATHS.some(p => typeof p === 'string' ? p === path : p.test(path));
+
 // Camada 1: Rate limit global para toda a API (/api)
 const globalRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     limit: 300,
+    skip: (req) => process.env.NODE_ENV === 'test' || isWhatsappPollPath(req.path, req.method),
+    handler: (_req, res) => {
+        res.status(429).json({
+            error: 'Muitas requisições. Tente novamente em alguns minutos.'
+        });
+    }
+});
+
+// Camada dedicada: polling do WhatsApp (GETs de alta frequência, ver comentário acima).
+// Chave por tenant (não por IP) porque cada aba de cada tenant faz seu próprio polling —
+// medir por tenant evita que uma clínica com várias abas abertas puna as demais atrás do
+// mesmo IP/NAT, e evita que o polling de uma clínica consuma a cota de outra.
+const whatsappPollRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 900, // ~60/min — folga generosa sobre os ~24/min do padrão atual de polling
     skip: () => process.env.NODE_ENV === 'test',
+    keyGenerator: (req) => {
+        const tenantId = (req as AuthenticatedRequest).tenantId;
+        return tenantId ? `poll:${tenantId}` : `poll:${ipKeyGenerator(req.ip ?? '')}`;
+    },
     handler: (_req, res) => {
         res.status(429).json({
             error: 'Muitas requisições. Tente novamente em alguns minutos.'
@@ -169,7 +203,8 @@ const whatsappMessagesCloudClient = whatsappMessagesCloudConfig ? new WhatsappCl
 app.use('/api', createWhatsappMessagesRoutes(
     whatsappCloudRepository,
     container.resolve<IPsychotherapyRepository>('IPsychotherapyRepository'),
-    whatsappMessagesCloudClient
+    whatsappMessagesCloudClient,
+    whatsappPollRateLimit
 ));
 
 // Webhook Pix — rota pública (sem auth JWT), valida via header da Efí Bank

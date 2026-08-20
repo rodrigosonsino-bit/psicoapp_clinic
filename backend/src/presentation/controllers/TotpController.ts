@@ -23,8 +23,8 @@ export class TotpController {
 
     async disable(req: Request, res: Response): Promise<Response> {
         const { tenantId } = this.getAuth(req);
-        const { token } = req.body;
-        await this.totpUseCase.disable(tenantId, token);
+        const { token, password } = req.body;
+        await this.totpUseCase.disable(tenantId, token, password);
         return res.status(200).json({ message: '2FA desativado com sucesso' });
     }
 

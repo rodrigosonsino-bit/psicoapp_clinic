@@ -5,9 +5,17 @@ import { IPsychotherapyRepository } from '../../domain/repositories/IPsychothera
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { AppError } from '../../domain/errors/AppError';
 
+const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
 function escapeCsv(value: unknown): string {
     if (value === null || value === undefined) return '';
-    const str = String(value);
+    let str = String(value);
+    // Neutraliza injeção de fórmula (Excel/Sheets executam células que começam com
+    // =, +, -, @ ou tab/CR ao abrir o CSV) prefixando com apóstrofo, como o próprio
+    // Excel faz ao importar texto literal.
+    if (CSV_FORMULA_PREFIX.test(str)) {
+        str = `'${str}`;
+    }
     if (str.includes(',') || str.includes('"') || str.includes('\n')) {
         return `"${str.replace(/"/g, '""')}"`;
     }
@@ -152,11 +160,18 @@ export class ExportController {
             );
             const t = tenantResult.rows[0];
 
-            // 2. Receita mensal (registros de faturamento)
+            // 2. Receita mensal (registros de faturamento) — recebido é derivado de
+            // financial_payments confirmados, não uma coluna em psychotherapy_monthly_records
+            // (mesmo padrão de PostgresBillingRepository.listPendingDetails).
             const revenueResult = await client.query<{ month: string; revenue_cents: string }>(
                 `SELECT mr.month,
-                        COALESCE(SUM(mr.received_amount_cents), 0)::bigint AS revenue_cents
+                        COALESCE(SUM(fp.received_cents), 0)::bigint AS revenue_cents
                  FROM psychotherapy_monthly_records mr
+                 LEFT JOIN LATERAL (
+                     SELECT SUM(amount_cents) AS received_cents
+                     FROM financial_payments
+                     WHERE monthly_record_id = mr.id AND status = 'confirmed'
+                 ) fp ON true
                  WHERE mr.tenant_id = $1
                    AND EXTRACT(YEAR FROM mr.month::date)::int = $2
                  GROUP BY mr.month
@@ -191,15 +206,20 @@ export class ExportController {
                      p.name                                                  AS patient_name,
                      p.full_name                                             AS patient_full_name,
                      p.document,
-                     COALESCE(SUM(mr.received_amount_cents), 0)::bigint      AS total_paid_cents,
+                     COALESCE(SUM(fp.received_cents), 0)::bigint             AS total_paid_cents,
                      COALESCE(SUM(mr.paid_sessions), 0)::bigint              AS session_count,
                      ARRAY_AGG(mr.month ORDER BY mr.month)                   AS months
                  FROM psychotherapy_monthly_records mr
                  JOIN psychotherapy_patients p ON p.id = mr.patient_id
+                 LEFT JOIN LATERAL (
+                     SELECT SUM(amount_cents) AS received_cents
+                     FROM financial_payments
+                     WHERE monthly_record_id = mr.id AND status = 'confirmed'
+                 ) fp ON true
                  WHERE mr.tenant_id = $1
                    AND EXTRACT(YEAR FROM mr.month::date)::int = $2
-                   AND mr.received_amount_cents > 0
                  GROUP BY p.id, p.name, p.full_name, p.document
+                 HAVING COALESCE(SUM(fp.received_cents), 0) > 0
                  ORDER BY p.name`,
                 [tenantId, year],
             );
