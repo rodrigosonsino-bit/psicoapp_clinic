@@ -7,6 +7,7 @@ import { formatCurrency, translateAppointmentStatus } from '../utils/formatters'
 import Skeleton, { SkeletonCard } from '../components/Skeleton';
 import { startOfDay, endOfDay } from 'date-fns';
 import ErrorState from '../components/ErrorState';
+import { SectionErrorBoundary } from '../components/SectionErrorBoundary';
 import { useToast } from '../context/ToastContext';
 import {
   BarChart,
@@ -273,6 +274,7 @@ export default function Dashboard() {
       </div>
 
       {pendingRenewals.length > 0 && (
+        <SectionErrorBoundary label="Séries recorrentes vencendo">
         <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', border: '1px solid var(--status-warning)' }}>
           <div className="flex items-center gap-2 mb-2">
             <RefreshCw size={18} color="var(--status-warning)" />
@@ -319,6 +321,7 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+        </SectionErrorBoundary>
       )}
 
       {showPendingModal && (
@@ -353,6 +356,7 @@ export default function Dashboard() {
                 <p>Nenhum mês vencido em aberto. 🎉</p>
               </div>
             ) : (
+              <SectionErrorBoundary label="Detalhamento da Inadimplência">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {pendingDetails.individualPatients.map(p => (
                   <div key={`${p.patientId}-${p.month}`} className="card" style={{ padding: '1rem' }}>
@@ -414,12 +418,14 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+              </SectionErrorBoundary>
             )}
           </div>
         </div>
       )}
 
       <div className="dashboard-grid mt-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}>
+        <SectionErrorBoundary label="Sessões de Hoje">
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-h3" style={{ margin: 0 }}>Sessões de Hoje</h2>
@@ -475,7 +481,9 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+        </SectionErrorBoundary>
 
+        <SectionErrorBoundary label="Evolução Financeira">
         <div className="card">
           <h2 className="text-h3 mb-4">Evolução Financeira (Últimos 6 meses)</h2>
         <div style={{ width: '100%', height: 400 }}>
@@ -509,6 +517,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
         </div>
+        </SectionErrorBoundary>
       </div>
     </div>
   );
